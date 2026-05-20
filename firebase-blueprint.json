@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "A room or accommodation unit in the retreat.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Shared Room", "Private Room", "Glamping Tent", "Campground", "Treehouse", "Venue Hire", "Home Exchange"] },
+        "guestCount": { "type": "number" },
+        "additionalBeds": { "type": "number" },
+        "singleBeds": { "type": "number" },
+        "doubleBeds": { "type": "number" },
+        "description": { "type": "string" },
+        "equipment": { "type": "string" },
+        "size": { "type": "string" },
+        "color": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["name", "type", "color"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A reservation for a room.",
+      "type": "object",
+      "properties": {
+        "guestName": { "type": "string" },
+        "additionalNames": { "type": "string" },
+        "adults": { "type": "number" },
+        "kids": { "type": "number" },
+        "totalGuests": { "type": "number" },
+        "type": { "type": "string" },
+        "checkIn": { "type": "string", "format": "date" },
+        "checkOut": { "type": "string", "format": "date" },
+        "roomId": { "type": "string" },
+        "bedSetting": { "type": "string", "enum": ["Double", "Twin"] },
+        "dietary": { "type": "string" },
+        "notes": { "type": "string" },
+        "comments": { "type": "string" },
+        "price": { "type": "number" },
+        "extras": { 
+          "type": "array", 
+          "items": { 
+            "type": "object", 
+            "properties": { 
+              "label": { "type": "string" }, 
+              "amount": { "type": "number" } 
+            } 
+          } 
+        },
+        "deposit": { "type": "number" },
+        "paidLater1": { "type": "number" },
+        "paidLater2": { "type": "number" },
+        "channelPaymentBasis": { "type": "string", "enum": ["bookingPrice", "deposit"] },
+        "status": { "type": "string", "enum": ["Paid", "Partial", "Unpaid"] },
+        "source": { "type": "string" },
+        "bookingChannel": { "type": "string" },
+        "isVenueHire": { "type": "boolean" }
+      },
+      "required": ["guestName", "checkIn", "checkOut", "roomId", "type"]
+    },
+    "Retreat": {
+      "title": "Retreat",
+      "description": "A high-level retreat event shown on top of the calendar.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "hosts": { "type": "string" }
+      },
+      "required": ["name", "startDate", "endDate"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application configuration.",
+      "type": "object",
+      "properties": {
+        "bookingTypes": { "type": "array", "items": { "type": "string" } },
+        "bookingSources": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile with roles.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "staff"] }
+      }
+    },
+    "ConfigOption": {
+      "title": "Config Option",
+      "description": "A reusable option for dropdowns (name and color).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "commission": { "type": "number" }
+      },
+      "required": ["name"]
+    },
+    "UserRecord": {
+      "title": "User Record",
+      "description": "A user management entry.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "staff"] }
+      },
+      "required": ["email", "name", "role"]
+    },
+    "Housekeeping": {
+      "title": "Housekeeping",
+      "description": "Status of a room for cleaning and inspection.",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string" },
+        "status": { "type": "string", "enum": ["clean", "dirty", "inspected"] },
+        "cleaned": { "type": "boolean" },
+        "inspected": { "type": "boolean" },
+        "lastCheckout": { "type": "string" },
+        "nextCheckin": { "type": "string" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["roomId", "status", "lastUpdated"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Collection of accommodation units."
+    },
+    "/housekeeping/{roomId}": {
+      "schema": "Housekeeping",
+      "description": "Collection of room cleaning statuses."
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Collection of reservations."
+    },
+    "/retreats/{retreatId}": {
+      "schema": "Retreat",
+      "description": "Collection of global retreats."
+    },
+    "/bookingTypes/{typeId}": {
+      "schema": "ConfigOption",
+      "description": "Collection of allowed booking types."
+    },
+    "/bookingChannels/{channelId}": {
+      "schema": "ConfigOption",
+      "description": "Collection of booking channel sources."
+    },
+    "/users/{userId}": {
+      "schema": "UserRecord",
+      "description": "Collection of managed users."
+    },
+    "/settings/global": {
+      "schema": "Settings",
+      "description": "Global settings for types and sources."
+    },
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "User roles and metadata."
+    }
+  }
+}

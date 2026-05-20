@@ -1,0 +1,199 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // HELPERS
+    // -------------------------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role check using get() - safer existence check
+    function getRole() {
+      return exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role
+        : 'none';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'pasha@storywiseapp.com' ||
+        getRole() == 'admin'
+      );
+    }
+
+    function isStaff() {
+      return isSignedIn() && getRole() == 'staff';
+    }
+
+    // -------------------------------------------------------------------------
+    // ENTITY VALIDATIONS
+    // -------------------------------------------------------------------------
+
+    function isValidRoom(data) {
+      return data.keys().hasAll(['name', 'type', 'color'])
+          && data.name is string && data.name.size() <= 100
+          && data.type is string && data.type.size() <= 50
+          && data.color is string && data.color.size() <= 30
+          && (!('guestCount' in data) || data.guestCount is number)
+          && (!('singleBeds' in data) || data.singleBeds is number)
+          && (!('doubleBeds' in data) || data.doubleBeds is number);
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll(['guestName', 'checkIn', 'checkOut', 'roomId', 'type'])
+          && data.guestName is string && data.guestName.size() <= 200
+          && data.checkIn is string && data.checkIn.size() == 10
+          && data.checkOut is string && data.checkOut.size() == 10
+          && data.roomId is string && isValidId(data.roomId)
+          && data.type is string && data.type.size() <= 50
+          && (!('bookingChannel' in data) || (data.bookingChannel is string && data.bookingChannel.size() <= 100))
+          && (!('channelPaymentBasis' in data) || (data.channelPaymentBasis in ['bookingPrice', 'deposit']))
+          && (!('adults' in data) || data.adults is number)
+          && (!('kids' in data) || data.kids is number)
+          && (!('price' in data) || data.price is number)
+          && (!('deposit' in data) || data.deposit is number)
+          && (!('paidLater1' in data) || data.paidLater1 is number)
+          && (!('paidLater2' in data) || data.paidLater2 is number)
+          && (!('extras' in data) || data.extras is list)
+          && (!('singleBeds' in data) || data.singleBeds is number)
+          && (!('doubleBeds' in data) || data.doubleBeds is number);
+    }
+
+    function isValidProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'role'])
+          && data.uid == userId
+          && data.email is string && data.email.size() <= 150
+          && data.role in ['admin', 'staff']
+          && (!('name' in data) || (data.name is string && data.name.size() <= 100))
+          // Bootstrapping: only specific email can self-appoint admin
+          && (data.role == 'staff' || data.email == 'pasha@storywiseapp.com');
+    }
+
+    function isValidConfigOption(data) {
+      return data.keys().hasAll(['name'])
+          && data.name is string && data.name.size() <= 100
+          && (!('color' in data) || (data.color is string && data.color.size() <= 30))
+          && (!('commission' in data) || data.commission is number);
+    }
+
+    function isValidHousekeeping(data) {
+      return data.keys().hasAll(['roomId', 'status', 'lastUpdated'])
+          && data.roomId is string
+          && data.status in ['clean', 'dirty', 'inspected']
+          && data.lastUpdated is string;
+    }
+
+    // -------------------------------------------------------------------------
+    // RULES
+    // -------------------------------------------------------------------------
+
+    // Profiles
+    match /profiles/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      
+      // Allow self-creation during first login
+      allow create: if isSignedIn() 
+                  && request.auth.uid == userId 
+                  && isValidProfile(incoming(), userId);
+                  
+      // Allow self-update of name or admin-update of everything
+      allow update: if isSignedIn() 
+                  && ((request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['name']))
+                      || (isAdmin() && incoming().uid == existing().uid && incoming().email == existing().email));
+    }
+
+    // Rooms
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidId(roomId) && isValidRoom(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Bookings
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidId(bookingId) && isValidBooking(incoming());
+      
+      allow update: if (isAdmin() && isValidBooking(incoming()))
+                   || (isStaff() && incoming().diff(existing()).affectedKeys().hasOnly(['comments']));
+                   
+      allow delete: if isAdmin();
+    }
+
+    // Retreats
+    match /retreats/{retreatId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(retreatId);
+    }
+
+    // Venue Hires
+    match /venueHires/{venueHireId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(venueHireId);
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Config Collections
+    match /bookingTypes/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidConfigOption(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /bookingChannels/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidConfigOption(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /retreatTypes/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /users/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /teamPositions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /teamAssignments/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Housekeeping
+    match /housekeeping/{roomId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidHousekeeping(incoming());
+    }
+
+    // Default Deny (Fallback)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
