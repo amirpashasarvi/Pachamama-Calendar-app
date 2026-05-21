@@ -182,12 +182,7 @@ export function useBookingData() {
         });
       }
       checkLoading('settings');
-    }, (error) => {
-      checkLoading('settings');
-      handleFirestoreError(error, OperationType.LIST, 'settings');
-    });
 
-    const unsubCalendarSettings = onSnapshot(collection(db, 'settings'), (snap) => {
       const display = snap.docs.find(d => d.id === 'calendarDisplay');
       if (display) {
         setCalendarDisplaySettings(display.data() as CalendarDisplaySettings);
@@ -209,6 +204,7 @@ export function useBookingData() {
       }
       checkLoading('calendarDisplay');
     }, (error) => {
+      checkLoading('settings');
       checkLoading('calendarDisplay');
       handleFirestoreError(error, OperationType.LIST, 'settings');
     });
@@ -225,7 +221,6 @@ export function useBookingData() {
       unsubPositions();
       unsubAssignments();
       unsubSettings();
-      unsubCalendarSettings();
     };
   }, []);
 

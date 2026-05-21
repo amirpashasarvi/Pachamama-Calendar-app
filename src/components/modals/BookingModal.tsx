@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
 import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
-import { Trash2, Save, Plus, X } from 'lucide-react';
+import { Trash2, Save, Plus, X, AlertTriangle } from 'lucide-react';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -157,6 +157,11 @@ export default function BookingModal({
   };
 
   const venueHireOverlapName = getVenueHireOverlap();
+
+  const liveOverlapWarning = useMemo(() => {
+    if (!formData.roomId || formData.roomId === 'ALL') return null;
+    return checkOverlaps(formData.roomId);
+  }, [formData.checkIn, formData.checkOut, formData.roomId, bookings, booking?.id]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -429,6 +434,13 @@ export default function BookingModal({
                 </div>
               )}
             </div>
+
+            {isAdmin && liveOverlapWarning && (
+              <div className="col-span-2 flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-1">
+                <AlertTriangle size={14} className="text-rose-500 shrink-0 mt-0.5" />
+                <span className="text-xs font-bold text-rose-700">{liveOverlapWarning}</span>
+              </div>
+            )}
           </div>
         </section>
 

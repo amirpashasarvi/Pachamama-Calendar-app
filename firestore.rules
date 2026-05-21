@@ -29,10 +29,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'pasha@storywiseapp.com' ||
-        getRole() == 'admin'
-      );
+      return isSignedIn() && getRole() == 'admin';
     }
 
     function isStaff() {
@@ -79,8 +76,7 @@ service cloud.firestore {
           && data.email is string && data.email.size() <= 150
           && data.role in ['admin', 'staff']
           && (!('name' in data) || (data.name is string && data.name.size() <= 100))
-          // Bootstrapping: only specific email can self-appoint admin
-          && (data.role == 'staff' || data.email == 'pasha@storywiseapp.com');
+          && data.role == 'staff';
     }
 
     function isValidConfigOption(data) {

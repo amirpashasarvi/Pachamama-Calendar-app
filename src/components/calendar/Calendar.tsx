@@ -4,6 +4,7 @@ import {
   eachDayOfInterval, 
   format, 
   isSameDay, 
+  isToday,
   isWeekend, 
   startOfToday,
 } from 'date-fns';
@@ -239,10 +240,10 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
             {days.map((day, idx) => (
               <div 
                 key={`header-${day.toISOString()}-${idx}`} 
-                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-400 font-mono text-[10px] ${isWeekend(day) ? 'bg-gray-300 text-gray-700' : 'text-gray-600'}`}
+                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-400 font-mono text-[10px] ${isToday(day) ? 'bg-blue-100 text-blue-700' : isWeekend(day) ? 'bg-gray-300 text-gray-700' : 'text-gray-600'}`}
               >
                 <span className="uppercase font-bold tracking-tighter opacity-50">{format(day, 'EEE')}</span>
-                <span className="text-sm font-bold text-black">{format(day, 'd')}</span>
+                <span className={`text-sm font-bold ${isToday(day) ? 'font-black text-blue-700' : 'text-black'}`}>{format(day, 'd')}</span>
               </div>
             ))}
           </div>

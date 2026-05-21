@@ -1,5 +1,5 @@
 import React from 'react';
-import { isWeekend, format, parseISO } from 'date-fns';
+import { isWeekend, isToday, format, parseISO } from 'date-fns';
 import { Room, Booking } from '@/types';
 import BookingBar from './BookingBar';
 import { Plus, GripVertical } from 'lucide-react';
@@ -98,6 +98,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
                 "w-14 flex-shrink-0 border-r border-gray-400 h-full transition-colors cursor-crosshair hover:bg-blue-50/20 active:bg-blue-50 flex items-center justify-center text-blue-400",
                 isWeekend(day) ? 'bg-gray-200' : '',
                 isVenueHireDay ? 'bg-orange-100/50' : '',
+                isToday(day) ? 'bg-blue-50' : '',
                 isOccupied ? 'cursor-default pointer-events-none' : ''
               )}
               onClick={() => !isOccupied && onAddBooking(day)}
