@@ -20,7 +20,7 @@ export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, 
   return (
     <div className="flex h-12 border-b border-gray-400 sticky top-12 z-[85] bg-gray-200 group border-l border-gray-400">
       <div 
-        className="w-48 sticky left-0 z-[80] bg-gray-200 border-r border-gray-400 p-2 flex flex-col justify-center gap-1 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+        className="w-28 sm:w-48 sticky left-0 z-[80] bg-gray-200 border-r border-gray-400 p-2 flex flex-col justify-center gap-1 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
       >
         <button 
           onClick={onAdd}

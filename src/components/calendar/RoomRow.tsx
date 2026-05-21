@@ -45,7 +45,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
     >
       {/* Room Label Column */}
       <div 
-        className="w-48 sticky left-0 z-[80] bg-white border-r border-gray-400 p-2 flex items-center gap-2 cursor-pointer hover:bg-gray-50 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] relative overflow-hidden"
+        className="w-28 sm:w-48 sticky left-0 z-[80] bg-white border-r border-gray-400 p-2 flex items-center gap-2 cursor-pointer hover:bg-gray-50 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] relative overflow-hidden"
         onClick={onEditRoom}
       >
         {/* Thicker Color Strip Drag Handle */}

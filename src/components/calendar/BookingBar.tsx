@@ -135,7 +135,7 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
       initial={{ opacity: 0, scaleY: 0.8 }}
       animate={{ opacity: 1, scaleY: 1 }}
       className={cn(
-        "absolute h-9 top-2.5 z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden",
+        "absolute h-11 top-1.5 z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden",
       )}
       style={{
         left: `${left - 1}px`, // Slight bleed to cover border

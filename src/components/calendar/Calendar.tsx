@@ -234,7 +234,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
           
           {/* Header Row (Dates) */}
           <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-400 shadow-sm border-l border-gray-400">
-            <div className="w-48 sticky left-0 z-[100] bg-white border-r border-gray-400 flex items-center justify-center p-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+            <div className="w-28 sm:w-48 sticky left-0 z-[100] bg-white border-r border-gray-400 flex items-center justify-center p-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
             </div>
             {days.map((day, idx) => (

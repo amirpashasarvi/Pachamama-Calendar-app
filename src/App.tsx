@@ -1,10 +1,11 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BarChart2, BrushCleaning, Bell, AlertTriangle } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BarChart2, BrushCleaning, Bell, AlertTriangle, LayoutDashboard } from 'lucide-react';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import SettingsModal from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
+import DashboardModal from './components/modals/DashboardModal';
 import HousekeepingModal from './components/modals/HousekeepingModal';
 import ProfileModal from './components/modals/ProfileModal';
 import { BookingDataProvider, useBooking } from './hooks/useBooking';
@@ -19,6 +20,7 @@ function AppContent() {
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isHousekeepingOpen, setIsHousekeepingOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -147,6 +149,13 @@ function AppContent() {
 
             {isAdmin && (
               <>
+                <button
+                  onClick={() => setIsDashboardOpen(true)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
+                  title="Business Dashboard"
+                >
+                  <LayoutDashboard size={18} />
+                </button>
                 <button 
                   onClick={() => setIsStatsOpen(true)}
                   className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
@@ -244,6 +253,14 @@ function AppContent() {
           <StatisticsModal
             isOpen={isStatsOpen}
             onClose={() => setIsStatsOpen(false)}
+            bookings={bookings}
+            venueHires={venueHires}
+            rooms={rooms}
+            bookingChannels={bookingChannels}
+          />
+          <DashboardModal
+            isOpen={isDashboardOpen}
+            onClose={() => setIsDashboardOpen(false)}
             bookings={bookings}
             venueHires={venueHires}
             rooms={rooms}

@@ -242,7 +242,7 @@ export default function BookingModal({
   };
 
   const addExtra = () => {
-    if ((formData.extras || []).length >= 2) return;
+    if ((formData.extras || []).length >= 5) return;
     setFormData(prev => ({
       ...prev,
       extras: [...(prev.extras || []), { label: '', amount: 0 }]
@@ -262,14 +262,70 @@ export default function BookingModal({
     });
   };
 
+  const modalFooter = (
+    <div className="flex items-center justify-between">
+      {booking && isAdmin && (
+        <div className="flex items-center gap-2">
+          {showConfirmDelete ? (
+            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
+              <span className="text-[10px] font-bold text-gray-500 italic">Delete this booking?</span>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="px-3 py-2.5 bg-rose-500 text-white text-[10px] font-bold rounded-lg hover:bg-rose-600 transition-colors"
+              >
+                Yes, delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(false)}
+                className="px-3 py-2.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowConfirmDelete(true)}
+              className="flex items-center gap-2 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-sm font-bold"
+            >
+              <Trash2 size={16} /> Delete
+            </button>
+          )}
+        </div>
+      )}
+      <div className="flex gap-3 ml-auto">
+        {!showConfirmDelete && (
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="booking-form"
+              className="flex items-center gap-2 px-8 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
+            >
+              <Save size={16} /> {isAdmin ? (booking ? 'Update Booking' : 'Create Booking') : 'Save Comment'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'}>
-      <form onSubmit={handleSave} className="space-y-8">
+    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'} footer={modalFooter}>
+      <form id="booking-form" onSubmit={handleSave} className="space-y-8">
         
         {/* Basic Info */}
         <section className="space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Guest Information</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-500 mb-1">Main Guest Name</label>
               {isAdmin ? (
@@ -499,9 +555,32 @@ export default function BookingModal({
         {isAdmin && (
           <section className="space-y-4 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-600">Financials</h3>
+
+            {/* Recap / Totals */}
+            <div className="pb-4 border-b flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</span>
+                <span className="text-2xl font-black text-black">€{total.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Remaining</span>
+                  <span className="text-lg font-bold text-blue-600">€{remaining.toFixed(2)}</span>
+                </div>
+                <div className={cn(
+                  "px-4 py-1.5 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
+                  calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+                  calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
+                  'bg-rose-100 text-rose-700'
+                )}>
+                  {calculatedStatus}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-4">
               {/* Row 1: Booking Price | Deposit */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
                   <div className="relative font-mono text-sm">
@@ -513,6 +592,11 @@ export default function BookingModal({
                       onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
+                  {nights > 0 && (formData.price || 0) > 0 && (
+                    <span className="block text-right text-[10px] font-mono text-gray-400 mt-1">
+                      ≈ €{((formData.price || 0) / nights).toFixed(2)} / night
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Deposit</label>
@@ -551,29 +635,43 @@ export default function BookingModal({
                         onChange={updateExtra.bind(null, idx, 'amount' as any)}
                       />
                     </div>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => removeExtra(idx)}
-                      className="p-1 px-2 text-rose-500 hover:bg-rose-50 rounded-lg"
+                      className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0"
                     >
                       <X size={14} />
                     </button>
                   </div>
                 ))}
 
-                {(formData.extras || []).length < 2 && (
-                  <button
-                    type="button"
-                    onClick={addExtra}
-                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 hover:text-blue-700 mt-1"
-                  >
-                    <Plus size={12} /> Add Extra
-                  </button>
-                )}
+                {(() => {
+                  const atLimit = (formData.extras || []).length >= 5;
+                  return (
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={addExtra}
+                        disabled={atLimit}
+                        className={cn(
+                          "flex items-center gap-1.5 text-[10px] font-bold",
+                          atLimit
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-blue-600 hover:text-blue-700"
+                        )}
+                      >
+                        <Plus size={12} /> Add Extra
+                      </button>
+                      {atLimit && (
+                        <span className="text-[10px] text-gray-400 italic">Maximum 5 extras reached</span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Paid Later Section */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
                   <div className="relative font-mono text-sm">
@@ -601,7 +699,7 @@ export default function BookingModal({
               </div>
 
               {/* Booking Channel + Payment Basis */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Booking Channel</label>
                   <select 
@@ -615,7 +713,7 @@ export default function BookingModal({
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Payment Basis</label>
-                  <div className="flex p-1 bg-white border rounded-lg h-[34px]">
+                  <div className="flex p-1 bg-white border rounded-lg h-[44px]">
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, channelPaymentBasis: 'bookingPrice' })}
@@ -644,27 +742,6 @@ export default function BookingModal({
                 </div>
               </div>
 
-              {/* Recap / Totals */}
-              <div className="pt-4 border-t flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</span>
-                  <span className="text-2xl font-black text-black">€{total.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">Remaining</span>
-                    <span className="text-lg font-bold text-blue-600">€{remaining.toFixed(2)}</span>
-                  </div>
-                  <div className={cn(
-                    "px-4 py-1.5 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
-                    calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
-                    calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
-                    'bg-rose-100 text-rose-700'
-                  )}>
-                    {calculatedStatus}
-                  </div>
-                </div>
-              </div>
             </div>
           </section>
         )}
@@ -687,59 +764,6 @@ export default function BookingModal({
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-6 border-t">
-          {booking && isAdmin && (
-            <div className="flex items-center gap-2">
-              {showConfirmDelete ? (
-                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
-                  <span className="text-[10px] font-bold text-gray-500 italic">Delete this booking?</span>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className="px-3 py-1.5 bg-rose-500 text-white text-[10px] font-bold rounded-lg hover:bg-rose-600 transition-colors"
-                  >
-                    Yes, delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmDelete(false)}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  type="button"
-                  onClick={() => setShowConfirmDelete(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-sm font-bold"
-                >
-                  <Trash2 size={16} /> Delete
-                </button>
-              )}
-            </div>
-          )}
-          <div className="flex gap-3 ml-auto">
-            {!showConfirmDelete && (
-              <>
-                <button 
-                  type="button" 
-                  onClick={onClose}
-                  className="px-6 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="flex items-center gap-2 px-8 py-2 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
-                >
-                  <Save size={16} /> {isAdmin ? (booking ? 'Update Booking' : 'Create Booking') : 'Save Comment'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
       </form>
     </Modal>
   );

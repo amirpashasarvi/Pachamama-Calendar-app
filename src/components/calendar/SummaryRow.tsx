@@ -39,7 +39,7 @@ export default function SummaryRow({ days, bookings, rooms }: SummaryRowProps) {
 
   return (
     <div className="flex bg-gray-100 border-t border-gray-400 sticky bottom-0 z-[90] border-l border-gray-400">
-      <div className="w-48 sticky left-0 z-[100] bg-gray-100 border-r border-gray-400 p-2 flex flex-col justify-center text-[11px] font-bold text-gray-500 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] flex-shrink-0">
+      <div className="w-28 sm:w-48 sticky left-0 z-[100] bg-gray-100 border-r border-gray-400 p-2 flex flex-col justify-center text-[11px] font-bold text-gray-500 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] flex-shrink-0">
         Summary
       </div>
       

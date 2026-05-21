@@ -76,7 +76,7 @@ export default function TeamRosterSection({
     <div className="flex flex-col">
       {/* Label Row */}
       <div className="flex bg-gray-50 border-b border-gray-400 h-8 items-center">
-        <div className="w-48 sticky left-0 z-[85] bg-gray-100 border-r border-gray-400 h-full flex items-center px-4 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+        <div className="w-28 sm:w-48 sticky left-0 z-[85] bg-gray-100 border-r border-gray-400 h-full flex items-center px-4 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
           <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Team Roster</span>
         </div>
         <div className="flex-1 h-full bg-gray-50/50" />
@@ -88,7 +88,7 @@ export default function TeamRosterSection({
         return (
           <div key={pos.id} className="flex relative border-b border-gray-300 h-14 bg-white group">
             {/* Position Label */}
-            <div className="w-48 sticky left-0 z-[80] bg-white border-r border-gray-400 p-2 flex items-center gap-2 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+            <div className="w-28 sm:w-48 sticky left-0 z-[80] bg-white border-r border-gray-400 p-2 flex items-center gap-2 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pos.color }} />
               <span className="text-[10px] font-bold text-gray-600 uppercase tracking-tight truncate">{pos.name}</span>
             </div>

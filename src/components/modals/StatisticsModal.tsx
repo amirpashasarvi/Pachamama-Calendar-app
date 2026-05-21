@@ -56,12 +56,14 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     to: format(new Date(), 'yyyy-MM-dd')
   });
 
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
 
   const combinedItems = useMemo(() => {
     const mappedBookings = bookings.map(b => ({
       ...b,
       isVenueHire: false,
+      type: b.type || 'Other',
       financials: {
         price: b.price || 0,
         deposit: b.deposit || 0,
@@ -80,6 +82,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       channelPaymentBasis: vh.channelPaymentBasis,
       createdAt: vh.createdAt,
       isVenueHire: true,
+      type: 'Venue Hire',
       roomId: 'venue-hire',
       financials: {
         price: vh.bookingPrice || 0,
@@ -135,12 +138,27 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
   }, [period, roomFilter, sortBy, customRange, combinedItems]);
 
   const searchedItems = useMemo(() => {
-    if (!searchQuery.trim()) return filteredItems;
-    const query = searchQuery.toLowerCase();
-    return filteredItems.filter(b => 
-      b.guestName.toLowerCase().includes(query)
-    );
-  }, [filteredItems, searchQuery]);
+    let result = filteredItems;
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(b => b.guestName.toLowerCase().includes(query));
+    }
+
+    if (statusFilter !== 'all') {
+      result = result.filter(b => {
+        const total = b.financials.price + (b.financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
+        const collected = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
+        const remaining = total - collected;
+        if (statusFilter === 'paid') return remaining === 0;
+        if (statusFilter === 'partial') return remaining > 0 && collected > 0;
+        if (statusFilter === 'unpaid') return collected === 0 && total > 0;
+        return true;
+      });
+    }
+
+    return result;
+  }, [filteredItems, searchQuery, statusFilter]);
 
   const tableTotals = useMemo(() => {
     let revenue = 0;
@@ -159,23 +177,34 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       }
     });
 
-    return { revenue, collected, commissions };
+    return { revenue, collected, remaining: revenue - collected, commissions };
   }, [searchedItems, bookingChannels]);
 
   const stats = useMemo(() => {
     let totalRevenue = 0;
     let totalCollected = 0;
     let totalCommissions = 0;
+    let overdue = 0;
+    let expected = 0;
+    const today = startOfDay(new Date());
 
     filteredItems.forEach(b => {
       const extrasAmount = (b.financials.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
       const bookingTotal = b.financials.price + extrasAmount;
       const collected = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
+      const remaining = bookingTotal - collected;
 
       totalRevenue += bookingTotal;
       totalCollected += collected;
 
-      // Commission calculation
+      if (remaining > 0) {
+        if (parseISO(b.checkOut) < today) {
+          overdue += remaining;
+        } else {
+          expected += remaining;
+        }
+      }
+
       const channel = bookingChannels.find(c => c.name === b.bookingChannel);
       if (channel && channel.commission) {
         const basisAmount = b.channelPaymentBasis === 'bookingPrice' ? b.financials.price : b.financials.deposit;
@@ -186,7 +215,8 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     return {
       revenue: totalRevenue,
       collected: totalCollected,
-      remaining: totalRevenue - totalCollected,
+      overdue,
+      expected,
       commissions: totalCommissions,
       count: filteredItems.length
     };
@@ -321,7 +351,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
             </button>
           </header>
 
-          <main className="flex-1 overflow-y-auto p-8 max-w-7xl mx-auto w-full space-y-8">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-8">
             {/* Filters */}
             <div className="flex flex-wrap items-center justify-between gap-6 pb-2">
               <div className="flex flex-col gap-2">
@@ -386,7 +416,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <SummaryCard 
                 title="Total Revenue" 
                 value={`€${stats.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
@@ -400,17 +430,25 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                 colorClass="bg-green-50 text-green-600"
               />
               <SummaryCard 
-                title="Remaining" 
-                value={`€${stats.remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                title="Overdue (past)" 
+                value={`€${stats.overdue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 icon={Clock}
-                colorClass="bg-amber-50 text-amber-600"
-              />
-              <SummaryCard 
-                title="Channel Commissions" 
-                value={`€${stats.commissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                icon={Percent}
                 colorClass="bg-rose-50 text-rose-600"
               />
+              <SummaryCard 
+                title="Expected (future)" 
+                value={`€${stats.expected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                icon={CalendarIcon}
+                colorClass="bg-amber-50 text-amber-600"
+              />
+              <div className="col-span-2 sm:col-span-1">
+                <SummaryCard 
+                  title="Channel Commissions" 
+                  value={`€${stats.commissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  icon={Percent}
+                  colorClass="bg-purple-50 text-purple-600"
+                />
+              </div>
             </div>
 
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">
@@ -499,6 +537,19 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                     />
                   </div>
                   <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-gray-400 uppercase">Status:</span>
+                    <select
+                      value={statusFilter}
+                      onChange={e => setStatusFilter(e.target.value as any)}
+                      className="px-3 py-1.5 bg-gray-50 border rounded-xl text-[11px] font-bold outline-none cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
+                      <option value="all">All</option>
+                      <option value="unpaid">Unpaid</option>
+                      <option value="partial">Partial</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <span className="text-[10px] font-black text-gray-400 uppercase">Sort:</span>
                     <select
                       value={sortBy}
@@ -528,6 +579,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Channel</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Total</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Collected</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Remaining</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Comm.</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Status</th>
                       <th className="w-10"></th>
@@ -561,6 +613,9 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                           >
                             <td className="px-6 py-4">
                               <div className="text-sm font-bold text-gray-900">{b.guestName}</div>
+                              {!b.isVenueHire && b.type && (
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{b.type}</span>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               <span className="text-xs font-bold text-gray-500 whitespace-nowrap">{roomName}</span>
@@ -588,6 +643,13 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                               <span className="text-xs font-bold text-gray-600">€{collected.toLocaleString()}</span>
                             </td>
                             <td className="px-6 py-4 text-right">
+                              {remaining > 0 ? (
+                                <span className="text-xs font-black text-amber-600">€{remaining.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-xs font-bold text-green-600">—</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right">
                               <span className="text-xs font-bold text-gray-500">€{commission.toLocaleString()}</span>
                             </td>
                             <td className="px-6 py-4 text-center">
@@ -606,7 +668,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                           
                           {isExpanded && (
                             <tr className="bg-blue-50/20">
-                              <td colSpan={9} className="px-8 py-4 border-t border-blue-50">
+                              <td colSpan={10} className="px-8 py-4 border-t border-blue-50">
                                 <div className="grid grid-cols-2 gap-8 max-w-2xl">
                                   <div className="space-y-2">
                                     <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Financial Breakdown</h4>
@@ -661,6 +723,9 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       <td colSpan={4} className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400">Visible Totals</td>
                       <td className="px-6 py-4 text-right text-sm">€{tableTotals.revenue.toLocaleString()}</td>
                       <td className="px-6 py-4 text-right text-sm text-gray-600">€{tableTotals.collected.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right text-sm text-amber-600">
+                        {tableTotals.remaining > 0 ? `€${tableTotals.remaining.toLocaleString()}` : '—'}
+                      </td>
                       <td className="px-6 py-4 text-right text-sm text-gray-400">€{tableTotals.commissions.toLocaleString()}</td>
                       <td colSpan={2}></td>
                     </tr>
