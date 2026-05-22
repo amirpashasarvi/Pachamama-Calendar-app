@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import DatePicker from '@/components/ui/DatePicker';
 import { Booking, Room, ConfigOption, VenueHire } from '@/types';
 import { cn } from '@/lib/utils';
+import { exportBookingsToCSV, exportVenueHiresToCSV, exportFinancialSummaryToCSV } from '@/lib/exportUtils';
 import { 
   format, 
   subMonths, 
@@ -268,60 +269,38 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     return data;
   }, [startDate, endDate, bookings, rooms, roomFilter]);
 
-  const exportToCSV = () => {
-    const headers = ['Guest Name', 'Room', 'Check-in', 'Check-out', 'Channel', 'Total (€)', 'Collected (€)', 'Remaining (€)', 'Commission (€)', 'Status'];
-    const rows = filteredItems.map(b => {
-      const extrasAmount = (b.financials.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-      const total = b.financials.price + extrasAmount;
-      const collected = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
-      const remaining = total - collected;
-      const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-      const commission = channel && channel.commission 
-        ? (b.channelPaymentBasis === 'bookingPrice' ? b.financials.price : b.financials.deposit) * channel.commission / 100
-        : 0;
-      
-      let status = 'Unpaid';
-      if (remaining === 0) status = 'Paid';
-      else if (collected > 0) status = 'Partial';
+  // Build filtered raw arrays from the period/room-filtered combinedItems IDs
+  const handleExportBookings = () => {
+    const ids = new Set(filteredItems.filter(i => !i.isVenueHire).map(i => i.id));
+    exportBookingsToCSV(bookings.filter(b => ids.has(b.id)), rooms, bookingChannels);
+  };
 
-      const room = b.isVenueHire ? 'Venue Hire' : (rooms.find(r => r.id === b.roomId)?.name || 'Unknown');
+  const handleExportVenueHires = () => {
+    const ids = new Set(filteredItems.filter(i => i.isVenueHire).map(i => i.id));
+    exportVenueHiresToCSV(venueHires.filter(v => ids.has(v.id)), bookingChannels);
+  };
 
-      return [
-        b.guestName,
-        room,
-        b.checkIn,
-        b.checkOut,
-        b.bookingChannel,
-        total.toFixed(2),
-        collected.toFixed(2),
-        remaining.toFixed(2),
-        commission.toFixed(2),
-        status
-      ];
-    });
-
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `bookings_stats_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExportFinancial = () => {
+    const bookingIds = new Set(filteredItems.filter(i => !i.isVenueHire).map(i => i.id));
+    const venueIds = new Set(filteredItems.filter(i => i.isVenueHire).map(i => i.id));
+    exportFinancialSummaryToCSV(
+      bookings.filter(b => bookingIds.has(b.id)),
+      venueHires.filter(v => venueIds.has(v.id)),
+      rooms,
+      bookingChannels
+    );
   };
 
   const SummaryCard = ({ title, value, icon: Icon, colorClass }: { title: string, value: string, icon: any, colorClass: string }) => (
-    <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col gap-4">
+    <div className="bg-white p-4 sm:p-6 rounded-2xl border shadow-sm flex flex-col gap-2 sm:gap-4">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{title}</span>
-        <div className={cn("p-2 rounded-xl", colorClass)}>
-          <Icon size={18} />
+        <div className={cn("p-1.5 sm:p-2 rounded-xl", colorClass)}>
+          <Icon size={16} />
         </div>
       </div>
       <div>
-        <h4 className="text-2xl font-black tracking-tight">{value}</h4>
+        <h4 className="text-xl sm:text-2xl font-black tracking-tight">{value}</h4>
       </div>
     </div>
   );
@@ -560,12 +539,29 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       <option value="createdAt">Added Date</option>
                     </select>
                   </div>
-                  <button 
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-bold transition-colors"
-                  >
-                    <Download size={14} /> Export CSV
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleExportBookings}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-bold transition-colors"
+                      title="Export bookings for the selected period to CSV"
+                    >
+                      <Download size={12} /> Bookings
+                    </button>
+                    <button
+                      onClick={handleExportVenueHires}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-bold transition-colors"
+                      title="Export venue hires for the selected period to CSV"
+                    >
+                      <Download size={12} /> Venue Hires
+                    </button>
+                    <button
+                      onClick={handleExportFinancial}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-bold transition-colors"
+                      title="Export combined financial summary to CSV"
+                    >
+                      <Download size={12} /> Financial
+                    </button>
+                  </div>
                 </div>
               </div>
 

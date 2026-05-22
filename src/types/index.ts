@@ -66,6 +66,7 @@ export interface Booking {
   isVenueHire?: boolean;
   createdAt?: string; // ISO Date
   updatedAt?: string; // ISO Date
+  deletedAt?: string; // ISO Date — present when soft-deleted, absent when active
 }
 
 export type HousekeepingStatus = 'clean' | 'dirty' | 'inspected';
@@ -113,6 +114,7 @@ export interface VenueHire {
   channelPaymentBasis: 'bookingPrice' | 'deposit';
   createdAt?: string;
   updatedAt?: string;
+  deletedAt?: string; // ISO Date — present when soft-deleted, absent when active
 }
 
 export interface GlobalSettings {

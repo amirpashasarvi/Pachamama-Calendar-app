@@ -87,16 +87,16 @@ export default function Header({ viewStartDate, setViewStartDate, onToday, daysC
         </div>
 
         {/* Right side: Days count (all screens) + Print (desktop only) */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 mr-1 sm:mr-0">
           <select
             value={daysCount}
             onChange={(e) => setDaysCount(Number(e.target.value))}
             className="text-xs font-bold border rounded-lg px-2 py-2 sm:py-1.5 bg-white shadow-sm"
           >
-            <option value={14}>14d</option>
-            <option value={21}>21d</option>
-            <option value={30}>30d</option>
-            <option value={60}>60d</option>
+            <option value={14}>14 days</option>
+            <option value={21}>21 days</option>
+            <option value={30}>30 days</option>
+            <option value={60}>60 days</option>
           </select>
 
           <button className="hidden sm:block p-2 hover:bg-gray-100 rounded-lg text-gray-500" title="Print Calendar">

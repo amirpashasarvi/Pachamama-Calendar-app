@@ -6,9 +6,11 @@ import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, User
 export function useBookingData() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [deletedBookings, setDeletedBookings] = useState<Booking[]>([]);
   const [retreats, setRetreats] = useState<Retreat[]>([]);
   const [retreatTypes, setRetreatTypes] = useState<RetreatType[]>([]);
   const [venueHires, setVenueHires] = useState<VenueHire[]>([]);
+  const [deletedVenueHires, setDeletedVenueHires] = useState<VenueHire[]>([]);
   const [bookingTypes, setBookingTypes] = useState<ConfigOption[]>([]);
   const [bookingChannels, setBookingChannels] = useState<ConfigOption[]>([]);
   const [teamPositions, setTeamPositions] = useState<TeamPosition[]>([]);
@@ -54,12 +56,24 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'rooms');
     });
 
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
     const unsubBookings = onSnapshot(collection(db, 'bookings'), (snap) => {
-      const bookingData: Booking[] = [];
+      const active: Booking[] = [];
+      const deleted: Booking[] = [];
       snap.docs.forEach(d => {
-        bookingData.push({ ...d.data(), id: d.id } as Booking);
+        const item = { ...d.data(), id: d.id } as Booking;
+        if (item.deletedAt) {
+          if (Date.now() - new Date(item.deletedAt).getTime() < THIRTY_DAYS_MS) {
+            deleted.push(item);
+          }
+          // Items older than 30 days are silently dropped from both lists
+        } else {
+          active.push(item);
+        }
       });
-      setBookings(bookingData);
+      setBookings(active);
+      setDeletedBookings(deleted);
       checkLoading('bookings');
     }, (error) => {
       checkLoading('bookings');
@@ -91,11 +105,20 @@ export function useBookingData() {
     });
 
     const unsubVenueHires = onSnapshot(collection(db, 'venueHires'), (snap) => {
-      const data: VenueHire[] = [];
+      const active: VenueHire[] = [];
+      const deleted: VenueHire[] = [];
       snap.docs.forEach(d => {
-        data.push({ ...d.data(), id: d.id } as VenueHire);
+        const item = { ...d.data(), id: d.id } as VenueHire;
+        if (item.deletedAt) {
+          if (Date.now() - new Date(item.deletedAt).getTime() < THIRTY_DAYS_MS) {
+            deleted.push(item);
+          }
+        } else {
+          active.push(item);
+        }
       });
-      setVenueHires(data);
+      setVenueHires(active);
+      setDeletedVenueHires(deleted);
       checkLoading('venueHires');
     }, (error) => {
       checkLoading('venueHires');
@@ -224,5 +247,5 @@ export function useBookingData() {
     };
   }, []);
 
-  return { rooms, bookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, users, loading };
+  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, users, loading };
 }

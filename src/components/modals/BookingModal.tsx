@@ -3,7 +3,7 @@ import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
 import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
-import { collection, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
 import { Trash2, Save, Plus, X, AlertTriangle } from 'lucide-react';
 
@@ -64,6 +64,7 @@ export default function BookingModal({
 
   const [error, setError] = useState<string | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   useEffect(() => {
     if (booking) {
@@ -93,6 +94,7 @@ export default function BookingModal({
     }
     setError(null);
     setShowConfirmDelete(false);
+    setDeleteConfirmText('');
   }, [booking, initialData, isOpen, bookingTypes, bookingChannels]);
 
   // Set defaults for new bookings
@@ -234,7 +236,7 @@ export default function BookingModal({
   const handleDelete = async () => {
     if (!booking?.id) return;
     try {
-      await deleteDoc(doc(db, 'bookings', booking.id));
+      await updateDoc(doc(db, 'bookings', booking.id), { deletedAt: new Date().toISOString() });
       onClose();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `bookings/${booking.id}`);
@@ -267,22 +269,35 @@ export default function BookingModal({
       {booking && isAdmin && (
         <div className="flex items-center gap-2">
           {showConfirmDelete ? (
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
-              <span className="text-[10px] font-bold text-gray-500 italic">Delete this booking?</span>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-3 py-2.5 bg-rose-500 text-white text-[10px] font-bold rounded-lg hover:bg-rose-600 transition-colors"
-              >
-                Yes, delete
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowConfirmDelete(false)}
-                className="px-3 py-2.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2">
+              <span className="text-[10px] font-bold text-gray-500">
+                Type <span className="text-rose-600 font-black">{booking?.guestName || 'DELETE'}</span> to confirm
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value)}
+                  placeholder={booking?.guestName || 'DELETE'}
+                  className="border rounded-lg px-2 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleteConfirmText.trim().toLowerCase() !== (booking?.guestName || 'DELETE').toLowerCase()}
+                  className="px-3 py-2 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowConfirmDelete(false); setDeleteConfirmText(''); }}
+                  className="px-3 py-2 bg-gray-100 text-gray-500 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           ) : (
             <button

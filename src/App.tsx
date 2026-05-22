@@ -1,11 +1,12 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BarChart2, BrushCleaning, Bell, AlertTriangle, LayoutDashboard } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BarChart2, BrushCleaning, Bell, AlertTriangle, LayoutDashboard, Trash2 } from 'lucide-react';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import SettingsModal from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
 import DashboardModal from './components/modals/DashboardModal';
+import TrashedItemsModal from './components/modals/TrashedItemsModal';
 import HousekeepingModal from './components/modals/HousekeepingModal';
 import ProfileModal from './components/modals/ProfileModal';
 import { BookingDataProvider, useBooking } from './hooks/useBooking';
@@ -15,12 +16,13 @@ import { format, parseISO, differenceInHours, isToday } from 'date-fns';
 
 function AppContent() {
   const { profile, logout, isAdmin } = useAuth();
-  const { bookingTypes, bookingChannels, users, bookings, venueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
+  const { bookingTypes, bookingChannels, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
   const { housekeeping, updateStatus, checkAutoDirty } = useHousekeeping(rooms, bookings);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isHousekeepingOpen, setIsHousekeepingOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -163,6 +165,16 @@ function AppContent() {
                 >
                   <BarChart2 size={18} />
                 </button>
+                <button
+                  onClick={() => setIsTrashOpen(true)}
+                  className="relative p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-rose-500"
+                  title="Recently Deleted"
+                >
+                  <Trash2 size={18} />
+                  {(deletedBookings.length + deletedVenueHires.length) > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
+                  )}
+                </button>
                 <button 
                   onClick={() => setIsSettingsOpen(true)}
                   className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
@@ -257,6 +269,12 @@ function AppContent() {
             venueHires={venueHires}
             rooms={rooms}
             bookingChannels={bookingChannels}
+          />
+          <TrashedItemsModal
+            isOpen={isTrashOpen}
+            onClose={() => setIsTrashOpen(false)}
+            deletedBookings={deletedBookings}
+            deletedVenueHires={deletedVenueHires}
           />
           <DashboardModal
             isOpen={isDashboardOpen}

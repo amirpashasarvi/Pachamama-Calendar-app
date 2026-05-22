@@ -5,11 +5,13 @@ import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, User
 interface BookingDataContextType {
   rooms: Room[];
   bookings: Booking[];
+  deletedBookings: Booking[];
   retreats: Retreat[];
   retreatTypes: RetreatType[];
   teamPositions: TeamPosition[];
   teamAssignments: TeamAssignment[];
   venueHires: VenueHire[];
+  deletedVenueHires: VenueHire[];
   bookingTypes: ConfigOption[];
   bookingChannels: ConfigOption[];
   users: UserRecord[];

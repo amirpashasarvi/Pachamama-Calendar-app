@@ -3,7 +3,7 @@ import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
 import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
-import { collection, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Trash2, Save, Plus, X } from 'lucide-react';
 
@@ -40,6 +40,7 @@ export default function VenueHireModal({
   });
 
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   useEffect(() => {
     if (venueHire) {
@@ -67,6 +68,7 @@ export default function VenueHireModal({
       });
     }
     setShowConfirmDelete(false);
+    setDeleteConfirmText('');
   }, [venueHire, isOpen, bookingChannels]);
 
   const totalExtras = (formData.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
@@ -103,7 +105,7 @@ export default function VenueHireModal({
   const handleDelete = async () => {
     if (!venueHire?.id) return;
     try {
-      await deleteDoc(doc(db, 'venueHires', venueHire.id));
+      await updateDoc(doc(db, 'venueHires', venueHire.id), { deletedAt: new Date().toISOString() });
       onClose();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `venueHires/${venueHire.id}`);
@@ -385,21 +387,35 @@ export default function VenueHireModal({
           
           <div className="flex gap-3 ml-auto">
             {showConfirmDelete ? (
-              <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="px-4 py-2 bg-rose-500 text-white text-sm font-bold rounded-xl hover:bg-rose-600 shadow-lg shadow-rose-200"
-                >
-                  Yes, delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDelete(false)}
-                  className="px-4 py-2 bg-gray-100 text-gray-500 text-sm font-bold rounded-xl hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
+              <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-right-2">
+                <span className="text-[10px] font-bold text-gray-500">
+                  Type <span className="text-rose-600 font-black">{venueHire?.name || 'DELETE'}</span> to confirm
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={e => setDeleteConfirmText(e.target.value)}
+                    placeholder={venueHire?.name || 'DELETE'}
+                    className="border rounded-lg px-2 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleteConfirmText.trim().toLowerCase() !== (venueHire?.name || 'DELETE').toLowerCase()}
+                    className="px-3 py-2 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowConfirmDelete(false); setDeleteConfirmText(''); }}
+                    className="px-3 py-2 bg-gray-100 text-gray-500 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : (
               <>
