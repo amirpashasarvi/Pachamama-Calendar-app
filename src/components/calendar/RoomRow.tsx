@@ -12,14 +12,15 @@ interface RoomRowProps {
   room: Room;
   days: Date[];
   bookings: Booking[];
-  housekeepingStatus?: 'clean' | 'dirty' | 'inspected';
+  housekeepingStatus?: 'clean' | 'dirty' | 'inspected' | 'cleaned';
   onEditRoom: () => void;
   onEditBooking: (booking: Booking) => void;
   onAddBooking: (date: Date) => void;
   venueHireTintDates?: string[];
+  isAdmin?: boolean;
 }
 
-export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [] }: RoomRowProps) {
+export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], isAdmin = false }: RoomRowProps) {
   const {
     attributes,
     listeners,
@@ -41,12 +42,12 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
     <div 
       ref={setNodeRef}
       style={style}
-      className="flex relative border-b border-gray-400 group h-14 border-l border-gray-400 bg-white"
+      className="flex relative border-b border-gray-200 group h-14 bg-white"
     >
       {/* Room Label Column */}
       <div 
-        className="w-28 sm:w-48 sticky left-0 z-[80] bg-white border-r border-gray-400 p-2 flex items-center gap-2 cursor-pointer hover:bg-gray-50 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] relative overflow-hidden"
-        onClick={onEditRoom}
+        className={cn("w-28 sm:w-48 sticky left-0 z-[80] bg-white border-r border-gray-200 p-2 flex items-center gap-2 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] overflow-hidden", isAdmin ? "cursor-pointer hover:bg-gray-50" : "cursor-default")}
+        onClick={isAdmin ? onEditRoom : undefined}
       >
         {/* Thicker Color Strip Drag Handle */}
         <div 
@@ -67,11 +68,11 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
               <div 
                 className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
                   housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' : 
-                  housekeepingStatus === 'inspected' ? 'bg-amber-500 shadow-amber-200' : 'bg-green-500 shadow-green-200'
+                  (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' : 'bg-green-500 shadow-green-200'
                 }`} 
                 title={
                   housekeepingStatus === 'dirty' ? 'Dirty' : 
-                  housekeepingStatus === 'inspected' ? 'Cleaned, needs inspection' : 'Clean'
+                  (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'Cleaned, needs inspection' : 'Clean'
                 }
               />
             )}
@@ -95,15 +96,16 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
             <div 
               key={`${String(room.id)}-${day.toISOString()}-${idx}`} 
               className={cn(
-                "w-14 flex-shrink-0 border-r border-gray-400 h-full transition-colors cursor-crosshair hover:bg-blue-50/20 active:bg-blue-50 flex items-center justify-center text-blue-400",
-                isWeekend(day) ? 'bg-gray-200' : '',
-                isVenueHireDay ? 'bg-orange-100/50' : '',
-                isToday(day) ? 'bg-blue-50' : '',
+                "w-14 flex-shrink-0 border-r border-gray-200 h-full transition-colors flex items-center justify-center text-blue-400",
+                isAdmin && !isOccupied ? "cursor-crosshair hover:bg-blue-50/30 active:bg-blue-50" : "",
+                isWeekend(day) ? 'bg-gray-50' : '',
+                isVenueHireDay ? 'bg-orange-50/60' : '',
+                isToday(day) ? 'bg-sky-50/70' : '',
                 isOccupied ? 'cursor-default pointer-events-none' : ''
               )}
-              onClick={() => !isOccupied && onAddBooking(day)}
+              onClick={() => isAdmin && !isOccupied && onAddBooking(day)}
             >
-              {!isOccupied && <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+              {isAdmin && !isOccupied && <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
             </div>
           );
         })}

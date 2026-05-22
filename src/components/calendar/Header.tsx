@@ -15,7 +15,7 @@ export default function Header({ viewStartDate, setViewStartDate, onToday, daysC
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   return (
-    <div className="bg-[#f0f2f5] border-b">
+    <div className="bg-[#f0f2f5] border-b print:hidden">
       {/* Main controls row */}
       <div className="h-14 flex items-center justify-between px-4">
         <div className="flex items-center gap-2 sm:gap-4">
@@ -99,7 +99,11 @@ export default function Header({ viewStartDate, setViewStartDate, onToday, daysC
             <option value={60}>60 days</option>
           </select>
 
-          <button className="hidden sm:block p-2 hover:bg-gray-100 rounded-lg text-gray-500" title="Print Calendar">
+          <button
+            className="hidden sm:block p-2 hover:bg-gray-100 rounded-lg text-gray-500"
+            title="Print Calendar"
+            onClick={() => window.print()}
+          >
             <Printer size={18} />
           </button>
         </div>

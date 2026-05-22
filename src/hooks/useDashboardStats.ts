@@ -98,8 +98,12 @@ function vhCollected(vh: VenueHire): number {
 function bookingCommission(b: Booking, channels: ConfigOption[]): number {
   const ch = channels.find(c => c.name === b.bookingChannel);
   if (!ch?.commission) return 0;
-  const basis = b.channelPaymentBasis === 'bookingPrice' ? (b.price || 0) : (b.deposit || 0);
-  return (basis * ch.commission) / 100;
+  const base = b.channelPaymentBasis === 'custom'
+    ? (b.commissionCustomAmount ?? 0)
+    : b.channelPaymentBasis === 'bookingPrice'
+      ? (b.price || 0)
+      : (b.deposit || 0);
+  return (base * ch.commission) / 100;
 }
 
 function inPeriod(dateStr: string, period: DashboardPeriod, today: Date): boolean {

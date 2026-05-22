@@ -81,6 +81,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       checkOut: vh.endDate,
       bookingChannel: vh.bookingChannel,
       channelPaymentBasis: vh.channelPaymentBasis,
+      commissionCustomAmount: vh.commissionCustomAmount,
       createdAt: vh.createdAt,
       isVenueHire: true,
       type: 'Venue Hire',
@@ -172,9 +173,13 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       collected += b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
 
       const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-      if (channel && channel.commission) {
-        const basisAmount = b.channelPaymentBasis === 'bookingPrice' ? b.financials.price : b.financials.deposit;
-        commissions += (basisAmount * channel.commission) / 100;
+      if (channel?.commission) {
+        const base = b.channelPaymentBasis === 'custom'
+          ? (b.commissionCustomAmount ?? 0)
+          : b.channelPaymentBasis === 'bookingPrice'
+            ? b.financials.price
+            : b.financials.deposit;
+        commissions += (base * channel.commission) / 100;
       }
     });
 
@@ -207,9 +212,13 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       }
 
       const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-      if (channel && channel.commission) {
-        const basisAmount = b.channelPaymentBasis === 'bookingPrice' ? b.financials.price : b.financials.deposit;
-        totalCommissions += (basisAmount * channel.commission) / 100;
+      if (channel?.commission) {
+        const base = b.channelPaymentBasis === 'custom'
+          ? (b.commissionCustomAmount ?? 0)
+          : b.channelPaymentBasis === 'bookingPrice'
+            ? b.financials.price
+            : b.financials.deposit;
+        totalCommissions += (base * channel.commission) / 100;
       }
     });
 
@@ -294,7 +303,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
   const SummaryCard = ({ title, value, icon: Icon, colorClass }: { title: string, value: string, icon: any, colorClass: string }) => (
     <div className="bg-white p-4 sm:p-6 rounded-2xl border shadow-sm flex flex-col gap-2 sm:gap-4">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{title}</span>
+        <span className="text-xs font-medium text-gray-400">{title}</span>
         <div className={cn("p-1.5 sm:p-2 rounded-xl", colorClass)}>
           <Icon size={16} />
         </div>
@@ -315,12 +324,12 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
           className="fixed inset-0 z-[200] bg-gray-50 flex flex-col"
         >
           {/* Header */}
-          <header className="h-16 bg-white border-b px-8 flex items-center justify-between sticky top-0 z-10">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                <TrendingUp size={20} />
+          <header className="h-14 bg-white border-b px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10">
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-gray-100 text-gray-600 rounded-lg">
+                <TrendingUp size={16} />
               </div>
-              <h2 className="text-xl font-black tracking-tight">Business Statistics</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Business Statistics</h2>
             </div>
             <button 
               onClick={onClose}
@@ -334,7 +343,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
             {/* Filters */}
             <div className="flex flex-wrap items-center justify-between gap-6 pb-2">
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Period</span>
+                <span className="text-xs font-bold text-gray-400">Period</span>
                 <div className="flex p-1 bg-white border rounded-xl shadow-sm">
                   {(['All', '1M', '3M', '6M', '12M', 'Custom'] as Period[]).map((p) => (
                     <button
@@ -355,7 +364,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
               {period === 'Custom' && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2 transition-all">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Custom Dates</span>
+                  <span className="text-xs font-bold text-gray-400">Custom Dates</span>
                   <div className="flex items-center gap-2 bg-white border p-1 rounded-xl shadow-sm">
                     <DatePicker 
                       value={customRange.from}
@@ -380,7 +389,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
               )}
 
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Room Filter</span>
+                <span className="text-xs font-bold text-gray-400">Room Filter</span>
                 <select
                   value={roomFilter}
                   onChange={e => setRoomFilter(e.target.value)}
@@ -589,9 +598,12 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       const remaining = total - collected;
                       
                       const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-                      const commission = channel && channel.commission 
-                        ? (b.channelPaymentBasis === 'bookingPrice' ? b.financials.price : b.financials.deposit) * channel.commission / 100
-                        : 0;
+                      const commBase = b.channelPaymentBasis === 'custom'
+                        ? (b.commissionCustomAmount ?? 0)
+                        : b.channelPaymentBasis === 'bookingPrice'
+                          ? b.financials.price
+                          : b.financials.deposit;
+                      const commission = channel?.commission ? (commBase * channel.commission) / 100 : 0;
 
                       const isExpanded = expandedBookingId === b.id;
                       const roomName = b.isVenueHire 

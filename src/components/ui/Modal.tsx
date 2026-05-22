@@ -35,7 +35,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }: Moda
           >
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
               <button
                 onClick={onClose}
                 className="p-2.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors"

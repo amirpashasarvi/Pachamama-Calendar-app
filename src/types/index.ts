@@ -59,7 +59,8 @@ export interface Booking {
   deposit: number;
   paidLater1: number;
   paidLater2: number;
-  channelPaymentBasis: 'bookingPrice' | 'deposit';
+  channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
+  commissionCustomAmount?: number;
   status: BookingStatus;
   source: string;
   bookingChannel: string;
@@ -67,9 +68,18 @@ export interface Booking {
   createdAt?: string; // ISO Date
   updatedAt?: string; // ISO Date
   deletedAt?: string; // ISO Date — present when soft-deleted, absent when active
+  commentsUpdatedAt?: string; // ISO Date — set when staff save a comment
 }
 
-export type HousekeepingStatus = 'clean' | 'dirty' | 'inspected';
+// 'cleaned' = room cleaned, awaiting final inspection
+// 'inspected' kept for backward-compat with existing Firestore records (treated as 'cleaned')
+export type HousekeepingStatus = 'clean' | 'dirty' | 'cleaned' | 'inspected';
+
+export interface HousekeepingHistoryEntry {
+  action: string;
+  timestamp: string; // ISO
+  userName: string;
+}
 
 export interface HousekeepingRecord {
   roomId: string;
@@ -78,7 +88,13 @@ export interface HousekeepingRecord {
   inspected: boolean;
   lastCheckout: string | null; // ISO Date
   nextCheckin: string | null;  // ISO Date
-  lastUpdated: string;        // ISO Date
+  lastUpdated: string;         // ISO Date
+  assignedTo?: string;         // staff name
+  cleanedBy?: string;          // name of staff who marked room cleaned
+  inspectedBy?: string;        // name of staff who marked room inspected & ready
+  notes?: string;
+  notesUpdatedAt?: string;     // ISO — set when notes are saved, used for admin alerts
+  history?: HousekeepingHistoryEntry[];
 }
 
 export interface Retreat {
@@ -111,7 +127,8 @@ export interface VenueHire {
   paidLater1: number;
   paidLater2: number;
   bookingChannel: string;
-  channelPaymentBasis: 'bookingPrice' | 'deposit';
+  channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
+  commissionCustomAmount?: number;
   createdAt?: string;
   updatedAt?: string;
   deletedAt?: string; // ISO Date — present when soft-deleted, absent when active

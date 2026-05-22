@@ -217,7 +217,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
   }
 
   return (
-    <div className="flex flex-col h-full bg-white select-none">
+    <div className="flex flex-col h-full bg-white select-none print:h-auto">
       <Header 
         viewStartDate={viewStartDate} 
         setViewStartDate={setViewStartDate}
@@ -228,22 +228,22 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
 
       <div 
         ref={(el) => { scrollContainerRef.current = el; }}
-        className="flex-1 overflow-auto border-t border-gray-400 scrollbar-thin scrollbar-thumb-gray-200"
+        className="flex-1 overflow-auto border-t border-gray-200 scrollbar-thin scrollbar-thumb-gray-200 print:overflow-visible print:h-auto print:flex-none"
       >
         <div className="inline-block min-w-full">
           
           {/* Header Row (Dates) */}
-          <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-400 shadow-sm border-l border-gray-400">
-            <div className="w-28 sm:w-48 sticky left-0 z-[100] bg-white border-r border-gray-400 flex items-center justify-center p-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+          <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-200 shadow-sm">
+            <div className="w-28 sm:w-48 sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center p-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
             </div>
             {days.map((day, idx) => (
               <div 
                 key={`header-${day.toISOString()}-${idx}`} 
-                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-400 font-mono text-[10px] ${isToday(day) ? 'bg-blue-100 text-blue-700' : isWeekend(day) ? 'bg-gray-300 text-gray-700' : 'text-gray-600'}`}
+                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono text-[10px] ${isToday(day) ? 'bg-sky-50 text-sky-700' : isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'}`}
               >
-                <span className="uppercase font-bold tracking-tighter opacity-50">{format(day, 'EEE')}</span>
-                <span className={`text-sm font-bold ${isToday(day) ? 'font-black text-blue-700' : 'text-black'}`}>{format(day, 'd')}</span>
+                <span className="uppercase font-bold tracking-tighter opacity-60">{format(day, 'EEE')}</span>
+                <span className={`text-sm font-bold ${isToday(day) ? 'font-black text-sky-700' : 'text-gray-800'}`}>{format(day, 'd')}</span>
               </div>
             ))}
           </div>
@@ -287,6 +287,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
                       onEditBooking={handleEditBooking}
                       onAddBooking={(date) => handleAddBooking(room.id, date)}
                       venueHireTintDates={venueHireTintDates}
+                      isAdmin={isAdmin}
                     />
                   ))}
                 </SortableContext>
@@ -316,37 +317,38 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         </div>
       </div>
 
-      <div className="h-10 border-t border-gray-400 bg-gray-50 flex items-center px-4 justify-between">
-        <div className="flex items-center gap-6">
+      <div className="h-12 border-t border-gray-200 bg-white flex items-center px-4 justify-between">
+        <div className="flex items-center gap-5">
           <div className="flex items-center gap-2">
             <input 
               type="checkbox" 
               checked={showSummary} 
               onChange={(e) => setShowSummary(e.target.checked)} 
               id="summary-toggle"
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
             />
-            <label htmlFor="summary-toggle" className="cursor-pointer font-bold text-[11px] uppercase tracking-wider text-gray-500">Show Summary</label>
+            <label htmlFor="summary-toggle" className="cursor-pointer text-xs text-gray-400 font-medium">Summary</label>
           </div>
-
           <div className="flex items-center gap-2">
             <input 
               type="checkbox" 
               checked={showTeamRoster} 
               onChange={(e) => setShowTeamRoster(e.target.checked)} 
               id="roster-toggle"
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
             />
-            <label htmlFor="roster-toggle" className="cursor-pointer font-bold text-[11px] uppercase tracking-wider text-gray-500">Show Team Roster</label>
+            <label htmlFor="roster-toggle" className="cursor-pointer text-xs text-gray-400 font-medium">Team Roster</label>
           </div>
         </div>
 
-        <button 
-          onClick={() => handleAddBooking()}
-          className="flex items-center gap-1.5 px-4 py-1 bg-black text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors"
-        >
-          <Plus size={14} /> Add Booking
-        </button>
+        {isAdmin && (
+          <button 
+            onClick={() => handleAddBooking()}
+            className="flex items-center gap-1.5 px-5 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
+          >
+            <Plus size={14} /> Add Booking
+          </button>
+        )}
       </div>
 
       <BookingModal 

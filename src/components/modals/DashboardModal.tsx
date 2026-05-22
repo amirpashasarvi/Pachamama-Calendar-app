@@ -32,9 +32,9 @@ function StatCard({ label, value, sub, tone = 'default' }: {
   }[tone];
   return (
     <div className="bg-white rounded-2xl border p-4 flex flex-col gap-1">
-      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</span>
+      <span className="text-xs font-medium text-gray-400">{label}</span>
       <span className={cn('text-xl font-black tracking-tight', toneClass)}>{value}</span>
-      {sub && <span className="text-[10px] text-gray-400 font-bold">{sub}</span>}
+      {sub && <span className="text-xs text-gray-400">{sub}</span>}
     </div>
   );
 }
@@ -115,7 +115,7 @@ function UpcomingTable({ items, showBalance = true }: { items: UpcomingItem[]; s
 
 function SectionTitle({ children }: { children: string }) {
   return (
-    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">{children}</h3>
+    <h3 className="text-xs font-bold text-gray-400 mb-3">{children}</h3>
   );
 }
 
@@ -351,12 +351,12 @@ export default function DashboardModal({
           className="fixed inset-0 z-[200] bg-gray-50 flex flex-col"
         >
           {/* Header */}
-          <header className="h-16 bg-white border-b px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10 shrink-0">
+          <header className="h-14 bg-white border-b px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10 shrink-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                <LayoutDashboard size={18} />
+              <div className="p-1.5 bg-gray-100 text-gray-600 rounded-lg">
+                <LayoutDashboard size={16} />
               </div>
-              <h2 className="text-lg font-black tracking-tight">Business Dashboard</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Business Dashboard</h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors">
               <X size={22} />
@@ -365,7 +365,7 @@ export default function DashboardModal({
 
           {/* Period filter */}
           <div className="bg-white border-b px-4 sm:px-8 py-2 flex items-center gap-2 shrink-0">
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 shrink-0">Period:</span>
+            <span className="text-xs font-medium text-gray-400 shrink-0">Period:</span>
             <div className="flex gap-1">
               {PERIODS.map(p => (
                 <button

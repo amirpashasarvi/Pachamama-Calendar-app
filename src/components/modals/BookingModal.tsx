@@ -54,6 +54,7 @@ export default function BookingModal({
     paidLater1: 0,
     paidLater2: 0,
     channelPaymentBasis: 'bookingPrice' as const,
+    commissionCustomAmount: 0,
     source: '',
     bookingChannel: '',
     status: 'Unpaid' as BookingStatus,
@@ -65,6 +66,7 @@ export default function BookingModal({
   const [error, setError] = useState<string | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [showBedConfig, setShowBedConfig] = useState(false);
 
   useEffect(() => {
     if (booking) {
@@ -119,6 +121,26 @@ export default function BookingModal({
   else if ((formData.deposit || 0) > 0 || (formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) calculatedStatus = 'Partial';
 
   const nights = calculateNights(formData.checkIn || '', formData.checkOut || '');
+
+  const selectedChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
+  const channelCommissionRate = selectedChannel?.commission ?? 0;
+
+  const commissionBase = formData.channelPaymentBasis === 'custom'
+    ? (formData.commissionCustomAmount ?? 0)
+    : formData.channelPaymentBasis === 'bookingPrice'
+      ? (formData.price || 0)
+      : (formData.deposit || 0);
+
+  const liveCommission = useMemo(() => {
+    if (!channelCommissionRate) return 0;
+    const base = formData.channelPaymentBasis === 'custom'
+      ? (formData.commissionCustomAmount ?? 0)
+      : formData.channelPaymentBasis === 'bookingPrice'
+        ? (formData.price || 0)
+        : (formData.deposit || 0);
+    return (base * channelCommissionRate) / 100;
+  }, [formData.channelPaymentBasis, formData.price, formData.deposit, formData.commissionCustomAmount, channelCommissionRate]);
+
 
   const checkOverlaps = (targetRoomId: string) => {
     if (!targetRoomId || !formData.checkIn || !formData.checkOut) return null;
@@ -208,7 +230,8 @@ export default function BookingModal({
         } else {
           // If staff, only update comments
           await updateDoc(doc(db, 'bookings', booking.id), {
-            comments: formData.comments || ''
+            comments: formData.comments || '',
+            commentsUpdatedAt: new Date().toISOString(),
           });
         }
       } else if (formData.roomId === 'ALL') {
@@ -335,23 +358,23 @@ export default function BookingModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'} footer={modalFooter}>
-      <form id="booking-form" onSubmit={handleSave} className="space-y-8">
+      <form id="booking-form" onSubmit={handleSave} className="space-y-5">
         
         {/* Basic Info */}
-        <section className="space-y-4">
+        <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Guest Information</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-bold text-gray-500 mb-1">Main Guest Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Main Guest Name</label>
               {isAdmin ? (
                 <input 
                   required
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.guestName || ''}
                   onChange={e => setFormData({ ...formData, guestName: e.target.value })}
                 />
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {formData.guestName || '-'}
                 </div>
               )}
@@ -362,12 +385,12 @@ export default function BookingModal({
                 <input 
                   type="number"
                   min={0}
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.adults ?? ''}
                   onChange={e => setFormData({ ...formData, adults: parseInt(e.target.value) || 0 })}
                 />
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {formData.adults ?? 0}
                 </div>
               )}
@@ -378,56 +401,59 @@ export default function BookingModal({
                 <input 
                   type="number"
                   min={0}
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.kids ?? ''}
                   onChange={e => setFormData({ ...formData, kids: parseInt(e.target.value) || 0 })}
                 />
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {formData.kids ?? 0}
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Single Beds</label>
-              {isAdmin ? (
-                <input 
-                  type="number"
-                  min={0}
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={formData.singleBeds ?? ''}
-                  onChange={e => setFormData({ ...formData, singleBeds: parseInt(e.target.value) || 0 })}
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
-                  {formData.singleBeds ?? 0}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Double Beds</label>
-              {isAdmin ? (
-                <input 
-                  type="number"
-                  min={0}
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={formData.doubleBeds ?? ''}
-                  onChange={e => setFormData({ ...formData, doubleBeds: parseInt(e.target.value) || 0 })}
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
-                  {formData.doubleBeds ?? 0}
-                </div>
-              )}
-            </div>
           </div>
+
+          {/* Bed configuration — collapsed by default */}
+          {isAdmin && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowBedConfig(v => !v)}
+                className="text-xs text-gray-400 hover:text-gray-600 font-bold transition-colors"
+              >
+                {showBedConfig ? '▾ Hide bed config' : '▸ Bed configuration'}
+              </button>
+              {showBedConfig && (
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Single Beds</label>
+                    <input 
+                      type="number" min={0}
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={formData.singleBeds ?? ''}
+                      onChange={e => setFormData({ ...formData, singleBeds: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Double Beds</label>
+                    <input 
+                      type="number" min={0}
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={formData.doubleBeds ?? ''}
+                      onChange={e => setFormData({ ...formData, doubleBeds: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Stay Info */}
-        <section className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <section className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Check-in</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Check-in</label>
               {isAdmin ? (
                 <DatePicker 
                   value={formData.checkIn || ''}
@@ -441,13 +467,13 @@ export default function BookingModal({
                   }}
                 />
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {formData.checkIn || '-'}
                 </div>
               )}
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Check-out</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
               {isAdmin ? (
                 <DatePicker 
                   value={formData.checkOut || ''}
@@ -458,20 +484,20 @@ export default function BookingModal({
                   }}
                 />
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {formData.checkOut || '-'}
                 </div>
               )}
             </div>
-            <div className="col-span-2 text-[10px] bg-blue-50 text-blue-600 px-3 py-1 rounded font-bold">
+            <div className="col-span-2 text-xs bg-sky-50 text-sky-700 px-3 py-1.5 rounded-lg font-bold">
               Total Stay: {nights} nights
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Room</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
               {isAdmin ? (
                 <select 
                   required
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.roomId || ''}
                   onChange={e => {
                     setFormData({ ...formData, roomId: e.target.value });
@@ -483,16 +509,16 @@ export default function BookingModal({
                   {rooms.map(r => <option key={String(r.id)} value={String(r.id)}>{typeof r.name === 'object' ? 'Unnamed Room' : String(r.name)}</option>)}
                 </select>
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {rooms.find(r => r.id === formData.roomId)?.name || (formData.roomId === 'ALL' ? 'All Rooms' : '-')}
                 </div>
               )}
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
               {isAdmin ? (
                 <select 
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.type || ''}
                   onChange={e => setFormData({ ...formData, type: e.target.value })}
                 >
@@ -500,7 +526,7 @@ export default function BookingModal({
                   {bookingTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                 </select>
               ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic">
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic">
                   {formData.type || '-'}
                 </div>
               )}
@@ -515,61 +541,53 @@ export default function BookingModal({
           </div>
         </section>
 
-        {/* Additional Info */}
-        <section className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-gray-500 mb-1 text-rose-500">Dietary Requirements</label>
-              {isAdmin ? (
-                <textarea 
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[60px]"
-                  placeholder="e.g. Vegan, Gluten-free..."
-                  value={formData.dietary || ''}
-                  onChange={e => setFormData({ ...formData, dietary: e.target.value })}
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic min-h-[60px] whitespace-pre-wrap">
-                  {formData.dietary || '-'}
-                </div>
-              )}
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-gray-500 mb-1">Booking Notes</label>
-              {isAdmin ? (
-                <textarea 
-                  className="w-full px-4 py-2 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[60px]"
-                  placeholder="Any special requests..."
-                  value={formData.notes || ''}
-                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-100/50 border rounded-lg text-sm font-bold text-gray-900 italic min-h-[60px] whitespace-pre-wrap">
-                  {formData.notes || '-'}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* Comments Section */}
-        <section className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-gray-500 mb-1">COMMENTS</label>
+        {/* Additional Info + Notes */}
+        <section className="space-y-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-bold text-rose-500 mb-1 uppercase tracking-wide">Dietary Requirements</label>
+            {isAdmin ? (
               <textarea 
-                className="w-full px-4 py-2 bg-white border-2 border-blue-100 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[100px] shadow-sm"
-                placeholder="Add a comment..."
-                value={formData.comments || ''}
-                onChange={e => setFormData({ ...formData, comments: e.target.value })}
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[56px] resize-none"
+                placeholder="e.g. Vegan, Gluten-free..."
+                value={formData.dietary || ''}
+                onChange={e => setFormData({ ...formData, dietary: e.target.value })}
               />
-            </div>
+            ) : (
+              <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic min-h-[56px] whitespace-pre-wrap">
+                {formData.dietary || '-'}
+              </div>
+            )}
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Booking Notes</label>
+            {isAdmin ? (
+              <textarea 
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[56px] resize-none"
+                placeholder="Any special requests..."
+                value={formData.notes || ''}
+                onChange={e => setFormData({ ...formData, notes: e.target.value })}
+              />
+            ) : (
+              <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic min-h-[56px] whitespace-pre-wrap">
+                {formData.notes || '-'}
+              </div>
+            )}
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Staff Comments</label>
+            <textarea 
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[72px] resize-none"
+              placeholder="Internal notes, observations..."
+              value={formData.comments || ''}
+              onChange={e => setFormData({ ...formData, comments: e.target.value })}
+            />
           </div>
         </section>
 
         {/* Financial info */}
         {isAdmin && (
-          <section className="space-y-4 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-600">Financials</h3>
+          <section className="space-y-4 pt-4 border-t border-gray-100">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Financials</h3>
 
             {/* Recap / Totals */}
             <div className="pb-4 border-b flex flex-col gap-2">
@@ -597,29 +615,29 @@ export default function BookingModal({
               {/* Row 1: Booking Price | Deposit */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
+                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
                   <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2 text-gray-400">€</span>
+                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
                     <input 
                       type="number"
-                      className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                       value={formData.price ?? ''}
                       onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   {nights > 0 && (formData.price || 0) > 0 && (
-                    <span className="block text-right text-[10px] font-mono text-gray-400 mt-1">
+                    <span className="block text-right text-xs font-mono text-gray-400 mt-1">
                       ≈ €{((formData.price || 0) / nights).toFixed(2)} / night
                     </span>
                   )}
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Deposit</label>
+                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Deposit</label>
                   <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2 text-gray-400">€</span>
+                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
                     <input 
                       type="number"
-                      className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                       value={formData.deposit ?? ''}
                       onChange={e => setFormData({ ...formData, deposit: parseFloat(e.target.value) || 0 })}
                     />
@@ -636,16 +654,16 @@ export default function BookingModal({
                 {(formData.extras || []).map((extra, idx) => (
                   <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                     <input 
-                      className="flex-1 px-3 py-2 text-xs border rounded-lg outline-none bg-white"
+                      className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none bg-gray-50"
                       placeholder="e.g. Airport transfer"
                       value={extra.label || ''}
                       onChange={updateExtra.bind(null, idx, 'label' as any)}
                     />
                     <div className="relative w-32 font-mono text-sm">
-                      <span className="absolute left-3 top-1.5 text-gray-400 text-xs">€</span>
+                      <span className="absolute left-3 top-2 text-gray-400 text-xs">€</span>
                       <input 
                         type="number"
-                        className="w-full pl-7 pr-3 py-1.5 border rounded-lg outline-none bg-white text-xs"
+                        className="w-full pl-7 pr-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-xs"
                         value={extra.amount ?? ''}
                         onChange={updateExtra.bind(null, idx, 'amount' as any)}
                       />
@@ -686,26 +704,26 @@ export default function BookingModal({
               </div>
 
               {/* Paid Later Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
+                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
                   <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2 text-gray-400">€</span>
+                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
                     <input 
                       type="number"
-                      className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                       value={formData.paidLater1 ?? ''}
                       onChange={e => setFormData({ ...formData, paidLater1: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
+                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
                   <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2 text-gray-400">€</span>
+                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
                     <input 
                       type="number"
-                      className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                       value={formData.paidLater2 ?? ''}
                       onChange={e => setFormData({ ...formData, paidLater2: parseFloat(e.target.value) || 0 })}
                     />
@@ -713,48 +731,69 @@ export default function BookingModal({
                 </div>
               </div>
 
-              {/* Booking Channel + Payment Basis */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Booking Channel</label>
-                  <select 
-                    className="w-full px-3 py-2 border rounded-lg outline-none bg-white text-xs"
+              {/* Channel & Commission */}
+              <div className="space-y-2 pt-2 border-t border-gray-100">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400">Channel &amp; Commission</h4>
+
+                {/* Row 1: Channel dropdown | basis pills | custom amount input */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
                     value={formData.bookingChannel || ''}
                     onChange={e => setFormData({ ...formData, bookingChannel: e.target.value })}
                   >
-                    <option value="">Select Channel</option>
+                    <option value="">Direct</option>
                     {bookingChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Payment Basis</label>
-                  <div className="flex p-1 bg-white border rounded-lg h-[44px]">
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, channelPaymentBasis: 'bookingPrice' })}
-                      className={cn(
-                        "flex-1 px-1 text-[9px] font-bold rounded transition-all leading-tight",
-                        formData.channelPaymentBasis === 'bookingPrice' 
-                          ? "bg-black text-white shadow-sm" 
-                          : "text-gray-400 hover:text-gray-600"
-                      )}
-                    >
-                      Booking Price
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, channelPaymentBasis: 'deposit' })}
-                      className={cn(
-                        "flex-1 px-1 text-[9px] font-bold rounded transition-all leading-tight",
-                        formData.channelPaymentBasis === 'deposit' 
-                          ? "bg-black text-white shadow-sm" 
-                          : "text-gray-400 hover:text-gray-600"
-                      )}
-                    >
-                      Deposit
-                    </button>
+
+                  <div className="flex gap-1 p-0.5 bg-gray-100 rounded-xl shrink-0">
+                    {([
+                      { value: 'bookingPrice', label: 'Full Booking' },
+                      { value: 'deposit',      label: 'Deposit' },
+                      { value: 'custom',       label: 'Custom' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, channelPaymentBasis: opt.value })}
+                        className={cn(
+                          'py-1 px-2.5 rounded-lg text-xs font-bold transition-all',
+                          formData.channelPaymentBasis === opt.value
+                            ? 'bg-white text-gray-800 shadow-sm'
+                            : 'text-gray-400 hover:text-gray-600'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
+
+                  {/* Base amount — always visible; editable only for Custom */}
+                  {formData.channelPaymentBasis === 'custom' ? (
+                    <div className="relative shrink-0 w-28">
+                      <span className="absolute left-2.5 top-[9px] text-xs text-gray-400">€</span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="w-full pl-6 pr-2 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono text-sm"
+                        value={formData.commissionCustomAmount ?? ''}
+                        onChange={e => setFormData({ ...formData, commissionCustomAmount: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  ) : (
+                    <div className="shrink-0 w-28 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-sm text-gray-400 text-right select-none">
+                      €{commissionBase.toFixed(2)}
+                    </div>
+                  )}
                 </div>
+
+                {/* Row 2: Always-visible commission result — even for 0% / direct */}
+                <p className="text-xs text-gray-400 font-mono">
+                  {channelCommissionRate}% commission
+                  <span className="mx-1.5 text-gray-200">·</span>
+                  €{liveCommission.toFixed(2)}
+                </p>
               </div>
 
             </div>
@@ -774,7 +813,7 @@ export default function BookingModal({
 
         {error && (
           <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-            <Trash2 size={18} className="text-rose-500 shrink-0 mt-0.5" />
+            <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
             <div className="text-sm font-bold text-rose-800 whitespace-pre-line">{error}</div>
           </div>
         )}

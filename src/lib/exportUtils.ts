@@ -42,11 +42,16 @@ function calcCommission(
   deposit: number,
   channelName: string,
   paymentBasis: string,
-  channels: ConfigOption[]
+  channels: ConfigOption[],
+  customBase?: number
 ): number {
   const ch = channels.find(c => c.name === channelName);
   if (!ch?.commission) return 0;
-  const base = paymentBasis === 'bookingPrice' ? price : deposit;
+  const base = paymentBasis === 'custom'
+    ? (customBase ?? 0)
+    : paymentBasis === 'bookingPrice'
+      ? price
+      : deposit;
   return (base * ch.commission) / 100;
 }
 
@@ -73,7 +78,7 @@ export function exportBookingsToCSV(
     const collected = (b.deposit || 0) + (b.paidLater1 || 0) + (b.paidLater2 || 0);
     const remaining = total - collected;
     const room = rooms.find(r => r.id === b.roomId)?.name || '';
-    const commission = calcCommission(b.price || 0, b.deposit || 0, b.bookingChannel, b.channelPaymentBasis, channels);
+        const commission = calcCommission(b.price || 0, b.deposit || 0, b.bookingChannel, b.channelPaymentBasis, channels, b.commissionCustomAmount);
 
     return [
       b.guestName, b.additionalNames, b.type,
@@ -84,7 +89,7 @@ export function exportBookingsToCSV(
       extrasTotal.toFixed(2), total.toFixed(2),
       collected.toFixed(2), remaining.toFixed(2), commission.toFixed(2),
       b.status, b.bookingChannel,
-      b.channelPaymentBasis === 'bookingPrice' ? 'Full Price' : 'Deposit Only',
+           b.channelPaymentBasis === 'bookingPrice' ? 'Full Booking' : b.channelPaymentBasis === 'deposit' ? 'Deposit Only' : 'Custom',
       b.dietary, b.bedSetting, b.source, b.notes,
       fmtDate(b.createdAt),
     ];
@@ -112,7 +117,7 @@ export function exportVenueHiresToCSV(
     const total = (v.bookingPrice || 0) + extrasTotal;
     const collected = (v.deposit || 0) + (v.paidLater1 || 0) + (v.paidLater2 || 0);
     const remaining = total - collected;
-    const commission = calcCommission(v.bookingPrice || 0, v.deposit || 0, v.bookingChannel, v.channelPaymentBasis, channels);
+        const commission = calcCommission(v.bookingPrice || 0, v.deposit || 0, v.bookingChannel, v.channelPaymentBasis, channels, v.commissionCustomAmount);
     const status = remaining <= 0 && total > 0 ? 'Paid' : collected > 0 ? 'Partial' : 'Unpaid';
 
     return [
@@ -122,7 +127,7 @@ export function exportVenueHiresToCSV(
       (v.deposit || 0).toFixed(2), (v.paidLater1 || 0).toFixed(2), (v.paidLater2 || 0).toFixed(2),
       collected.toFixed(2), remaining.toFixed(2), commission.toFixed(2),
       status, v.bookingChannel,
-      v.channelPaymentBasis === 'bookingPrice' ? 'Full Price' : 'Deposit Only',
+           v.channelPaymentBasis === 'bookingPrice' ? 'Full Booking' : v.channelPaymentBasis === 'deposit' ? 'Deposit Only' : 'Custom',
       v.notes, fmtDate(v.createdAt),
     ];
   });
@@ -151,7 +156,7 @@ export function exportFinancialSummaryToCSV(
     const collected = (b.deposit || 0) + (b.paidLater1 || 0) + (b.paidLater2 || 0);
     const remaining = total - collected;
     const room = rooms.find(r => r.id === b.roomId)?.name || '';
-    const commission = calcCommission(b.price || 0, b.deposit || 0, b.bookingChannel, b.channelPaymentBasis, channels);
+        const commission = calcCommission(b.price || 0, b.deposit || 0, b.bookingChannel, b.channelPaymentBasis, channels, b.commissionCustomAmount);
     return [
       'Booking', b.guestName, b.type,
       fmtDate(b.checkIn), fmtDate(b.checkOut), calcNights(b.checkIn, b.checkOut),
@@ -165,7 +170,7 @@ export function exportFinancialSummaryToCSV(
     const total = (v.bookingPrice || 0) + extrasTotal;
     const collected = (v.deposit || 0) + (v.paidLater1 || 0) + (v.paidLater2 || 0);
     const remaining = total - collected;
-    const commission = calcCommission(v.bookingPrice || 0, v.deposit || 0, v.bookingChannel, v.channelPaymentBasis, channels);
+        const commission = calcCommission(v.bookingPrice || 0, v.deposit || 0, v.bookingChannel, v.channelPaymentBasis, channels, v.commissionCustomAmount);
     const status = remaining <= 0 && total > 0 ? 'Paid' : collected > 0 ? 'Partial' : 'Unpaid';
     return [
       'Venue Hire', v.name, 'Venue Hire',

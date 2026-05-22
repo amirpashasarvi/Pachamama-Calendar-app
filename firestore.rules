@@ -58,7 +58,7 @@ service cloud.firestore {
           && data.roomId is string && isValidId(data.roomId)
           && data.type is string && data.type.size() <= 50
           && (!('bookingChannel' in data) || (data.bookingChannel is string && data.bookingChannel.size() <= 100))
-          && (!('channelPaymentBasis' in data) || (data.channelPaymentBasis in ['bookingPrice', 'deposit']))
+          && (!('channelPaymentBasis' in data) || (data.channelPaymentBasis in ['bookingPrice', 'deposit', 'custom']))
           && (!('adults' in data) || data.adults is number)
           && (!('kids' in data) || data.kids is number)
           && (!('price' in data) || data.price is number)
@@ -89,7 +89,7 @@ service cloud.firestore {
     function isValidHousekeeping(data) {
       return data.keys().hasAll(['roomId', 'status', 'lastUpdated'])
           && data.roomId is string
-          && data.status in ['clean', 'dirty', 'inspected']
+          && data.status in ['clean', 'dirty', 'inspected', 'cleaned']
           && data.lastUpdated is string;
     }
 
