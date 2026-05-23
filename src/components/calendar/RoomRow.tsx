@@ -17,10 +17,11 @@ interface RoomRowProps {
   onEditBooking: (booking: Booking) => void;
   onAddBooking: (date: Date) => void;
   venueHireTintDates?: string[];
+  retreatTintDates?: string[];
   isAdmin?: boolean;
 }
 
-export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], isAdmin = false }: RoomRowProps) {
+export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], retreatTintDates = [], isAdmin = false }: RoomRowProps) {
   const {
     attributes,
     listeners,
@@ -85,7 +86,20 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
         {days.map((day, idx) => {
           const dateStr = format(day, 'yyyy-MM-dd');
           const isVenueHireDay = venueHireTintDates.includes(dateStr);
-          
+          const isRetreatDay = retreatTintDates.includes(dateStr);
+          const weekend = isWeekend(day);
+          const today = isToday(day);
+
+          // Single priority chain — avoids tailwind-merge bg-* conflicts
+          const bgClass =
+            today                        ? 'bg-sky-50/70'     :
+            isVenueHireDay && weekend    ? 'bg-orange-200/80' :
+            isVenueHireDay               ? 'bg-orange-100/75' :
+            isRetreatDay   && weekend    ? 'bg-blue-200/80'   :
+            isRetreatDay                 ? 'bg-blue-100/75'   :
+            weekend                      ? 'bg-gray-100'      :
+            '';
+
           const isOccupied = bookings.some(booking => {
             const checkIn = format(parseISO(booking.checkIn), 'yyyy-MM-dd');
             const checkOut = format(parseISO(booking.checkOut), 'yyyy-MM-dd');
@@ -97,10 +111,8 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
               key={`${String(room.id)}-${day.toISOString()}-${idx}`} 
               className={cn(
                 "w-14 flex-shrink-0 border-r border-gray-200 h-full transition-colors flex items-center justify-center text-blue-400",
+                bgClass,
                 isAdmin && !isOccupied ? "cursor-crosshair hover:bg-blue-50/30 active:bg-blue-50" : "",
-                isWeekend(day) ? 'bg-gray-50' : '',
-                isVenueHireDay ? 'bg-orange-50/60' : '',
-                isToday(day) ? 'bg-sky-50/70' : '',
                 isOccupied ? 'cursor-default pointer-events-none' : ''
               )}
               onClick={() => isAdmin && !isOccupied && onAddBooking(day)}

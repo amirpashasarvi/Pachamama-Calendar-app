@@ -87,29 +87,25 @@ export default function BookingModal({
     } else if (initialData) {
       setFormData({ ...INITIAL_BOOKING_STATE, ...initialData });
     } else {
-      // Default type if nothing selected
       setFormData({
         ...INITIAL_BOOKING_STATE,
-        type: bookingTypes[0]?.name || '',
         bookingChannel: bookingChannels[0]?.name || ''
       });
     }
     setError(null);
     setShowConfirmDelete(false);
     setDeleteConfirmText('');
-  }, [booking, initialData, isOpen, bookingTypes, bookingChannels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id, initialData, isOpen]);
 
-  // Set defaults for new bookings
+  // Set default booking channel for new bookings
   useEffect(() => {
     if (!booking && !initialData && isOpen) {
-      if (!formData.type && bookingTypes.length > 0) {
-        setFormData(prev => ({ ...prev, type: bookingTypes[0].name }));
-      }
       if (!formData.bookingChannel && bookingChannels.length > 0) {
         setFormData(prev => ({ ...prev, bookingChannel: bookingChannels[0].name }));
       }
     }
-  }, [isOpen, bookingTypes, bookingChannels, booking, initialData]);
+  }, [isOpen, bookingChannels, booking, initialData]);
 
   // Status calculation logic
   const totalExtras = (formData.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
@@ -191,6 +187,11 @@ export default function BookingModal({
     e.preventDefault();
     setError(null);
 
+    if (isAdmin && !formData.type?.trim()) {
+      setError('Please select a booking type before saving.');
+      return;
+    }
+
     // Filter out empty extras
     const filteredExtras = (formData.extras || []).filter(e => e.label || e.amount > 0);
 
@@ -214,18 +215,33 @@ export default function BookingModal({
       }
     }
 
+    // Recursively removes undefined values so Firestore never receives them,
+    // even inside nested objects or arrays.
+    const removeUndefinedDeep = (obj: unknown): unknown => {
+      if (Array.isArray(obj)) return obj.map(removeUndefinedDeep);
+      if (obj !== null && typeof obj === 'object') {
+        return Object.fromEntries(
+          Object.entries(obj as Record<string, unknown>)
+            .filter(([, v]) => v !== undefined)
+            .map(([k, v]) => [k, removeUndefinedDeep(v)])
+        );
+      }
+      return obj;
+    };
+
     const { id, ...dataToSave } = formData;
-    const data = {
+    const data = removeUndefinedDeep({
       ...dataToSave,
       extras: filteredExtras,
       status: calculatedStatus,
       totalGuests: (formData.adults || 0) + (formData.kids || 0),
-      updatedAt: new Date().toISOString()
-    };
+      updatedAt: new Date().toISOString(),
+    }) as Record<string, unknown>;
 
     try {
       if (booking?.id) {
         if (isAdmin) {
+          console.log('Booking update payload:', data);
           await updateDoc(doc(db, 'bookings', booking.id), data);
         } else {
           // If staff, only update comments
@@ -237,22 +253,20 @@ export default function BookingModal({
       } else if (formData.roomId === 'ALL') {
         // Bulk Create
         const promises = rooms.map(room => {
-          return addDoc(collection(db, 'bookings'), {
-            ...data,
-            roomId: room.id,
-            createdAt: new Date().toISOString()
-          });
+          const bulkData = { ...data, roomId: room.id, createdAt: new Date().toISOString() };
+          console.log('Bulk booking create payload:', bulkData);
+          return addDoc(collection(db, 'bookings'), bulkData);
         });
         await Promise.all(promises);
       } else {
-        await addDoc(collection(db, 'bookings'), {
-          ...data,
-          createdAt: new Date().toISOString()
-        });
+        const createData = { ...data, createdAt: new Date().toISOString() };
+        console.log('Booking create payload:', createData);
+        await addDoc(collection(db, 'bookings'), createData);
       }
       onClose();
     } catch (err) {
-      handleFirestoreError(err, booking?.id ? OperationType.UPDATE : OperationType.CREATE, booking?.id ? `bookings/${booking.id}` : 'bookings');
+      const msg = err instanceof Error ? err.message : 'Failed to save booking. Please try again.';
+      setError(msg);
     }
   };
 
@@ -288,6 +302,13 @@ export default function BookingModal({
   };
 
   const modalFooter = (
+    <div className="space-y-3">
+      {error && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
+          <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+          <div className="text-xs font-bold text-rose-800 whitespace-pre-line">{error}</div>
+        </div>
+      )}
     <div className="flex items-center justify-between">
       {booking && isAdmin && (
         <div className="flex items-center gap-2">
@@ -303,6 +324,7 @@ export default function BookingModal({
                   onChange={e => setDeleteConfirmText(e.target.value)}
                   placeholder={booking?.guestName || 'DELETE'}
                   className="border rounded-lg px-2 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                  autoComplete="off"
                   autoFocus
                 />
                 <button
@@ -354,11 +376,12 @@ export default function BookingModal({
         )}
       </div>
     </div>
+    </div>
   );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'} footer={modalFooter}>
-      <form id="booking-form" onSubmit={handleSave} className="space-y-5">
+      <form id="booking-form" onSubmit={handleSave} autoComplete="off" className="space-y-5">
         
         {/* Basic Info */}
         <section className="space-y-3">
@@ -369,6 +392,7 @@ export default function BookingModal({
               {isAdmin ? (
                 <input 
                   required
+                  autoComplete="new-password"
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.guestName || ''}
                   onChange={e => setFormData({ ...formData, guestName: e.target.value })}
@@ -522,7 +546,7 @@ export default function BookingModal({
                   value={formData.type || ''}
                   onChange={e => setFormData({ ...formData, type: e.target.value })}
                 >
-                  <option value="">Select Type</option>
+                  <option value="">Select type</option>
                   {bookingTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                 </select>
               ) : (
@@ -808,13 +832,6 @@ export default function BookingModal({
             <div className="text-xs font-bold text-orange-800">
               These dates overlap with a Venue Hire: {venueHireOverlapName}. You can still proceed.
             </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-            <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
-            <div className="text-sm font-bold text-rose-800 whitespace-pre-line">{error}</div>
           </div>
         )}
 

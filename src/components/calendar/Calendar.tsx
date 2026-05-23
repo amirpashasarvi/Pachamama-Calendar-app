@@ -208,6 +208,17 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
     return Array.from(dates);
   }, [venueHires]);
 
+  const retreatTintDates = useMemo(() => {
+    const dates = new Set<string>();
+    retreats.forEach(r => {
+      const start = parseISO(r.startDate);
+      const end = parseISO(r.endDate);
+      const interval = eachDayOfInterval({ start, end });
+      interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
+    });
+    return Array.from(dates);
+  }, [retreats]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -287,6 +298,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
                       onEditBooking={handleEditBooking}
                       onAddBooking={(date) => handleAddBooking(room.id, date)}
                       venueHireTintDates={venueHireTintDates}
+                      retreatTintDates={retreatTintDates}
                       isAdmin={isAdmin}
                     />
                   ))}
