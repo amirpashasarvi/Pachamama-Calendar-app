@@ -1,20 +1,25 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Pachamama Calendar App
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/6e88db3f-bd4b-4318-840c-9af7e0054958
+Operations dashboard for Pachamama bookings, rooms, housekeeping, venue hires, retreats, and team assignments.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js 22 or newer
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Start the development server:
    `npm run dev`
+
+## Deploy
+
+The app is configured for Netlify:
+
+1. Connect this GitHub repo to Netlify.
+2. Use `npm run build` as the build command.
+3. Use `dist` as the publish directory.
+4. Add the Netlify domain to Firebase Authentication authorized domains.
+
+## Access Control
+
+New Google sign-ins create a `pending` profile. An existing administrator must promote approved users to `staff` or `admin` before they can access operations data.

@@ -149,7 +149,7 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'bookingChannels');
     });
 
-    const unsubUsers = onSnapshot(query(collection(db, 'users'), orderBy('name', 'asc')), (snap) => {
+    const unsubUsers = onSnapshot(query(collection(db, 'profiles'), orderBy('name', 'asc')), (snap) => {
       const data: UserRecord[] = [];
       snap.docs.forEach(d => {
         data.push({ ...d.data(), id: d.id } as UserRecord);

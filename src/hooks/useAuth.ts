@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { UserProfile, UserRole } from '@/types';
 
@@ -18,7 +18,7 @@ export function useAuth() {
           if (docSnap.exists()) {
             setProfile(docSnap.data() as UserProfile);
           } else {
-            const defaultRole: UserRole = 'staff';
+            const defaultRole: UserRole = 'pending';
             const newProfile: UserProfile = {
               uid: u.uid,
               email: u.email || '',
