@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { format, differenceInDays } from "date-fns";
+import { differenceInDays, parseISO } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function calculateNights(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
-  return Math.max(0, differenceInDays(new Date(checkOut), new Date(checkIn)));
+  return Math.max(0, differenceInDays(parseISO(checkOut), parseISO(checkIn)));
 }
 
 export function formatCurrency(amount: number) {

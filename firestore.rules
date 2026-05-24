@@ -125,7 +125,7 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidId(bookingId) && isValidBooking(incoming());
       
       allow update: if (isAdmin() && isValidBooking(incoming()))
-                   || (isStaff() && incoming().diff(existing()).affectedKeys().hasOnly(['comments']));
+                   || (isStaff() && incoming().diff(existing()).affectedKeys().hasOnly(['comments', 'commentsUpdatedAt']));
                    
       allow delete: if isAdmin();
     }

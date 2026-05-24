@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   addDays, 
+  differenceInDays,
   eachDayOfInterval, 
   format, 
-  isSameDay, 
   isToday,
   isWeekend, 
   startOfToday,
@@ -75,21 +75,70 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
   const [selectedTeamAssignment, setSelectedTeamAssignment] = useState<TeamAssignment | null>(null);
   const [initialTeamAssignmentData, setInitialTeamAssignmentData] = useState<Partial<TeamAssignment>>({});
 
-  // Date state
-  const [viewStartDate, setViewStartDate] = useState(startOfToday());
-  const [daysCount, setDaysCount] = useState(30);
+  // Date state — always Jan 1 of the viewed year
+  const [viewStartDate, setViewStartDate] = useState(() => new Date(new Date().getFullYear(), 0, 1));
   const [showSummary, setShowSummary] = useState(true);
   const [showTeamRoster, setShowTeamRoster] = useState(true);
+
+  // Tracks which month index (0–11) is currently dominant in the viewport
+  const [visibleMonth, setVisibleMonth] = useState(startOfToday().getMonth());
 
   // Scroll ref
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const handleToday = () => {
-    setViewStartDate(startOfToday());
+  // Scroll the grid to bring a specific date into view (56px per day column)
+  const scrollToDate = (date: Date) => {
+    const yearStart = new Date(date.getFullYear(), 0, 1);
+    const dayIndex = differenceInDays(date, yearStart);
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollLeft = 0;
+      scrollContainerRef.current.scrollLeft = dayIndex * 56;
     }
   };
+
+  const handleToday = () => {
+    const today = startOfToday();
+    const currentYear = today.getFullYear();
+    if (viewStartDate.getFullYear() !== currentYear) {
+      setViewStartDate(new Date(currentYear, 0, 1));
+      // Allow React to re-render the new year before scrolling
+      setTimeout(() => scrollToDate(today), 50);
+    } else {
+      scrollToDate(today);
+    }
+  };
+
+  // Update visibleMonth from scroll position using rAF for smooth performance
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const dayIndex = Math.floor(el.scrollLeft / 56);
+    const date = new Date(viewStartDate.getFullYear(), 0, 1 + dayIndex);
+    setVisibleMonth(date.getMonth());
+  }, [viewStartDate]);
+
+  // Attach passive scroll listener; re-attach when viewed year changes or grid mounts after loading
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    let rafId: number;
+    const onScroll = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(handleScroll);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(rafId);
+    };
+  }, [handleScroll, loading]);
+
+  // Scroll to today automatically once loading completes
+  useEffect(() => {
+    if (!loading && scrollContainerRef.current) {
+      scrollToDate(startOfToday());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // DnD Sensors
   const sensors = useSensors(
@@ -103,12 +152,14 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
     })
   );
 
+  // Always render the full year (Jan 1 – Dec 31)
   const days = useMemo(() => {
+    const year = viewStartDate.getFullYear();
     return eachDayOfInterval({
-      start: viewStartDate,
-      end: addDays(viewStartDate, daysCount - 1)
+      start: new Date(year, 0, 1),
+      end: new Date(year, 11, 31),
     });
-  }, [viewStartDate, daysCount]);
+  }, [viewStartDate]);
 
   const handleAddRoom = () => {
     setSelectedRoom(null);
@@ -229,12 +280,12 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
 
   return (
     <div className="flex flex-col h-full bg-white select-none print:h-auto">
-      <Header 
-        viewStartDate={viewStartDate} 
+      <Header
+        viewStartDate={viewStartDate}
         setViewStartDate={setViewStartDate}
         onToday={handleToday}
-        daysCount={daysCount}
-        setDaysCount={setDaysCount}
+        onScrollToDate={scrollToDate}
+        visibleMonth={visibleMonth}
       />
 
       <div 

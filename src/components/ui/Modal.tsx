@@ -8,9 +8,10 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  dismissible?: boolean;
 }
 
-export default function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, footer, dismissible = true }: ModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -20,7 +21,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }: Moda
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={dismissible ? onClose : undefined}
             className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[100] hidden sm:block"
           />
 

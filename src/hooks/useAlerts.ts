@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Booking, Room, HousekeepingRecord } from '@/types';
 import {
   isToday, isSameDay, addDays, startOfToday,
-  parseISO, differenceInDays, format,
+  parseISO, differenceInDays,
 } from 'date-fns';
 
 export interface ArrivalAlert {

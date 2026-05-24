@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
 import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
-import { db, handleFirestoreError, OperationType } from '@/services/firebase';
+import { db } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
-import { cn } from '@/lib/utils';
-import { Trash2, Save, Plus, X } from 'lucide-react';
+import { calculateNights, cn } from '@/lib/utils';
+import { AlertTriangle, Trash2, Save, Plus, X } from 'lucide-react';
 
 interface VenueHireModalProps {
   isOpen: boolean;
@@ -36,9 +36,12 @@ export default function VenueHireModal({
     paidLater1: 0,
     paidLater2: 0,
     bookingChannel: '',
-    channelPaymentBasis: 'bookingPrice'
+    channelPaymentBasis: 'bookingPrice',
+    commissionCustomAmount: 0,
   });
 
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
@@ -47,7 +50,8 @@ export default function VenueHireModal({
       setFormData({
         ...venueHire,
         roomNotes: venueHire.roomNotes || {},
-        extras: venueHire.extras || []
+        extras: venueHire.extras || [],
+        commissionCustomAmount: venueHire.commissionCustomAmount ?? 0,
       });
     } else if (isOpen) {
       setFormData({
@@ -64,41 +68,75 @@ export default function VenueHireModal({
         paidLater1: 0,
         paidLater2: 0,
         bookingChannel: '',
-        channelPaymentBasis: 'bookingPrice'
+        channelPaymentBasis: 'bookingPrice',
+        commissionCustomAmount: 0,
       });
     }
+    setError(null);
+    setIsSaving(false);
     setShowConfirmDelete(false);
     setDeleteConfirmText('');
-  }, [venueHire, isOpen, bookingChannels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venueHire?.id, isOpen]);
 
   const totalExtras = (formData.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
   const total = (formData.bookingPrice || 0) + totalExtras;
   const remaining = total - (formData.deposit || 0) - (formData.paidLater1 || 0) - (formData.paidLater2 || 0);
-  
+  const days = calculateNights(formData.startDate || '', formData.endDate || '');
+
   let calculatedStatus: BookingStatus = 'Unpaid';
   if (remaining <= 0 && total > 0) calculatedStatus = 'Paid';
   else if ((formData.deposit || 0) > 0 || (formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) calculatedStatus = 'Partial';
 
+  const selectedChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
+  const channelCommissionRate = selectedChannel?.commission ?? 0;
+
+  const commissionBase = formData.channelPaymentBasis === 'custom'
+    ? (formData.commissionCustomAmount ?? 0)
+    : formData.channelPaymentBasis === 'bookingPrice'
+      ? (formData.bookingPrice || 0)
+      : (formData.deposit || 0);
+
+  const liveCommission = useMemo(() => {
+    if (!channelCommissionRate) return 0;
+    return (commissionBase * channelCommissionRate) / 100;
+  }, [commissionBase, channelCommissionRate]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { id, ...dataToSave } = formData;
-    const data = {
-      ...dataToSave,
-      updatedAt: new Date().toISOString()
+    setError(null);
+
+    const removeUndefinedDeep = (obj: unknown): unknown => {
+      if (Array.isArray(obj)) return obj.map(removeUndefinedDeep);
+      if (obj !== null && typeof obj === 'object') {
+        return Object.fromEntries(
+          Object.entries(obj as Record<string, unknown>)
+            .filter(([, v]) => v !== undefined)
+            .map(([k, v]) => [k, removeUndefinedDeep(v)])
+        );
+      }
+      return obj;
     };
 
+    const { id, ...dataToSave } = formData;
+    const data = removeUndefinedDeep({
+      ...dataToSave,
+      updatedAt: new Date().toISOString(),
+    }) as Record<string, unknown>;
+
+    setIsSaving(true);
     try {
       if (venueHire?.id) {
         await updateDoc(doc(db, 'venueHires', venueHire.id), data);
       } else {
-        await addDoc(collection(db, 'venueHires'), {
-          ...data,
-          createdAt: new Date().toISOString()
-        });
+        const createData = { ...data, createdAt: new Date().toISOString() };
+        await addDoc(collection(db, 'venueHires'), createData);
       }
       onClose();
     } catch (err) {
-      handleFirestoreError(err, venueHire?.id ? OperationType.UPDATE : OperationType.CREATE, venueHire?.id ? `venueHires/${venueHire.id}` : 'venueHires');
+      setIsSaving(false);
+      const msg = err instanceof Error ? err.message : 'Failed to save. Please try again.';
+      setError(msg);
     }
   };
 
@@ -108,12 +146,13 @@ export default function VenueHireModal({
       await updateDoc(doc(db, 'venueHires', venueHire.id), { deletedAt: new Date().toISOString() });
       onClose();
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `venueHires/${venueHire.id}`);
+      const msg = err instanceof Error ? err.message : 'Failed to delete. Please try again.';
+      setError(msg);
     }
   };
 
   const addExtra = () => {
-    if ((formData.extras || []).length >= 2) return;
+    if ((formData.extras || []).length >= 5) return;
     setFormData(prev => ({
       ...prev,
       extras: [...(prev.extras || []), { label: '', amount: 0 }]
@@ -227,29 +266,58 @@ export default function VenueHireModal({
         </section>
 
         {/* Financial info */}
-        <section className="space-y-4 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-600">Financials</h3>
+        <section className="space-y-4 pt-4 border-t border-gray-100">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Financials</h3>
+
+          {/* Summary at top */}
+          <div className="pb-4 border-b flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</span>
+              <span className="text-2xl font-black text-black">€{total.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">Remaining</span>
+                <span className="text-lg font-bold text-blue-600">€{remaining.toFixed(2)}</span>
+              </div>
+              <div className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
+                calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+                calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
+                'bg-rose-100 text-rose-700'
+              )}>
+                {calculatedStatus}
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            {/* Booking Price + Deposit */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
+                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
                 <div className="relative font-mono text-sm">
-                  <span className="absolute left-3 top-2 text-gray-400">€</span>
-                  <input 
+                  <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                  <input
                     type="number"
-                    className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                     value={formData.bookingPrice ?? ''}
                     onChange={e => setFormData({ ...formData, bookingPrice: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
+                {days > 0 && (formData.bookingPrice || 0) > 0 && (
+                  <span className="block text-right text-xs font-mono text-gray-400 mt-1">
+                    ≈ €{((formData.bookingPrice || 0) / days).toFixed(2)} / day
+                  </span>
+                )}
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Deposit</label>
+                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Deposit</label>
                 <div className="relative font-mono text-sm">
-                  <span className="absolute left-3 top-2 text-gray-400">€</span>
-                  <input 
+                  <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                  <input
                     type="number"
-                    className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                     value={formData.deposit ?? ''}
                     onChange={e => setFormData({ ...formData, deposit: parseFloat(e.target.value) || 0 })}
                   />
@@ -257,53 +325,73 @@ export default function VenueHireModal({
               </div>
             </div>
 
+            {/* Extras */}
             <div className="space-y-2">
               <label className="block text-[10px] font-bold text-gray-400 uppercase">Extras</label>
               {(formData.extras || []).map((extra, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input 
-                    className="flex-1 px-3 py-2 text-xs border rounded-lg outline-none bg-white"
-                    placeholder="label"
+                <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                  <input
+                    className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none bg-gray-50"
+                    placeholder="e.g. Sound system"
                     value={extra.label || ''}
                     onChange={e => updateExtra(idx, 'label', e.target.value)}
                   />
                   <div className="relative w-32 font-mono text-sm">
-                    <span className="absolute left-3 top-1.5 text-gray-400 text-xs">€</span>
-                    <input 
+                    <span className="absolute left-3 top-2 text-gray-400 text-xs">€</span>
+                    <input
                       type="number"
-                      className="w-full pl-7 pr-3 py-1.5 border rounded-lg outline-none bg-white text-xs"
+                      className="w-full pl-7 pr-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-xs"
                       value={extra.amount ?? ''}
                       onChange={e => updateExtra(idx, 'amount', parseFloat(e.target.value) || 0)}
                     />
                   </div>
-                  <button type="button" onClick={() => removeExtra(idx)} className="p-1 px-2 text-rose-500"><X size={14} /></button>
+                  <button type="button" onClick={() => removeExtra(idx)} className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0">
+                    <X size={14} />
+                  </button>
                 </div>
               ))}
-              {(formData.extras || []).length < 2 && (
-                <button type="button" onClick={addExtra} className="text-[10px] font-bold text-blue-600">+ Add Extra</button>
-              )}
+              {(() => {
+                const atLimit = (formData.extras || []).length >= 5;
+                return (
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={addExtra}
+                      disabled={atLimit}
+                      className={cn(
+                        "flex items-center gap-1.5 text-[10px] font-bold",
+                        atLimit ? "text-gray-300 cursor-not-allowed" : "text-blue-600 hover:text-blue-700"
+                      )}
+                    >
+                      <Plus size={12} /> Add Extra
+                    </button>
+                    {atLimit && <span className="text-[10px] text-gray-400 italic">Maximum 5 extras reached</span>}
+                  </div>
+                );
+              })()}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Paid Later */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
+                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
                 <div className="relative font-mono text-sm">
-                  <span className="absolute left-3 top-2 text-gray-400">€</span>
-                  <input 
+                  <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                  <input
                     type="number"
-                    className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                     value={formData.paidLater1 ?? ''}
                     onChange={e => setFormData({ ...formData, paidLater1: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
+                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
                 <div className="relative font-mono text-sm">
-                  <span className="absolute left-3 top-2 text-gray-400">€</span>
-                  <input 
+                  <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                  <input
                     type="number"
-                    className="w-full pl-8 pr-4 py-2 border rounded-lg outline-none bg-white font-mono"
+                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
                     value={formData.paidLater2 ?? ''}
                     onChange={e => setFormData({ ...formData, paidLater2: parseFloat(e.target.value) || 0 })}
                   />
@@ -311,67 +399,75 @@ export default function VenueHireModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Channel</label>
-                <select 
-                  className="w-full px-3 py-2 border rounded-lg outline-none bg-white text-xs"
+            {/* Channel & Commission */}
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400">Channel &amp; Commission</h4>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
                   value={formData.bookingChannel || ''}
                   onChange={e => setFormData({ ...formData, bookingChannel: e.target.value })}
                 >
-                  <option value="">Select Channel</option>
+                  <option value="">Direct</option>
                   {bookingChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Basis</label>
-                <div className="flex p-1 bg-white border rounded-lg h-[34px]">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, channelPaymentBasis: 'bookingPrice' })}
-                    className={cn(
-                      "flex-1 px-1 text-[9px] font-bold rounded",
-                      formData.channelPaymentBasis === 'bookingPrice' ? "bg-black text-white shadow-sm" : "text-gray-400"
-                    )}
-                  >
-                    Price
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, channelPaymentBasis: 'deposit' })}
-                    className={cn(
-                      "flex-1 px-1 text-[9px] font-bold rounded",
-                      formData.channelPaymentBasis === 'deposit' ? "bg-black text-white shadow-sm" : "text-gray-400"
-                    )}
-                  >
-                    Deposit
-                  </button>
-                </div>
-              </div>
-            </div>
 
-            <div className="pt-4 border-t flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest text-[10px]">Total</span>
-                <span className="text-2xl font-black text-black">€{total.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">Remaining</span>
-                  <span className="text-lg font-bold text-blue-600">€{remaining.toFixed(2)}</span>
+                <div className="flex gap-1 p-0.5 bg-gray-100 rounded-xl shrink-0">
+                  {([
+                    { value: 'bookingPrice', label: 'Full Booking' },
+                    { value: 'deposit',      label: 'Deposit' },
+                    { value: 'custom',       label: 'Custom' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, channelPaymentBasis: opt.value })}
+                      className={cn(
+                        'py-1 px-2.5 rounded-lg text-xs font-bold transition-all',
+                        formData.channelPaymentBasis === opt.value
+                          ? 'bg-white text-gray-800 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-600'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-                <div className={cn(
-                  "px-4 py-1.5 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
-                  calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
-                  calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
-                  'bg-rose-100 text-rose-700'
-                )}>
-                  {calculatedStatus}
-                </div>
+
+                {formData.channelPaymentBasis === 'custom' ? (
+                  <div className="relative shrink-0 w-28">
+                    <span className="absolute left-2.5 top-[9px] text-xs text-gray-400">€</span>
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full pl-6 pr-2 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono text-sm"
+                      value={formData.commissionCustomAmount ?? ''}
+                      onChange={e => setFormData({ ...formData, commissionCustomAmount: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                ) : (
+                  <div className="shrink-0 w-28 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-sm text-gray-400 text-right select-none">
+                    €{commissionBase.toFixed(2)}
+                  </div>
+                )}
               </div>
+              <p className="text-xs text-gray-400 font-mono">
+                {channelCommissionRate}% commission
+                <span className="mx-1.5 text-gray-200">·</span>
+                €{liveCommission.toFixed(2)}
+              </p>
             </div>
           </div>
         </section>
+
+        {/* Error display */}
+        {error && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
+            <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+            <div className="text-xs font-bold text-rose-800 whitespace-pre-line">{error}</div>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-6 border-t">

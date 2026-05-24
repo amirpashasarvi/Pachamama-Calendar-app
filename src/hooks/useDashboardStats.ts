@@ -106,6 +106,17 @@ function bookingCommission(b: Booking, channels: ConfigOption[]): number {
   return (base * ch.commission) / 100;
 }
 
+function vhCommission(vh: VenueHire, channels: ConfigOption[]): number {
+  const ch = channels.find(c => c.name === vh.bookingChannel);
+  if (!ch?.commission) return 0;
+  const base = vh.channelPaymentBasis === 'custom'
+    ? (vh.commissionCustomAmount ?? 0)
+    : vh.channelPaymentBasis === 'bookingPrice'
+      ? (vh.bookingPrice || 0)
+      : (vh.deposit || 0);
+  return (base * ch.commission) / 100;
+}
+
 function inPeriod(dateStr: string, period: DashboardPeriod, today: Date): boolean {
   try {
     const d = parseISO(dateStr);
@@ -165,6 +176,7 @@ export function useDashboardStats(
       const col = vhCollected(vh);
       totalRevenue += rev;
       totalCollected += col;
+      totalCommissions += vhCommission(vh, bookingChannels);
       if (col === 0 && rev > 0) unpaidCount++;
       byType['Venue Hire'] = {
         revenue: (byType['Venue Hire']?.revenue ?? 0) + rev,

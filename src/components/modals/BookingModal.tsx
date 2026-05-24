@@ -64,6 +64,7 @@ export default function BookingModal({
   const [formData, setFormData] = useState<Partial<Booking>>(INITIAL_BOOKING_STATE);
 
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [showBedConfig, setShowBedConfig] = useState(false);
@@ -93,6 +94,7 @@ export default function BookingModal({
       });
     }
     setError(null);
+    setIsSaving(false);
     setShowConfirmDelete(false);
     setDeleteConfirmText('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,9 +181,10 @@ export default function BookingModal({
   const venueHireOverlapName = getVenueHireOverlap();
 
   const liveOverlapWarning = useMemo(() => {
+    if (isSaving) return null;
     if (!formData.roomId || formData.roomId === 'ALL') return null;
     return checkOverlaps(formData.roomId);
-  }, [formData.checkIn, formData.checkOut, formData.roomId, bookings, booking?.id]);
+  }, [isSaving, formData.checkIn, formData.checkOut, formData.roomId, bookings, booking?.id]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,10 +241,10 @@ export default function BookingModal({
       updatedAt: new Date().toISOString(),
     }) as Record<string, unknown>;
 
+    setIsSaving(true);
     try {
       if (booking?.id) {
         if (isAdmin) {
-          console.log('Booking update payload:', data);
           await updateDoc(doc(db, 'bookings', booking.id), data);
         } else {
           // If staff, only update comments
@@ -254,17 +257,16 @@ export default function BookingModal({
         // Bulk Create
         const promises = rooms.map(room => {
           const bulkData = { ...data, roomId: room.id, createdAt: new Date().toISOString() };
-          console.log('Bulk booking create payload:', bulkData);
           return addDoc(collection(db, 'bookings'), bulkData);
         });
         await Promise.all(promises);
       } else {
         const createData = { ...data, createdAt: new Date().toISOString() };
-        console.log('Booking create payload:', createData);
         await addDoc(collection(db, 'bookings'), createData);
       }
       onClose();
     } catch (err) {
+      setIsSaving(false);
       const msg = err instanceof Error ? err.message : 'Failed to save booking. Please try again.';
       setError(msg);
     }
@@ -380,7 +382,7 @@ export default function BookingModal({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'} footer={modalFooter}>
+    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'} footer={modalFooter} dismissible={!error}>
       <form id="booking-form" onSubmit={handleSave} autoComplete="off" className="space-y-5">
         
         {/* Basic Info */}
