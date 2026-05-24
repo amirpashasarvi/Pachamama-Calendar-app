@@ -150,7 +150,7 @@ export interface CalendarDisplaySettings {
   teamRosterBarFields: CalendarDisplayField[];
 }
 
-export type UserRole = 'admin' | 'staff';
+export type UserRole = 'admin' | 'staff' | 'pending';
 
 export interface UserProfile {
   uid: string;

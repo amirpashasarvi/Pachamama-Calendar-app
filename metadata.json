@@ -2,7 +2,5 @@
   "name": "Pachamama Booking Calendar",
   "description": "Full-stack booking management system with real-time calendar, venue hire support, and business statistics.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": []
 }

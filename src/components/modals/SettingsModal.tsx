@@ -3,7 +3,7 @@ import Modal from '@/components/ui/Modal';
 import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, writeBatch, setDoc } from 'firebase/firestore';
-import { Trash2, Plus, Save, ChevronRight, ChevronLeft, UserPlus, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DndContext,
@@ -93,7 +93,6 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
   // User Management state
   const [userFormData, setUserFormData] = useState({ email: '', name: '', role: 'staff' as UserRole });
-  const [isAddingUser, setIsAddingUser] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
   const resetForms = () => {
@@ -101,7 +100,6 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
     setFormData({ name: '', color: '#36454F', commission: '' });
     setIsAdding(false);
     setUserFormData({ email: '', name: '', role: 'staff' });
-    setIsAddingUser(false);
     setEditingUserId(null);
     setConfirmDeleteId(null);
   };
@@ -161,34 +159,24 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
   };
 
   const handleSaveUser = async () => {
-    if (!userFormData.email || !userFormData.name) return;
+    if (!editingUserId || !userFormData.email || !userFormData.name) return;
     try {
-      if (editingUserId) {
-        await updateDoc(doc(db, 'users', editingUserId), { 
-          email: userFormData.email,
-          name: userFormData.name,
-          role: userFormData.role 
-        });
-      } else {
-        await addDoc(collection(db, 'users'), { 
-          email: userFormData.email,
-          name: userFormData.name,
-          role: userFormData.role,
-          createdAt: new Date().toISOString()
-        });
-      }
+      await updateDoc(doc(db, 'profiles', editingUserId), {
+        name: userFormData.name,
+        role: userFormData.role
+      });
       resetForms();
     } catch (err) {
-      handleFirestoreError(err, editingUserId ? OperationType.UPDATE : OperationType.CREATE, `users/${editingUserId || ''}`);
+      handleFirestoreError(err, OperationType.UPDATE, `profiles/${editingUserId}`);
     }
   };
 
   const handleDeleteUser = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'users', id));
+      await updateDoc(doc(db, 'profiles', id), { role: 'pending' });
       setConfirmDeleteId(null);
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `users/${id}`);
+      handleFirestoreError(err, OperationType.UPDATE, `profiles/${id}`);
     }
   };
 
@@ -831,16 +819,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         <h3 className="font-bold text-lg">User Management</h3>
       </div>
 
-      {!isAddingUser && !editingUserId && (
-        <button
-          onClick={() => setIsAddingUser(true)}
-          className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
-        >
-          <UserPlus size={14} /> Invite New User
-        </button>
-      )}
-
-      {(isAddingUser || editingUserId) && (
+      {editingUserId && (
         <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-4 animate-in fade-in slide-in-from-top-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -872,6 +851,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               >
                 <option value="staff">Staff Member</option>
                 <option value="admin">Administrator</option>
+                <option value="pending">Pending Access</option>
               </select>
             </div>
           </div>
@@ -880,7 +860,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               onClick={handleSaveUser}
               className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
             >
-              <Save size={14} /> {editingUserId ? 'Update User' : 'Invite User'}
+              <Save size={14} /> Update User
             </button>
             <button
               onClick={resetForms}
@@ -895,7 +875,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
         {users.length === 0 ? (
           <div className="py-12 text-center text-gray-400 text-xs italic">
-            No users found. Invite one above.
+            No users found. New sign-ins appear here for approval.
           </div>
         ) : (
           users.map(user => (
@@ -915,12 +895,12 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {confirmDeleteId === user.id ? (
                   <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
-                    <span className="text-[10px] font-bold text-gray-500 italic">Delete this item?</span>
+                    <span className="text-[10px] font-bold text-gray-500 italic">Move to pending?</span>
                     <button
                       onClick={() => handleDeleteUser(user.id)}
                       className="px-2 py-1 bg-rose-500 text-white text-[10px] font-bold rounded hover:bg-rose-600 transition-colors"
                     >
-                      Yes, delete
+                      Yes, restrict
                     </button>
                     <button
                       onClick={() => setConfirmDeleteId(null)}
@@ -935,7 +915,6 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                       onClick={() => {
                         setEditingUserId(user.id);
                         setUserFormData({ email: user.email, name: user.name, role: user.role });
-                        setIsAddingUser(false);
                         setConfirmDeleteId(null);
                       }}
                       className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"

@@ -74,9 +74,9 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'email', 'role'])
           && data.uid == userId
           && data.email is string && data.email.size() <= 150
-          && data.role in ['admin', 'staff']
+          && data.role in ['admin', 'staff', 'pending']
           && (!('name' in data) || (data.name is string && data.name.size() <= 100))
-          && data.role == 'staff';
+          && data.role == 'pending';
     }
 
     function isValidConfigOption(data) {
@@ -99,7 +99,7 @@ service cloud.firestore {
 
     // Profiles
     match /profiles/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isStaff());
       
       // Allow self-creation during first login
       allow create: if isSignedIn() 
