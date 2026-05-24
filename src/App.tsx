@@ -228,18 +228,27 @@ function AppContent() {
             )}
 
             <div className="relative border-l ml-2 pl-4" ref={userMenuRef}>
-              <button 
-                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2 group"
-              >
-                <div className="text-right hidden sm:block">
-                  <p className="text-[10px] font-bold leading-none text-gray-900 group-hover:text-blue-600 transition-colors">{profile?.name || profile?.email}</p>
-                  <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-0.5 font-black">{profile?.role}</p>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50 overflow-hidden">
-                  <UserIcon size={16} className="text-gray-400 group-hover:text-blue-500" />
-                </div>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-2 group"
+                >
+                  <div className="text-right hidden sm:block">
+                    <p className="text-[10px] font-bold leading-none text-gray-900 group-hover:text-blue-600 transition-colors">{profile?.name || profile?.email}</p>
+                    <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-0.5 font-black">{profile?.role}</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50 overflow-hidden">
+                    <UserIcon size={16} className="text-gray-400 group-hover:text-blue-500" />
+                  </div>
+                </button>
+                <button
+                  onClick={logout}
+                  className="p-2 hover:bg-rose-50 rounded-full transition-colors text-gray-400 hover:text-rose-600"
+                  title="Log out"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
 
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[60] animate-in fade-in zoom-in-95 duration-100">
