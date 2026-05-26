@@ -40,6 +40,8 @@ const COLORS = [
   '#22d3ee', '#38bdf8', '#60a5fa', '#818cf8', '#a78bfa', '#c084fc', '#e879f9', '#f472b6',
   '#fb7185', '#94a3b8', '#36454F'
 ];
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const userDocIdFromEmail = (email: string) => normalizeEmail(email);
 
 type SettingsView = 'menu' | 'types' | 'channels' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display';
 
@@ -160,23 +162,50 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
   const handleSaveUser = async () => {
     if (!editingUserId || !userFormData.email || !userFormData.name) return;
+    const normalizedEmail = normalizeEmail(userFormData.email);
     try {
-      await updateDoc(doc(db, 'profiles', editingUserId), {
+      console.log('User update request', { id: editingUserId, email: normalizedEmail, role: userFormData.role });
+      await updateDoc(doc(db, 'users', editingUserId), {
         name: userFormData.name,
-        role: userFormData.role
+        email: normalizedEmail,
+        role: userFormData.role,
       });
       resetForms();
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `profiles/${editingUserId}`);
+      console.error('User update failed', { id: editingUserId, error: err });
+      handleFirestoreError(err, OperationType.UPDATE, `users/${editingUserId}`);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!userFormData.email || !userFormData.name) return;
+    const now = new Date().toISOString();
+    const normalizedEmail = normalizeEmail(userFormData.email);
+    const id = userDocIdFromEmail(normalizedEmail);
+    try {
+      console.log('User create request', { id, email: normalizedEmail, role: userFormData.role });
+      await setDoc(doc(db, 'users', id), {
+        uid: '',
+        name: userFormData.name,
+        email: normalizedEmail,
+        role: userFormData.role,
+        createdAt: now,
+      });
+      resetForms();
+    } catch (err) {
+      console.error('User create failed', { id, error: err });
+      handleFirestoreError(err, OperationType.CREATE, `users/${id}`);
     }
   };
 
   const handleDeleteUser = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'profiles', id), { role: 'pending' });
+      console.log('User delete request', { id });
+      await deleteDoc(doc(db, 'users', id));
       setConfirmDeleteId(null);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `profiles/${id}`);
+      console.error('User delete failed', { id, error: err });
+      handleFirestoreError(err, OperationType.DELETE, `users/${id}`);
     }
   };
 
@@ -819,7 +848,20 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         <h3 className="font-bold text-lg">User Management</h3>
       </div>
 
-      {editingUserId && (
+      {!isAdding && !editingUserId && (
+        <button
+          onClick={() => {
+            setIsAdding(true);
+            setUserFormData({ email: '', name: '', role: 'staff' });
+            setConfirmDeleteId(null);
+          }}
+          className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
+        >
+          <Plus size={14} /> Add User
+        </button>
+      )}
+
+      {(editingUserId || isAdding) && (
         <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-4 animate-in fade-in slide-in-from-top-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -851,16 +893,15 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               >
                 <option value="staff">Staff Member</option>
                 <option value="admin">Administrator</option>
-                <option value="pending">Pending Access</option>
               </select>
             </div>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={handleSaveUser}
+              onClick={editingUserId ? handleSaveUser : handleCreateUser}
               className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
             >
-              <Save size={14} /> Update User
+              <Save size={14} /> {editingUserId ? 'Update User' : 'Create User'}
             </button>
             <button
               onClick={resetForms}
@@ -875,7 +916,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
         {users.length === 0 ? (
           <div className="py-12 text-center text-gray-400 text-xs italic">
-            No users found. New sign-ins appear here for approval.
+            No users found. Add staff/admin users here first.
           </div>
         ) : (
           users.map(user => (
@@ -890,17 +931,18 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                 <div>
                   <p className="text-sm font-bold text-gray-700">{user.name}</p>
                   <p className="text-[10px] text-gray-400 font-mono">{user.email}</p>
+                  <p className="text-[10px] text-gray-300">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : ''}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {confirmDeleteId === user.id ? (
                   <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
-                    <span className="text-[10px] font-bold text-gray-500 italic">Move to pending?</span>
+                    <span className="text-[10px] font-bold text-gray-500 italic">Delete this user?</span>
                     <button
                       onClick={() => handleDeleteUser(user.id)}
                       className="px-2 py-1 bg-rose-500 text-white text-[10px] font-bold rounded hover:bg-rose-600 transition-colors"
                     >
-                      Yes, restrict
+                      Yes, delete
                     </button>
                     <button
                       onClick={() => setConfirmDeleteId(null)}

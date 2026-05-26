@@ -149,15 +149,33 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'bookingChannels');
     });
 
-    const unsubUsers = onSnapshot(query(collection(db, 'profiles'), orderBy('name', 'asc')), (snap) => {
-      const data: UserRecord[] = [];
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      const byEmail = new Map<string, UserRecord>();
       snap.docs.forEach(d => {
-        data.push({ ...d.data(), id: d.id } as UserRecord);
+        const user = d.data() as Partial<UserRecord>;
+        const email = (user.email || '').trim().toLowerCase();
+        if (!email) return;
+        const candidate: UserRecord = {
+          id: d.id,
+          uid: user.uid || '',
+          name: user.name || email || 'Unnamed user',
+          email,
+          role: user.role === 'admin' ? 'admin' : 'staff',
+          createdAt: user.createdAt,
+        };
+
+        const current = byEmail.get(email);
+        const candidateIsUidDoc = candidate.uid && candidate.id === candidate.uid;
+        const currentIsUidDoc = current?.uid && current.id === current.uid;
+        if (!current || (candidateIsUidDoc && !currentIsUidDoc)) {
+          byEmail.set(email, candidate);
+        }
       });
-      setUsers(data);
+      setUsers(Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name)));
       checkLoading('users');
     }, (error) => {
       checkLoading('users');
+      console.error('Users listener failed', error);
       handleFirestoreError(error, OperationType.LIST, 'users');
     });
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Clock, LogIn, LogOut } from 'lucide-react';
+import { AlertTriangle, LogIn, LogOut } from 'lucide-react';
 
 export default function AuthContainer({ children }: { children: React.ReactNode }) {
   const { user, profile, loading, login, logout } = useAuth();
@@ -31,16 +31,16 @@ export default function AuthContainer({ children }: { children: React.ReactNode 
     );
   }
 
-  if (!profile || profile.role === 'pending') {
+  if (user && !profile) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#f5f5f5] px-4">
         <div className="p-8 bg-white rounded-2xl shadow-xl w-full max-w-md text-center">
-          <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-            <Clock size={24} />
+          <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+            <AlertTriangle size={24} />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Access pending</h1>
+          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
           <p className="text-gray-500 mb-6">
-            Your Google sign-in worked. An administrator still needs to approve your account before you can open the operations dashboard.
+            Your account is not authorized. Please contact the administrator.
           </p>
           <button
             onClick={logout}

@@ -21,10 +21,15 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Role check using get() - safer existence check
+    function authEmail() {
+      return request.auth.token.email;
+    }
+
+    // Role check from users collection (pre-approved access model)
     function getRole() {
-      return exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role
+      return isSignedIn() && authEmail() != null
+        && exists(/databases/$(database)/documents/users/$(authEmail()))
+        ? get(/databases/$(database)/documents/users/$(authEmail())).data.role
         : 'none';
     }
 
@@ -84,6 +89,15 @@ service cloud.firestore {
           && data.name is string && data.name.size() <= 100
           && (!('color' in data) || (data.color is string && data.color.size() <= 30))
           && (!('commission' in data) || data.commission is number);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role', 'createdAt'])
+          && data.uid is string
+          && data.name is string && data.name.size() <= 100
+          && data.email is string && data.email.size() <= 150
+          && data.role in ['admin', 'staff']
+          && data.createdAt is string;
     }
 
     function isValidHousekeeping(data) {
@@ -168,7 +182,27 @@ service cloud.firestore {
 
     match /users/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin()
+                    && isValidUser(incoming())
+                    && incoming().email == id;
+
+      // Admin can edit users; approved users can attach uid on first login.
+      allow update: if (isAdmin()
+                      && isValidUser(incoming())
+                      && incoming().email == existing().email
+                      && incoming().email == id)
+                    || (isSignedIn()
+                      && authEmail() != null
+                      && id == authEmail()
+                      && existing().email == authEmail()
+                      && existing().uid == ''
+                      && incoming().uid == request.auth.uid
+                      && incoming().email == existing().email
+                      && incoming().role == existing().role
+                      && incoming().createdAt == existing().createdAt
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'name']));
+
+      allow delete: if isAdmin();
     }
 
     match /teamPositions/{id} {

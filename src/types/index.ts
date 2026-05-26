@@ -150,20 +150,23 @@ export interface CalendarDisplaySettings {
   teamRosterBarFields: CalendarDisplayField[];
 }
 
-export type UserRole = 'admin' | 'staff' | 'pending';
+export type UserRole = 'admin' | 'staff';
 
 export interface UserProfile {
-  uid: string;
+  uid?: string;
   email: string;
-  name?: string;
+  name: string;
   role: UserRole;
+  createdAt?: string;
 }
 
 export interface UserRecord {
   id: string;
+  uid?: string;
   email: string;
   name: string;
   role: UserRole;
+  createdAt?: string;
 }
 
 export interface TeamPosition {
