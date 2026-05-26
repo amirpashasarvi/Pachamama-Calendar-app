@@ -5,6 +5,7 @@ import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
 import { db } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
+import { logActivity } from '@/lib/activityLog';
 import { AlertTriangle, Trash2, Save, Plus, X } from 'lucide-react';
 
 interface VenueHireModalProps {
@@ -13,6 +14,8 @@ interface VenueHireModalProps {
   venueHire?: VenueHire | null;
   rooms: Room[];
   bookingChannels: ConfigOption[];
+  currentUserName?: string;
+  currentUserEmail?: string;
 }
 
 export default function VenueHireModal({ 
@@ -20,7 +23,9 @@ export default function VenueHireModal({
   onClose, 
   venueHire, 
   rooms, 
-  bookingChannels 
+  bookingChannels,
+  currentUserName = '',
+  currentUserEmail = '',
 }: VenueHireModalProps) {
   const [formData, setFormData] = useState<Partial<VenueHire>>({
     name: '',
@@ -125,12 +130,17 @@ export default function VenueHireModal({
     }) as Record<string, unknown>;
 
     setIsSaving(true);
+    const logBase = { userName: currentUserName || currentUserEmail, userEmail: currentUserEmail, entityType: 'venueHire' as const };
+    const venueName = formData.name || 'Unknown venue';
+    const dates = `${formData.startDate} → ${formData.endDate}`;
     try {
       if (venueHire?.id) {
         await updateDoc(doc(db, 'venueHires', venueHire.id), data);
+        logActivity({ ...logBase, action: 'updated', entityId: venueHire.id, summary: `Venue Hire updated · ${venueName} · ${dates}` });
       } else {
         const createData = { ...data, createdAt: new Date().toISOString() };
-        await addDoc(collection(db, 'venueHires'), createData);
+        const ref = await addDoc(collection(db, 'venueHires'), createData);
+        logActivity({ ...logBase, action: 'created', entityId: ref.id, summary: `Venue Hire created · ${venueName} · ${dates}` });
       }
       onClose();
     } catch (err) {
@@ -144,6 +154,7 @@ export default function VenueHireModal({
     if (!venueHire?.id) return;
     try {
       await updateDoc(doc(db, 'venueHires', venueHire.id), { deletedAt: new Date().toISOString() });
+      logActivity({ action: 'deleted', entityType: 'venueHire', entityId: venueHire.id, summary: `Venue Hire deleted · ${venueHire.name}`, userName: currentUserName || currentUserEmail, userEmail: currentUserEmail });
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to delete. Please try again.';

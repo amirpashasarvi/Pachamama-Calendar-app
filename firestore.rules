@@ -221,6 +221,12 @@ service cloud.firestore {
       allow write: if isSignedIn() && isValidHousekeeping(incoming());
     }
 
+    // Activity Log
+    match /activityLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+    }
+
     // Default Deny (Fallback)
     match /{document=**} {
       allow read, write: if false;

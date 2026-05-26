@@ -51,7 +51,7 @@ interface CalendarProps {
 
 export default function Calendar({ rooms: propRooms, bookings: propBookings, housekeeping: propHousekeeping }: CalendarProps) {
   const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, teamPositions, teamAssignments, loading } = useBooking();
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile } = useAuth();
   
   const rooms = propRooms || localRooms;
   const bookings = propBookings || localBookings;
@@ -426,6 +426,8 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         bookingTypes={bookingTypes}
         bookingChannels={bookingChannels}
         isAdmin={isAdmin}
+        currentUserName={profile?.name}
+        currentUserEmail={profile?.email}
       />
 
       <RoomModal 
@@ -447,6 +449,8 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         venueHire={selectedVenueHire}
         rooms={rooms}
         bookingChannels={bookingChannels}
+        currentUserName={profile?.name}
+        currentUserEmail={profile?.email}
       />
 
       <TeamAssignmentModal

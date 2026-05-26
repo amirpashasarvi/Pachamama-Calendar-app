@@ -4,12 +4,15 @@ import { Booking, VenueHire } from '@/types';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { Trash2, RotateCcw, Calendar } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+import { logActivity } from '@/lib/activityLog';
 
 interface TrashedItemsModalProps {
   isOpen: boolean;
   onClose: () => void;
   deletedBookings: Booking[];
   deletedVenueHires: VenueHire[];
+  currentUserName?: string;
+  currentUserEmail?: string;
 }
 
 const THIRTY_DAYS = 30;
@@ -26,12 +29,14 @@ function safeFormat(iso: string | undefined, fmt: string): string {
 }
 
 export default function TrashedItemsModal({
-  isOpen, onClose, deletedBookings, deletedVenueHires
+  isOpen, onClose, deletedBookings, deletedVenueHires, currentUserName = '', currentUserEmail = ''
 }: TrashedItemsModalProps) {
 
-  const handleRestore = async (collectionName: string, id: string) => {
+  const handleRestore = async (collectionName: string, id: string, name: string) => {
     try {
       await updateDoc(doc(db, collectionName, id), { deletedAt: deleteField() });
+      const entityType = collectionName === 'bookings' ? 'booking' : 'venueHire' as const;
+      logActivity({ action: 'restored', entityType, entityId: id, summary: `${entityType === 'booking' ? 'Booking' : 'Venue Hire'} restored · ${name}`, userName: currentUserName || currentUserEmail, userEmail: currentUserEmail });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `${collectionName}/${id}`);
     }
@@ -103,7 +108,7 @@ export default function TrashedItemsModal({
                   </div>
                 </div>
                 <button
-                  onClick={() => handleRestore(item.collectionName, item.id)}
+                  onClick={() => handleRestore(item.collectionName, item.id, item.name)}
                   className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors shrink-0"
                 >
                   <RotateCcw size={12} /> Restore

@@ -46,7 +46,7 @@ function AppContent() {
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden print:h-auto print:overflow-visible">
       {/* Header bar */}
-      <header className="h-14 border-b flex items-center justify-between px-6 bg-white z-50 print:hidden">
+      <header className="h-14 border-b flex items-center justify-between px-6 bg-white relative z-[150] print:hidden">
         <div className="flex items-center gap-4">
           <h1 className="font-bold text-xl tracking-tight">Pachamama</h1>
           <span className="hidden md:block py-1 px-2.5 bg-gray-100 rounded text-[10px] font-bold uppercase tracking-wider text-gray-500">
@@ -228,46 +228,35 @@ function AppContent() {
             )}
 
             <div className="relative border-l ml-2 pl-4" ref={userMenuRef}>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-2 group"
-                >
-                  <div className="text-right hidden sm:block">
-                    <p className="text-[10px] font-bold leading-none text-gray-900 group-hover:text-blue-600 transition-colors">{profile?.name || profile?.email}</p>
-                    <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-0.5 font-black">{profile?.role}</p>
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50 overflow-hidden">
-                    <UserIcon size={16} className="text-gray-400 group-hover:text-blue-500" />
-                  </div>
-                </button>
-                <button
-                  onClick={logout}
-                  className="p-2 hover:bg-rose-50 rounded-full transition-colors text-gray-400 hover:text-rose-600"
-                  title="Log out"
-                >
-                  <LogOut size={18} />
-                </button>
-              </div>
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-2 group"
+              >
+                <div className="text-right hidden sm:block">
+                  <p className="text-[10px] font-bold leading-none text-gray-900 group-hover:text-blue-600 transition-colors">{profile?.name || profile?.email}</p>
+                  <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-0.5 font-black">{profile?.role}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50 overflow-hidden">
+                  <UserIcon size={16} className="text-gray-400 group-hover:text-blue-500" />
+                </div>
+              </button>
 
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[60] animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-3 py-2.5 border-b border-gray-50 flex flex-col">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Account</span>
-                    <span className="text-xs font-bold text-gray-900 truncate mt-0.5">{profile?.email}</span>
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3 py-2.5 border-b border-gray-100">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Account</p>
+                    <p className="text-xs font-bold text-gray-900 truncate">{profile?.name || profile?.email}</p>
+                    {profile?.name && <p className="text-[10px] text-gray-400 truncate mt-0.5">{profile?.email}</p>}
+                    <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-gray-100 text-gray-500">
+                      {profile?.role === 'admin' ? 'Admin' : 'Staff'}
+                    </span>
                   </div>
                   <div className="mt-1 space-y-0.5">
-                    <button 
+                    <button
                       onClick={() => {
                         setIsUserMenuOpen(false);
-                        setIsProfileOpen(true);
+                        logout();
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all font-bold text-xs"
-                    >
-                      <UserIcon size={14} /> Profile
-                    </button>
-                    <button 
-                      onClick={logout}
                       className="w-full flex items-center gap-3 px-3 py-2 text-gray-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-bold text-xs"
                     >
                       <LogOut size={14} /> Logout
@@ -328,6 +317,8 @@ function AppContent() {
             onClose={() => setIsTrashOpen(false)}
             deletedBookings={deletedBookings}
             deletedVenueHires={deletedVenueHires}
+            currentUserName={profile?.name}
+            currentUserEmail={profile?.email}
           />
           <DashboardModal
             isOpen={isDashboardOpen}

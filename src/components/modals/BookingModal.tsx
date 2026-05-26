@@ -5,6 +5,7 @@ import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire }
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
+import { logActivity } from '@/lib/activityLog';
 import { Trash2, Save, Plus, X, AlertTriangle } from 'lucide-react';
 
 interface BookingModalProps {
@@ -19,6 +20,8 @@ interface BookingModalProps {
   bookingChannels: ConfigOption[];
   initialData?: Partial<Booking>;
   isAdmin?: boolean;
+  currentUserName?: string;
+  currentUserEmail?: string;
 }
 
 export default function BookingModal({ 
@@ -32,7 +35,9 @@ export default function BookingModal({
   bookingChannels, 
   venueHires = [],
   initialData,
-  isAdmin = false 
+  isAdmin = false,
+  currentUserName = '',
+  currentUserEmail = '',
 }: BookingModalProps) {
   const INITIAL_BOOKING_STATE = {
     guestName: '',
@@ -243,15 +248,23 @@ export default function BookingModal({
 
     setIsSaving(true);
     try {
+      const room = rooms.find(r => r.id === formData.roomId);
+      const roomName = room?.name ?? formData.roomId ?? '';
+      const guest = formData.guestName || 'Unknown guest';
+      const dates = `${formData.checkIn} → ${formData.checkOut}`;
+      const logBase = { userName: currentUserName || currentUserEmail, userEmail: currentUserEmail, entityType: 'booking' as const };
+
       if (booking?.id) {
         if (isAdmin) {
           await updateDoc(doc(db, 'bookings', booking.id), data);
+          logActivity({ ...logBase, action: 'updated', entityId: booking.id, summary: `Booking updated for ${guest} · ${roomName} · ${dates}` });
         } else {
           // If staff, only update comments
           await updateDoc(doc(db, 'bookings', booking.id), {
             comments: formData.comments || '',
             commentsUpdatedAt: new Date().toISOString(),
           });
+          logActivity({ ...logBase, action: 'updated', entityId: booking.id, summary: `Comment added on booking for ${guest} · ${roomName}` });
         }
       } else if (formData.roomId === 'ALL') {
         // Bulk Create
@@ -259,10 +272,14 @@ export default function BookingModal({
           const bulkData = { ...data, roomId: room.id, createdAt: new Date().toISOString() };
           return addDoc(collection(db, 'bookings'), bulkData);
         });
-        await Promise.all(promises);
+        const results = await Promise.all(promises);
+        results.forEach((ref, i) => {
+          logActivity({ ...logBase, action: 'created', entityId: ref.id, summary: `Booking created for ${guest} · ${rooms[i]?.name} · ${dates}` });
+        });
       } else {
         const createData = { ...data, createdAt: new Date().toISOString() };
-        await addDoc(collection(db, 'bookings'), createData);
+        const ref = await addDoc(collection(db, 'bookings'), createData);
+        logActivity({ ...logBase, action: 'created', entityId: ref.id, summary: `Booking created for ${guest} · ${roomName} · ${dates}` });
       }
       onClose();
     } catch (err) {
@@ -276,6 +293,7 @@ export default function BookingModal({
     if (!booking?.id) return;
     try {
       await updateDoc(doc(db, 'bookings', booking.id), { deletedAt: new Date().toISOString() });
+      logActivity({ action: 'deleted', entityType: 'booking', entityId: booking.id, summary: `Booking deleted for ${booking.guestName}`, userName: currentUserName || currentUserEmail, userEmail: currentUserEmail });
       onClose();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `bookings/${booking.id}`);

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
-import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField } from '@/types';
+import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField, ActivityLogEntry } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
-import { collection, addDoc, updateDoc, doc, deleteDoc, writeBatch, setDoc } from 'firebase/firestore';
-import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle } from 'lucide-react';
+import { collection, addDoc, updateDoc, doc, deleteDoc, writeBatch, setDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle, ClipboardList } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
   DndContext,
@@ -43,7 +44,7 @@ const COLORS = [
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const userDocIdFromEmail = (email: string) => normalizeEmail(email);
 
-type SettingsView = 'menu' | 'types' | 'channels' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display';
+type SettingsView = 'menu' | 'types' | 'channels' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
 
 function SortableItem({ id, children, disabled }: { id: string, children: React.ReactNode, key?: string, disabled?: boolean }) {
   const {
@@ -96,6 +97,17 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
   // User Management state
   const [userFormData, setUserFormData] = useState({ email: '', name: '', role: 'staff' as UserRole });
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+
+  // Activity Log state
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  useEffect(() => {
+    if (view !== 'activity') return;
+    const q = query(collection(db, 'activityLog'), orderBy('timestamp', 'desc'), limit(50));
+    const unsub = onSnapshot(q, snap => {
+      setActivityLog(snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityLogEntry)));
+    });
+    return unsub;
+  }, [view]);
 
   const resetForms = () => {
     setEditingId(null);
@@ -1202,6 +1214,17 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
+
+            <button
+              onClick={() => setView('activity')}
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
+            >
+              <div className="text-left">
+                <h4 className="font-bold text-gray-900">Activity Log</h4>
+                <p className="text-xs text-gray-500">Recent actions by admins and staff</p>
+              </div>
+              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+            </button>
           </div>
         )}
 
@@ -1212,6 +1235,51 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         {view === 'retreats' && renderRetreatsManagement()}
         {view === 'roster' && renderRosterManagement()}
         {view === 'display' && renderCalendarDisplayManagement()}
+
+        {view === 'activity' && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <button onClick={() => setView('menu')} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+                <ChevronLeft size={18} className="text-gray-500" />
+              </button>
+              <div className="flex items-center gap-2">
+                <ClipboardList size={16} className="text-gray-400" />
+                <h3 className="font-bold text-gray-900">Activity Log</h3>
+              </div>
+            </div>
+            {activityLog.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
+                <ClipboardList size={28} strokeWidth={1.5} />
+                <p className="text-sm font-bold">No activity yet</p>
+                <p className="text-xs text-center text-gray-400">Actions will appear here as bookings are created, updated, or deleted.</p>
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
+                {activityLog.map(entry => {
+                  let timeStr = '';
+                  try { timeStr = format(parseISO(entry.timestamp), 'dd MMM · HH:mm'); } catch { timeStr = entry.timestamp; }
+                  const actionColors: Record<string, string> = {
+                    created: 'bg-green-100 text-green-700',
+                    updated: 'bg-blue-100 text-blue-700',
+                    deleted: 'bg-rose-100 text-rose-700',
+                    restored: 'bg-amber-100 text-amber-700',
+                  };
+                  return (
+                    <div key={entry.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                      <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${actionColors[entry.action] ?? 'bg-gray-100 text-gray-500'}`}>
+                        {entry.action}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-800 leading-snug">{entry.summary}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{entry.userName || entry.userEmail} · {timeStr}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );

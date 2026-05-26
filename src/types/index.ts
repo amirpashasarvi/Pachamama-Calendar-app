@@ -176,6 +176,20 @@ export interface TeamPosition {
   order: number;
 }
 
+export type ActivityAction = 'created' | 'updated' | 'deleted' | 'restored';
+export type ActivityEntityType = 'booking' | 'venueHire';
+
+export interface ActivityLogEntry {
+  id?: string;
+  action: ActivityAction;
+  entityType: ActivityEntityType;
+  entityId: string;
+  summary: string;
+  userName: string;
+  userEmail: string;
+  timestamp: string;
+}
+
 export interface TeamAssignment {
   id: string;
   positionId: string;
