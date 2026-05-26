@@ -71,7 +71,7 @@ export default function BookingModal({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showBedConfig, setShowBedConfig] = useState(false);
 
   useEffect(() => {
@@ -101,9 +101,16 @@ export default function BookingModal({
     setError(null);
     setIsSaving(false);
     setShowConfirmDelete(false);
-    setDeleteConfirmText('');
+    setIsDeleting(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id, initialData, isOpen]);
+
+  useEffect(() => {
+    if (!showConfirmDelete) return;
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowConfirmDelete(false); };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [showConfirmDelete]);
 
   // Set default booking channel for new bookings
   useEffect(() => {
@@ -290,12 +297,16 @@ export default function BookingModal({
   };
 
   const handleDelete = async () => {
-    if (!booking?.id) return;
+    if (!booking?.id || isDeleting) return;
+    setIsDeleting(true);
     try {
       await updateDoc(doc(db, 'bookings', booking.id), { deletedAt: new Date().toISOString() });
       logActivity({ action: 'deleted', entityType: 'booking', entityId: booking.id, summary: `Booking deleted for ${booking.guestName}`, userName: currentUserName || currentUserEmail, userEmail: currentUserEmail });
+      setShowConfirmDelete(false);
       onClose();
     } catch (err) {
+      setIsDeleting(false);
+      setShowConfirmDelete(false);
       handleFirestoreError(err, OperationType.DELETE, `bookings/${booking.id}`);
     }
   };
@@ -332,68 +343,32 @@ export default function BookingModal({
     <div className="flex items-center justify-between">
       {booking && isAdmin && (
         <div className="flex items-center gap-2">
-          {showConfirmDelete ? (
-            <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2">
-              <span className="text-[10px] font-bold text-gray-500">
-                Type <span className="text-rose-600 font-black">{booking?.guestName || 'DELETE'}</span> to confirm
-              </span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={e => setDeleteConfirmText(e.target.value)}
-                  placeholder={booking?.guestName || 'DELETE'}
-                  className="border rounded-lg px-2 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-rose-300"
-                  autoComplete="off"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleteConfirmText.trim().toLowerCase() !== (booking?.guestName || 'DELETE').toLowerCase()}
-                  className="px-3 py-2 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowConfirmDelete(false); setDeleteConfirmText(''); }}
-                  className="px-3 py-2 bg-gray-100 text-gray-500 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowConfirmDelete(true)}
-              className="flex items-center gap-2 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-sm font-bold"
-            >
-              <Trash2 size={16} /> Delete
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowConfirmDelete(true)}
+            className="flex items-center gap-2 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-sm font-bold"
+          >
+            <Trash2 size={16} /> Delete
+          </button>
         </div>
       )}
       <div className="flex gap-3 ml-auto">
-        {!showConfirmDelete && (
-          <>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              form="booking-form"
-              className="flex items-center gap-2 px-8 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
-            >
-              <Save size={16} /> {isAdmin ? (booking ? 'Update Booking' : 'Create Booking') : 'Save Comment'}
-            </button>
-          </>
-        )}
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="booking-form"
+            className="flex items-center gap-2 px-8 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
+          >
+            <Save size={16} /> {isAdmin ? (booking ? 'Update Booking' : 'Create Booking') : 'Save Comment'}
+          </button>
+        </>
       </div>
     </div>
     </div>
@@ -856,6 +831,47 @@ export default function BookingModal({
         )}
 
       </form>
+
+      {/* Delete confirmation overlay */}
+      {showConfirmDelete && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          onMouseDown={() => setShowConfirmDelete(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm animate-in fade-in zoom-in-95 duration-150"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1 mb-5">
+              <h3 className="text-base font-bold text-gray-900">Delete this booking?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">The booking will be moved to Trash and can be restored later.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(false)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                {isDeleting ? 'Deleting…' : 'Delete Booking'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
