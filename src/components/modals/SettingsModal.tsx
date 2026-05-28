@@ -6,6 +6,7 @@ import { collection, addDoc, updateDoc, doc, deleteDoc, writeBatch, setDoc, quer
 import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle, ClipboardList } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { APP_COLOR_PALETTE } from '@/lib/colorPalette';
 import {
   DndContext,
   closestCenter,
@@ -36,11 +37,7 @@ interface SettingsModalProps {
   displaySettings: CalendarDisplaySettings | null;
 }
 
-const COLORS = [
-  '#f87171', '#fb923c', '#fbbf24', '#facc15', '#a3e635', '#4ade80', '#34d399', '#2dd4bf', 
-  '#22d3ee', '#38bdf8', '#60a5fa', '#818cf8', '#a78bfa', '#c084fc', '#e879f9', '#f472b6',
-  '#fb7185', '#94a3b8', '#36454F'
-];
+const COLORS = APP_COLOR_PALETTE;
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const userDocIdFromEmail = (email: string) => normalizeEmail(email);
 

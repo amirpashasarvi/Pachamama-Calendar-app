@@ -4,6 +4,7 @@ import { Room, RoomType, Booking } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Trash2, Save } from 'lucide-react';
+import { APP_COLOR_PALETTE } from '@/lib/colorPalette';
 
 interface RoomModalProps {
   isOpen: boolean;
@@ -31,28 +32,7 @@ export default function RoomModal({ isOpen, onClose, room, bookings }: RoomModal
     'Shared Room', 'Private Room', 'Glamping Tent', 'Campground', 'Treehouse', 'Venue Hire', 'Home Exchange'
   ];
 
-  const colors = [
-    // Yellows/Oranges
-    '#FFF9E3', '#FAF5E4', '#FFF4D0', '#FFEF9C', '#FFEE00', '#E8C100', '#FFA500', '#FF8C00', '#D2691E',
-    // Reds/Pinks
-    '#FFDAB9', '#FF8C00', '#CD5C5C', '#FFA500', '#FF4500', '#FF6347', '#FF0000', '#B22222', '#800000',
-    // Pinks
-    '#FFD1DC', '#F08080', '#FF7F50', '#FF69B4', '#FFC0CB', '#FFC1CC', '#FF1493', '#DA1884', '#D21F3C',
-    // Magentas/Purples
-    '#FF00FF', '#FFBCD9', '#FF00FF', '#C154C1', '#8A2BE2', '#DA70D6', '#800080', '#990066', '#722F37',
-    // Purples/Navys
-    '#E0BBE4', '#C8A2C8', '#6F2DA8', '#7851A9', '#000080', '#0047AB', '#4169E1', '#007FFF', '#87CEEB',
-    // Blues
-    '#7DF9FF', '#00FFFF', '#00BFFF', '#89CFF0', '#A7D8DE', '#00CCCC', '#0ABAB5', '#40E0D0', '#00F5FF',
-    // Greens
-    '#008080', '#40826D', '#71EEB8', '#98FF98', '#1B4D3E', '#00FF7F', '#008000', '#7CFC00', '#4CBB17',
-    // Emeralds
-    '#50C878', '#056608', '#00A550', '#228B22', '#1B4D3E', '#00FF00', '#D1E231', '#7FFF00', '#8FBC8F',
-    // Neutrals
-    '#F5F5DC', '#C2B280', '#D2B48C', '#8E9294', '#EBA937', '#B5651D', '#954535', '#967969', '#7B3F00',
-    // Grays
-    '#EFEFEF', '#FFFFFF', '#D3D3D3', '#C0C0C0', '#808080', '#A5A5A5', '#4F4F4F', '#666362', '#36454F'
-  ];
+  const colors = APP_COLOR_PALETTE;
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
