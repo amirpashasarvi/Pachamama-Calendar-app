@@ -1,11 +1,13 @@
 import React from 'react';
-import { isWeekend, isToday, format, parseISO } from 'date-fns';
+import { isWeekend, format, parseISO } from 'date-fns';
 import { Room, Booking } from '@/types';
 import BookingBar from './BookingBar';
 import { Plus, GripVertical } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
+
+interface BoundaryDates { start: string[]; end: string[]; }
 
 interface RoomRowProps {
   key?: React.Key;
@@ -17,11 +19,15 @@ interface RoomRowProps {
   onEditBooking: (booking: Booking) => void;
   onAddBooking: (date: Date) => void;
   venueHireTintDates?: string[];
+  venueHireBoundaryDates?: BoundaryDates;
   retreatTintDates?: string[];
+  retreatBoundaryDates?: BoundaryDates;
   isAdmin?: boolean;
 }
 
-export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], retreatTintDates = [], isAdmin = false }: RoomRowProps) {
+const EMPTY_BOUNDARY: BoundaryDates = { start: [], end: [] };
+
+export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], venueHireBoundaryDates = EMPTY_BOUNDARY, retreatTintDates = [], retreatBoundaryDates = EMPTY_BOUNDARY, isAdmin = false }: RoomRowProps) {
   const {
     attributes,
     listeners,
@@ -88,17 +94,30 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
           const isVenueHireDay = venueHireTintDates.includes(dateStr);
           const isRetreatDay = retreatTintDates.includes(dateStr);
           const weekend = isWeekend(day);
-          const today = isToday(day);
 
-          // Single priority chain — avoids tailwind-merge bg-* conflicts
+          // Boundary diagonal: start = tint on right half, end = tint on left half
+          const isVHStart = venueHireBoundaryDates.start.includes(dateStr);
+          const isVHEnd   = venueHireBoundaryDates.end.includes(dateStr);
+          const isRStart  = retreatBoundaryDates.start.includes(dateStr);
+          const isREnd    = retreatBoundaryDates.end.includes(dateStr);
+          const isBoundary = isVHStart || isVHEnd || isRStart || isREnd;
+
+          // clip-path for right-half tint (start day) and left-half tint (end day)
+          const startClip = 'polygon(calc(50% + 6px) 0%, 100% 0%, 100% 100%, calc(50% - 6px) 100%)';
+          const endClip   = 'polygon(0% 0%, calc(50% + 6px) 0%, calc(50% - 6px) 100%, 0% 100%)';
+
+          // Base cell background: boundary days are plain (diagonal overlay handles color)
           const bgClass =
-            today                        ? 'bg-sky-50/70'     :
-            isVenueHireDay && weekend    ? 'bg-orange-200/80' :
-            isVenueHireDay               ? 'bg-orange-100/75' :
-            isRetreatDay   && weekend    ? 'bg-blue-200/80'   :
-            isRetreatDay                 ? 'bg-blue-100/75'   :
-            weekend                      ? 'bg-gray-100'      :
+            !isBoundary && isVenueHireDay && weekend    ? 'bg-orange-200/80' :
+            !isBoundary && isVenueHireDay               ? 'bg-orange-100/75' :
+            !isBoundary && isRetreatDay   && weekend    ? 'bg-blue-200/80'   :
+            !isBoundary && isRetreatDay                 ? 'bg-blue-100/75'   :
+            weekend                                     ? 'bg-gray-100'      :
             '';
+
+          // Overlay color for boundary days
+          const vhColor  = weekend ? 'rgba(251,146,60,0.80)' : 'rgba(254,215,170,0.75)';
+          const retColor = weekend ? 'rgba(147,197,253,0.80)' : 'rgba(219,234,254,0.75)';
 
           const isOccupied = bookings.some(booking => {
             const checkIn = format(parseISO(booking.checkIn), 'yyyy-MM-dd');
@@ -110,14 +129,19 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
             <div 
               key={`${String(room.id)}-${day.toISOString()}-${idx}`} 
               className={cn(
-                "w-14 flex-shrink-0 border-r border-gray-200 h-full transition-colors flex items-center justify-center text-blue-400",
+                "w-14 flex-shrink-0 border-r border-gray-200 h-full transition-colors flex items-center justify-center text-blue-400 relative overflow-hidden",
                 bgClass,
                 isAdmin && !isOccupied ? "cursor-crosshair hover:bg-blue-50/30 active:bg-blue-50" : "",
                 isOccupied ? 'cursor-default pointer-events-none' : ''
               )}
               onClick={() => isAdmin && !isOccupied && onAddBooking(day)}
             >
-              {isAdmin && !isOccupied && <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+              {/* Diagonal overlay for period start/end days */}
+              {isVHStart && <div className="absolute inset-0 pointer-events-none" style={{ background: vhColor, clipPath: startClip }} />}
+              {isVHEnd   && <div className="absolute inset-0 pointer-events-none" style={{ background: vhColor, clipPath: endClip }} />}
+              {isRStart  && <div className="absolute inset-0 pointer-events-none" style={{ background: retColor, clipPath: startClip }} />}
+              {isREnd    && <div className="absolute inset-0 pointer-events-none" style={{ background: retColor, clipPath: endClip }} />}
+              {isAdmin && !isOccupied && <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity relative z-10" />}
             </div>
           );
         })}

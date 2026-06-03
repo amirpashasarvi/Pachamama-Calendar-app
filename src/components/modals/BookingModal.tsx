@@ -5,7 +5,9 @@ import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire }
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
+import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 import { Trash2, Save, Plus, X, AlertTriangle } from 'lucide-react';
 
 interface BookingModalProps {
@@ -477,10 +479,11 @@ export default function BookingModal({
                 <DatePicker 
                   value={formData.checkIn || ''}
                   onChange={val => {
-                    setFormData(prev => ({ 
-                      ...prev, 
+                    const autoCheckOut = val ? format(addDays(parseISO(val), 6), 'yyyy-MM-dd') : '';
+                    setFormData(prev => ({
+                      ...prev,
                       checkIn: val,
-                      checkOut: (prev.checkOut && val >= prev.checkOut) ? '' : prev.checkOut
+                      checkOut: (!prev.checkOut || val >= prev.checkOut) ? autoCheckOut : prev.checkOut
                     }));
                     setError(null);
                   }}
@@ -497,6 +500,7 @@ export default function BookingModal({
                 <DatePicker 
                   value={formData.checkOut || ''}
                   min={formData.checkIn ? new Date(new Date(formData.checkIn).getTime() + 86400000).toISOString().split('T')[0] : ''}
+                  defaultMonth={formData.checkIn || undefined}
                   onChange={val => {
                     setFormData({ ...formData, checkOut: val });
                     setError(null);
@@ -605,28 +609,29 @@ export default function BookingModal({
 
         {/* Financial info */}
         {isAdmin && (
-          <section className="space-y-4 pt-4 border-t border-gray-100">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Financials</h3>
+          <section className="space-y-4 pt-5 border-t-2 border-gray-200">
+            <h3 className="text-sm font-black uppercase tracking-widest text-gray-700">Financials</h3>
 
-            {/* Recap / Totals */}
-            <div className="pb-4 border-b flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</span>
-                <span className="text-2xl font-black text-black">€{total.toFixed(2)}</span>
+            {/* Summary card */}
+            <div className="grid grid-cols-3 gap-0 bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden mb-2">
+              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-gray-200">
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total</span>
+                <span className="text-xl font-black text-gray-900">€{total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">Remaining</span>
-                  <span className="text-lg font-bold text-blue-600">€{remaining.toFixed(2)}</span>
-                </div>
-                <div className={cn(
-                  "px-4 py-1.5 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
+              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-gray-200">
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Remaining</span>
+                <span className="text-xl font-black text-blue-600">€{remaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex flex-col items-center justify-center py-4 px-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Status</span>
+                <span className={cn(
+                  "px-3 py-1 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
                   calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
                   calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
                   'bg-rose-100 text-rose-700'
                 )}>
                   {calculatedStatus}
-                </div>
+                </span>
               </div>
             </div>
 
@@ -637,11 +642,10 @@ export default function BookingModal({
                   <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
                   <div className="relative font-mono text-sm">
                     <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <input 
-                      type="number"
-                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                      value={formData.price ?? ''}
-                      onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    <CurrencyInput
+                      value={formData.price ?? 0}
+                      onChange={v => setFormData({ ...formData, price: v })}
+                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                     />
                   </div>
                   {nights > 0 && (formData.price || 0) > 0 && (
@@ -654,11 +658,10 @@ export default function BookingModal({
                   <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Deposit</label>
                   <div className="relative font-mono text-sm">
                     <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <input 
-                      type="number"
-                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                      value={formData.deposit ?? ''}
-                      onChange={e => setFormData({ ...formData, deposit: parseFloat(e.target.value) || 0 })}
+                    <CurrencyInput
+                      value={formData.deposit ?? 0}
+                      onChange={v => setFormData({ ...formData, deposit: v })}
+                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                     />
                   </div>
                 </div>
@@ -680,11 +683,10 @@ export default function BookingModal({
                     />
                     <div className="relative w-32 font-mono text-sm">
                       <span className="absolute left-3 top-2 text-gray-400 text-xs">€</span>
-                      <input 
-                        type="number"
-                        className="w-full pl-7 pr-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-xs"
-                        value={extra.amount ?? ''}
-                        onChange={updateExtra.bind(null, idx, 'amount' as any)}
+                      <CurrencyInput
+                        value={extra.amount ?? 0}
+                        onChange={v => updateExtra(idx, 'amount' as any, v)}
+                        className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-xs"
                       />
                     </div>
                     <button
@@ -728,11 +730,10 @@ export default function BookingModal({
                   <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
                   <div className="relative font-mono text-sm">
                     <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <input 
-                      type="number"
-                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                      value={formData.paidLater1 ?? ''}
-                      onChange={e => setFormData({ ...formData, paidLater1: parseFloat(e.target.value) || 0 })}
+                    <CurrencyInput
+                      value={formData.paidLater1 ?? 0}
+                      onChange={v => setFormData({ ...formData, paidLater1: v })}
+                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                     />
                   </div>
                 </div>
@@ -740,11 +741,10 @@ export default function BookingModal({
                   <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
                   <div className="relative font-mono text-sm">
                     <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <input 
-                      type="number"
-                      className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                      value={formData.paidLater2 ?? ''}
-                      onChange={e => setFormData({ ...formData, paidLater2: parseFloat(e.target.value) || 0 })}
+                    <CurrencyInput
+                      value={formData.paidLater2 ?? 0}
+                      onChange={v => setFormData({ ...formData, paidLater2: v })}
+                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                     />
                   </div>
                 </div>
@@ -791,13 +791,10 @@ export default function BookingModal({
                   {formData.channelPaymentBasis === 'custom' ? (
                     <div className="relative shrink-0 w-28">
                       <span className="absolute left-2.5 top-[9px] text-xs text-gray-400">€</span>
-                      <input
-                        type="number"
-                        min={0}
-                        className="w-full pl-6 pr-2 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono text-sm"
-                        value={formData.commissionCustomAmount ?? ''}
-                        onChange={e => setFormData({ ...formData, commissionCustomAmount: parseFloat(e.target.value) || 0 })}
-                        placeholder="0.00"
+                      <CurrencyInput
+                        value={formData.commissionCustomAmount ?? 0}
+                        onChange={v => setFormData({ ...formData, commissionCustomAmount: v })}
+                        className="pl-6 pr-2 py-2 border border-gray-200 rounded-xl text-sm"
                       />
                     </div>
                   ) : (

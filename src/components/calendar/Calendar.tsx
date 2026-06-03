@@ -4,7 +4,6 @@ import {
   differenceInDays,
   eachDayOfInterval, 
   format, 
-  isToday,
   isWeekend, 
   startOfToday,
 } from 'date-fns';
@@ -259,6 +258,16 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
     return Array.from(dates);
   }, [venueHires]);
 
+  const venueHireBoundaryDates = useMemo(() => {
+    const start = new Set<string>();
+    const end = new Set<string>();
+    venueHires.forEach(vh => {
+      start.add(format(parseISO(vh.startDate), 'yyyy-MM-dd'));
+      end.add(format(parseISO(vh.endDate), 'yyyy-MM-dd'));
+    });
+    return { start: Array.from(start), end: Array.from(end) };
+  }, [venueHires]);
+
   const retreatTintDates = useMemo(() => {
     const dates = new Set<string>();
     retreats.forEach(r => {
@@ -268,6 +277,16 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
       interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
     });
     return Array.from(dates);
+  }, [retreats]);
+
+  const retreatBoundaryDates = useMemo(() => {
+    const start = new Set<string>();
+    const end = new Set<string>();
+    retreats.forEach(r => {
+      start.add(format(parseISO(r.startDate), 'yyyy-MM-dd'));
+      end.add(format(parseISO(r.endDate), 'yyyy-MM-dd'));
+    });
+    return { start: Array.from(start), end: Array.from(end) };
   }, [retreats]);
 
   if (loading) {
@@ -302,10 +321,10 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
             {days.map((day, idx) => (
               <div 
                 key={`header-${day.toISOString()}-${idx}`} 
-                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono text-[10px] ${isToday(day) ? 'bg-sky-50 text-sky-700' : isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'}`}
+                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono text-[10px] ${isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'}`}
               >
                 <span className="uppercase font-bold tracking-tighter opacity-60">{format(day, 'EEE')}</span>
-                <span className={`text-sm font-bold ${isToday(day) ? 'font-black text-sky-700' : 'text-gray-800'}`}>{format(day, 'd')}</span>
+                <span className="text-sm font-bold text-gray-800">{format(day, 'd')}</span>
               </div>
             ))}
           </div>
@@ -349,7 +368,9 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
                       onEditBooking={handleEditBooking}
                       onAddBooking={(date) => handleAddBooking(room.id, date)}
                       venueHireTintDates={venueHireTintDates}
+                      venueHireBoundaryDates={venueHireBoundaryDates}
                       retreatTintDates={retreatTintDates}
+                      retreatBoundaryDates={retreatBoundaryDates}
                       isAdmin={isAdmin}
                     />
                   ))}

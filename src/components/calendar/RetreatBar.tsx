@@ -12,6 +12,15 @@ interface RetreatBarProps {
   onEditVenue: (venueHire: VenueHire) => void;
 }
 
+function diagonalClip(width: number, slope = 6): string {
+  const halfDay = 28;
+  const p1 = `${halfDay + slope + 1}px 0%`;
+  const p4 = `${halfDay - slope + 1}px 100%`;
+  const p2 = `${width - halfDay + slope + 1}px 0%`;
+  const p3 = `${width - halfDay - slope + 1}px 100%`;
+  return `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
+}
+
 export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue }: RetreatBarProps) {
   const dayWidth = 56;
   const calendarStart = days[0];
@@ -62,8 +71,8 @@ export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, 
             return (
               <div 
                 key={`retreat-${retreat.id}`}
-                className="absolute top-0.5 h-5 bg-blue-200 border border-blue-400 border-l-2 border-l-blue-700 rounded-r shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto"
-                style={{ left, width }}
+                className="absolute top-0.5 h-5 bg-blue-200 border border-blue-400 shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto"
+                style={{ left: left - 1, width: width + 2, clipPath: diagonalClip(width + 2) }}
                 onClick={() => onEdit(retreat)}
               >
                 <span className="text-[9px] font-bold text-blue-950 uppercase tracking-tight truncate w-full text-center">
@@ -88,8 +97,8 @@ export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, 
             return (
               <div 
                 key={`venue-hire-${vh.id}`}
-                className="absolute bottom-0.5 h-5 bg-orange-200 border border-orange-400 border-l-2 border-l-orange-700 rounded-r shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto"
-                style={{ left, width }}
+                className="absolute bottom-0.5 h-5 bg-orange-200 border border-orange-400 shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto"
+                style={{ left: left - 1, width: width + 2, clipPath: diagonalClip(width + 2) }}
                 onClick={() => onEditVenue(vh)}
               >
                 <span className="text-[9px] font-bold text-orange-850 uppercase tracking-tight truncate w-full text-center">

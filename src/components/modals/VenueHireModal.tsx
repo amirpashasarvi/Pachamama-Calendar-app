@@ -5,7 +5,9 @@ import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
 import { db } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
+import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 import { AlertTriangle, Trash2, Save, Plus, X } from 'lucide-react';
 
 interface VenueHireModalProps {
@@ -214,10 +216,11 @@ export default function VenueHireModal({
               <DatePicker 
                 value={formData.startDate || ''}
                 onChange={val => {
+                  const autoEndDate = val ? format(addDays(parseISO(val), 6), 'yyyy-MM-dd') : '';
                   setFormData(prev => ({
                     ...prev,
                     startDate: val,
-                    endDate: (prev.endDate && val >= prev.endDate) ? '' : prev.endDate
+                    endDate: (!prev.endDate || val >= prev.endDate) ? autoEndDate : prev.endDate
                   }));
                 }}
               />
@@ -227,6 +230,7 @@ export default function VenueHireModal({
               <DatePicker 
                 value={formData.endDate || ''}
                 min={formData.startDate ? new Date(new Date(formData.startDate).getTime() + 86400000).toISOString().split('T')[0] : ''}
+                defaultMonth={formData.startDate || undefined}
                 onChange={val => setFormData({ ...formData, endDate: val })}
               />
             </div>
@@ -309,11 +313,10 @@ export default function VenueHireModal({
                 <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
                 <div className="relative font-mono text-sm">
                   <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                  <input
-                    type="number"
-                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                    value={formData.bookingPrice ?? ''}
-                    onChange={e => setFormData({ ...formData, bookingPrice: parseFloat(e.target.value) || 0 })}
+                  <CurrencyInput
+                    value={formData.bookingPrice ?? 0}
+                    onChange={v => setFormData({ ...formData, bookingPrice: v })}
+                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                   />
                 </div>
                 {days > 0 && (formData.bookingPrice || 0) > 0 && (
@@ -326,11 +329,10 @@ export default function VenueHireModal({
                 <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Deposit</label>
                 <div className="relative font-mono text-sm">
                   <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                  <input
-                    type="number"
-                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                    value={formData.deposit ?? ''}
-                    onChange={e => setFormData({ ...formData, deposit: parseFloat(e.target.value) || 0 })}
+                  <CurrencyInput
+                    value={formData.deposit ?? 0}
+                    onChange={v => setFormData({ ...formData, deposit: v })}
+                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                   />
                 </div>
               </div>
@@ -349,11 +351,10 @@ export default function VenueHireModal({
                   />
                   <div className="relative w-32 font-mono text-sm">
                     <span className="absolute left-3 top-2 text-gray-400 text-xs">€</span>
-                    <input
-                      type="number"
-                      className="w-full pl-7 pr-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-xs"
-                      value={extra.amount ?? ''}
-                      onChange={e => updateExtra(idx, 'amount', parseFloat(e.target.value) || 0)}
+                    <CurrencyInput
+                      value={extra.amount ?? 0}
+                      onChange={v => updateExtra(idx, 'amount', v)}
+                      className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-xs"
                     />
                   </div>
                   <button type="button" onClick={() => removeExtra(idx)} className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0">
@@ -388,11 +389,10 @@ export default function VenueHireModal({
                 <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
                 <div className="relative font-mono text-sm">
                   <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                  <input
-                    type="number"
-                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                    value={formData.paidLater1 ?? ''}
-                    onChange={e => setFormData({ ...formData, paidLater1: parseFloat(e.target.value) || 0 })}
+                  <CurrencyInput
+                    value={formData.paidLater1 ?? 0}
+                    onChange={v => setFormData({ ...formData, paidLater1: v })}
+                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                   />
                 </div>
               </div>
@@ -400,11 +400,10 @@ export default function VenueHireModal({
                 <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
                 <div className="relative font-mono text-sm">
                   <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                  <input
-                    type="number"
-                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono"
-                    value={formData.paidLater2 ?? ''}
-                    onChange={e => setFormData({ ...formData, paidLater2: parseFloat(e.target.value) || 0 })}
+                  <CurrencyInput
+                    value={formData.paidLater2 ?? 0}
+                    onChange={v => setFormData({ ...formData, paidLater2: v })}
+                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
                   />
                 </div>
               </div>
@@ -448,12 +447,10 @@ export default function VenueHireModal({
                 {formData.channelPaymentBasis === 'custom' ? (
                   <div className="relative shrink-0 w-28">
                     <span className="absolute left-2.5 top-[9px] text-xs text-gray-400">€</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full pl-6 pr-2 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 font-mono text-sm"
-                      value={formData.commissionCustomAmount ?? ''}
-                      onChange={e => setFormData({ ...formData, commissionCustomAmount: parseFloat(e.target.value) || 0 })}
+                    <CurrencyInput
+                      value={formData.commissionCustomAmount ?? 0}
+                      onChange={v => setFormData({ ...formData, commissionCustomAmount: v })}
+                      className="pl-6 pr-2 py-2 border border-gray-200 rounded-xl text-sm"
                       placeholder="0.00"
                     />
                   </div>

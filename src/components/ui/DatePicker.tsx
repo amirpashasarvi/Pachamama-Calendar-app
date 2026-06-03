@@ -20,14 +20,16 @@ interface DatePickerProps {
   value: string;
   onChange: (date: string) => void;
   min?: string;
+  defaultMonth?: string;
   placeholder?: string;
   required?: boolean;
   className?: string;
 }
 
-export default function DatePicker({ value, onChange, min, placeholder, required, className }: DatePickerProps) {
+export default function DatePicker({ value, onChange, min, defaultMonth, placeholder, required, className }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(value ? parseISO(value) : startOfToday());
+  const initialMonth = value ? parseISO(value) : (defaultMonth && isValid(parseISO(defaultMonth)) ? parseISO(defaultMonth) : startOfToday());
+  const [currentMonth, setCurrentMonth] = useState(initialMonth);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync current month view when value changes externally
@@ -36,6 +38,13 @@ export default function DatePicker({ value, onChange, min, placeholder, required
       setCurrentMonth(parseISO(value));
     }
   }, [value]);
+
+  // When picker opens with no value, jump to defaultMonth if provided
+  useEffect(() => {
+    if (isOpen && !value && defaultMonth && isValid(parseISO(defaultMonth))) {
+      setCurrentMonth(parseISO(defaultMonth));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
