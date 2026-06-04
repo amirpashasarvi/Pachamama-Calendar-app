@@ -85,6 +85,9 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
     })
   );
   
+  // Local optimistic order for drag-to-reorder (avoids visual revert during Firestore round-trip)
+  const [localOrders, setLocalOrders] = useState<Record<string, ConfigOption[]>>({});
+
   // Generic state for Types/Channels editing
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', color: '#36454F', commission: '' as number | '' });
@@ -146,6 +149,11 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
     if (collectionName === 'teamPositions' && !editingId) {
       data.order = teamPositions.length;
+    }
+
+    if ((collectionName === 'bookingTypes' || collectionName === 'bookingChannels') && !editingId) {
+      const currentOptions = collectionName === 'bookingTypes' ? bookingTypes : bookingChannels;
+      data.sortOrder = currentOptions.length;
     }
 
     try {
@@ -267,6 +275,30 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           handleFirestoreError(error, OperationType.UPDATE, 'teamPositions');
         }
       }
+    }
+  };
+
+  const handleConfigDragEnd = async (event: DragEndEvent, options: ConfigOption[], collectionName: string) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = options.findIndex(o => o.id === active.id);
+    const newIndex = options.findIndex(o => o.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(options, oldIndex, newIndex);
+    // Update UI immediately without waiting for Firestore
+    setLocalOrders(prev => ({ ...prev, [collectionName]: reordered }));
+    const batch = writeBatch(db);
+    reordered.forEach((item, index) => {
+      batch.update(doc(db, collectionName, item.id), { sortOrder: index });
+    });
+    try {
+      await batch.commit();
+      // Firestore confirmed — clear local override (onSnapshot will provide the correct order)
+      setLocalOrders(prev => { const next = { ...prev }; delete next[collectionName]; return next; });
+    } catch (err) {
+      // Revert local state on error
+      setLocalOrders(prev => { const next = { ...prev }; delete next[collectionName]; return next; });
+      handleFirestoreError(err, OperationType.UPDATE, collectionName);
     }
   };
 
@@ -692,7 +724,8 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
     </div>
   );
 
-  const renderConfigList = (options: ConfigOption[], collectionName: string, label: string) => {
+  const renderConfigList = (rawOptions: ConfigOption[], collectionName: string, label: string) => {
+    const options = localOrders[collectionName] ?? rawOptions;
     const isChannel = collectionName === 'bookingChannels';
     
     return (
@@ -781,10 +814,16 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               No options found. Add one above.
             </div>
           ) : (
-            options.map(option => (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => handleConfigDragEnd(e, options, collectionName)}
+            >
+              <SortableContext items={options.map(o => o.id)} strategy={verticalListSortingStrategy}>
+                {options.map(option => (
+              <SortableItem key={option.id} id={option.id}>
               <div 
-                key={option.id}
-                className="flex items-center justify-between p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow group"
+                className="flex items-center justify-between p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow group ml-8"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: option.color }} />
@@ -841,7 +880,10 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                   )}
                 </div>
               </div>
-            ))
+              </SortableItem>
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </div>

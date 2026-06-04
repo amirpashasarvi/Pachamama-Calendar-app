@@ -35,6 +35,7 @@ export interface ConfigOption {
   name: string;
   color: string;
   commission?: number;
+  sortOrder?: number;
 }
 
 export interface Booking {

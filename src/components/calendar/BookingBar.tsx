@@ -155,7 +155,7 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
       {/* 2. Color layer (opaque for standard types, transparent for custom) */}
       <div 
         className={cn("absolute inset-0", bgColor)} 
-        style={{ backgroundColor: customColor ? `${customColor}25` : undefined }}
+        style={{ backgroundColor: customColor ? customColor : undefined }}
       />
 
       {/* 3. Content layer */}

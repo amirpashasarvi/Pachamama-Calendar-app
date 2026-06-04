@@ -125,10 +125,13 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'venueHires');
     });
 
-    const unsubTypes = onSnapshot(query(collection(db, 'bookingTypes'), orderBy('name', 'asc')), (snap) => {
-      const data: ConfigOption[] = [];
-      snap.docs.forEach(d => {
-        data.push({ ...d.data(), id: d.id } as ConfigOption);
+    const unsubTypes = onSnapshot(collection(db, 'bookingTypes'), (snap) => {
+      const data: ConfigOption[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as ConfigOption));
+      data.sort((a, b) => {
+        const ao = a.sortOrder ?? Infinity;
+        const bo = b.sortOrder ?? Infinity;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name);
       });
       setBookingTypes(data);
       checkLoading('bookingTypes');
@@ -137,10 +140,13 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'bookingTypes');
     });
 
-    const unsubChannels = onSnapshot(query(collection(db, 'bookingChannels'), orderBy('name', 'asc')), (snap) => {
-      const data: ConfigOption[] = [];
-      snap.docs.forEach(d => {
-        data.push({ ...d.data(), id: d.id } as ConfigOption);
+    const unsubChannels = onSnapshot(collection(db, 'bookingChannels'), (snap) => {
+      const data: ConfigOption[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as ConfigOption));
+      data.sort((a, b) => {
+        const ao = a.sortOrder ?? Infinity;
+        const bo = b.sortOrder ?? Infinity;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name);
       });
       setBookingChannels(data);
       checkLoading('bookingChannels');

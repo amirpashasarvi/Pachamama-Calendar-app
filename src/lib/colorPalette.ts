@@ -1,4 +1,4 @@
-// 12 color families × 5 shades (light → extra dark), matching the app color reference.
+// 14 color families × 5 shades (light → extra dark), matching the app color reference.
 export const APP_COLOR_PALETTE = [
   // Black
   '#E0E0E0', '#9E9E9E', '#616161', '#424242', '#212121',
@@ -24,4 +24,8 @@ export const APP_COLOR_PALETTE = [
   '#FCE4EC', '#F48FB1', '#E91E63', '#C2185B', '#880E4F',
   // Brown
   '#EFEBE9', '#D7CCC8', '#A1887F', '#6D4C41', '#3E2723',
+  // Purple
+  '#F3E5F5', '#CE93D8', '#AB47BC', '#7B1FA2', '#4A148C',
+  // Indigo
+  '#E8EAF6', '#9FA8DA', '#5C6BC0', '#283593', '#1A237E',
 ];
