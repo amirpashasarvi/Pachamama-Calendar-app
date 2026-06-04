@@ -180,8 +180,8 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
     setSelectedBooking(null);
     setInitialBookingData({
       roomId: roomId || '',
-      checkIn: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-      checkOut: date ? format(addDays(date, 7), 'yyyy-MM-dd') : format(addDays(new Date(), 7), 'yyyy-MM-dd'),
+      checkIn: date ? format(date, 'yyyy-MM-dd') : '',
+      checkOut: date ? format(addDays(date, 7), 'yyyy-MM-dd') : '',
     });
     setIsBookingModalOpen(true);
   };
