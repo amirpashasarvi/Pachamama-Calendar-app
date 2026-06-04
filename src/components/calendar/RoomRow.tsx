@@ -68,22 +68,27 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
           <GripVertical size={12} className="text-white opacity-0 group-hover/handle:opacity-100 transition-opacity" />
         </div>
 
-        <div className="flex flex-col ml-4 flex-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold truncate tracking-tight uppercase">{String(room.name)}</span>
-            {housekeepingStatus && (
-              <div 
-                className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
-                  housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' : 
-                  (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' : 'bg-green-500 shadow-green-200'
-                }`} 
-                title={
-                  housekeepingStatus === 'dirty' ? 'Dirty' : 
-                  (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'Cleaned, needs inspection' : 'Clean'
-                }
-              />
-            )}
-          </div>
+        <div className="flex flex-col ml-4 flex-1 min-w-0">
+          <span className="text-xs font-bold truncate tracking-tight uppercase leading-tight">{String(room.name)}</span>
+          {housekeepingStatus && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <div className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
+                housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
+                (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
+                'bg-green-500 shadow-green-200'
+              }`} />
+              <span className={`text-[9px] font-bold uppercase tracking-tight leading-none ${
+                housekeepingStatus === 'dirty' ? 'text-rose-500' :
+                (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'text-amber-500' :
+                'text-green-500'
+              }`}>
+                {housekeepingStatus === 'dirty' ? 'Dirty' :
+                 housekeepingStatus === 'cleaned' ? 'Cleaned' :
+                 housekeepingStatus === 'inspected' ? 'Inspected' :
+                 'Clean'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

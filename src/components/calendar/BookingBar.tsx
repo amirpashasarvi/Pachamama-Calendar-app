@@ -60,7 +60,7 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
 
   // Polygon points for the diagonal split with gap, centered in the cells
   const slope = 12; 
-  const gap = -2; // Negative gap to ensure overlap and cover borders
+  const gap = 3; // Small positive gap to create visible split between same-day checkout/checkin
   
   // Account for the extra bleed in coordinates relative to (left - 1)
   const relHalfDay = halfDay + 1;
@@ -93,6 +93,8 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
       }
       case 'bookingChannel':
         return booking.bookingChannel;
+      case 'dietary':
+        return booking.dietary || null;
       case 'paymentStatus': {
         const statusColors = {
           'Paid': 'bg-green-500 text-white',

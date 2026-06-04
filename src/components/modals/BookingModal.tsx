@@ -570,7 +570,7 @@ export default function BookingModal({
             <label className="block text-xs font-bold text-rose-500 mb-1 uppercase tracking-wide">Dietary Requirements</label>
             {isAdmin ? (
               <textarea 
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[56px] resize-none"
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[56px] resize-none placeholder:text-gray-400 placeholder:font-normal"
                 placeholder="e.g. Vegan, Gluten-free..."
                 value={formData.dietary || ''}
                 onChange={e => setFormData({ ...formData, dietary: e.target.value })}
@@ -585,7 +585,7 @@ export default function BookingModal({
             <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Booking Notes</label>
             {isAdmin ? (
               <textarea 
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[56px] resize-none"
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[56px] resize-none placeholder:text-gray-400 placeholder:font-normal"
                 placeholder="Any special requests..."
                 value={formData.notes || ''}
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}
@@ -599,7 +599,7 @@ export default function BookingModal({
           <div className="col-span-2">
             <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Staff Comments</label>
             <textarea 
-              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[72px] resize-none"
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[72px] resize-none placeholder:text-gray-400 placeholder:font-normal"
               placeholder="Internal notes, observations..."
               value={formData.comments || ''}
               onChange={e => setFormData({ ...formData, comments: e.target.value })}

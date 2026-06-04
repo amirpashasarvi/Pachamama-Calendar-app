@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings } from '@/types';
 
@@ -224,23 +224,36 @@ export function useBookingData() {
       }
       checkLoading('settings');
 
+      const defaultBookingBarFields = [
+        { id: 'guestName', label: 'Guest Name', enabled: true },
+        { id: 'adultsKids', label: 'Adults / Kids', enabled: false },
+        { id: 'bookingType', label: 'Booking Type', enabled: false },
+        { id: 'notes', label: 'Notes', enabled: false },
+        { id: 'bookingChannel', label: 'Booking Channel', enabled: false },
+        { id: 'paymentStatus', label: 'Payment Status', enabled: false },
+        { id: 'dietary', label: 'Dietary Requirements', enabled: false },
+      ];
+      const defaultTeamRosterBarFields = [
+        { id: 'name', label: 'Name', enabled: true },
+        { id: 'accommodationNotes', label: 'Accommodation Notes', enabled: false },
+      ];
+
       const display = snap.docs.find(d => d.id === 'calendarDisplay');
       if (display) {
-        setCalendarDisplaySettings(display.data() as CalendarDisplaySettings);
+        const existing = display.data() as CalendarDisplaySettings;
+        const existingIds = new Set(existing.bookingBarFields.map((f: any) => f.id));
+        const missingFields = defaultBookingBarFields.filter(f => !existingIds.has(f.id));
+        if (missingFields.length > 0) {
+          const merged = { ...existing, bookingBarFields: [...existing.bookingBarFields, ...missingFields] };
+          setCalendarDisplaySettings(merged);
+          setDoc(doc(db, 'settings', 'calendarDisplay'), merged).catch(() => {});
+        } else {
+          setCalendarDisplaySettings(existing);
+        }
       } else {
         setCalendarDisplaySettings({
-          bookingBarFields: [
-            { id: 'guestName', label: 'Guest Name', enabled: true },
-            { id: 'adultsKids', label: 'Adults / Kids', enabled: false },
-            { id: 'bookingType', label: 'Booking Type', enabled: false },
-            { id: 'notes', label: 'Notes', enabled: false },
-            { id: 'bookingChannel', label: 'Booking Channel', enabled: false },
-            { id: 'paymentStatus', label: 'Payment Status', enabled: false },
-          ],
-          teamRosterBarFields: [
-            { id: 'name', label: 'Name', enabled: true },
-            { id: 'accommodationNotes', label: 'Accommodation Notes', enabled: false },
-          ]
+          bookingBarFields: defaultBookingBarFields,
+          teamRosterBarFields: defaultTeamRosterBarFields,
         });
       }
       checkLoading('calendarDisplay');

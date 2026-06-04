@@ -1134,14 +1134,41 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
     <Modal isOpen={isOpen} onClose={onClose} title="Operational Settings">
       <div className="min-h-[400px]">
         {view === 'menu' && (
-          <div className="space-y-2 animate-in fade-in slide-in-from-left-4 duration-200">
+          <div className="space-y-1 animate-in fade-in slide-in-from-left-4 duration-200">
+
+            {/* Property */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-2 pb-1">Property</p>
+            <button
+              onClick={() => setView('rooms')}
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
+            >
+              <div className="text-left">
+                <h4 className="font-bold text-gray-900">Rooms</h4>
+                <p className="text-xs text-gray-500">Physical rooms, colors and display order</p>
+              </div>
+              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+            </button>
+
+            <button
+              onClick={() => setView('retreats')}
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
+            >
+              <div className="text-left">
+                <h4 className="font-bold text-gray-900">Retreats</h4>
+                <p className="text-xs text-gray-500">Retreat programs shown on the calendar</p>
+              </div>
+              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+            </button>
+
+            {/* Booking Config */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Booking Config</p>
             <button
               onClick={() => setView('types')}
-              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group group"
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
                 <h4 className="font-bold text-gray-900">Booking Types</h4>
-                <p className="text-xs text-gray-500">Manage booking type labels and colors</p>
+                <p className="text-xs text-gray-500">Labels and colors used on booking bars</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
@@ -1152,7 +1179,20 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             >
               <div className="text-left">
                 <h4 className="font-bold text-gray-900">Booking Channels</h4>
-                <p className="text-xs text-gray-500">Manage booking channel labels and colors</p>
+                <p className="text-xs text-gray-500">OTAs, direct bookings and commission rates</p>
+              </div>
+              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+            </button>
+
+            {/* Team & People */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Team & People</p>
+            <button
+              onClick={() => setView('roster')}
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
+            >
+              <div className="text-left">
+                <h4 className="font-bold text-gray-900">Team Roster</h4>
+                <p className="text-xs text-gray-500">Staff positions and calendar assignments</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
@@ -1162,56 +1202,27 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
-                <h4 className="font-bold text-gray-900">User Management</h4>
-                <p className="text-xs text-gray-500">Add, edit, or remove admins and staff members</p>
+                <h4 className="font-bold text-gray-900">Users & Access</h4>
+                <p className="text-xs text-gray-500">Who can log in and what they can do</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
 
-            <button
-              onClick={() => setView('rooms')}
-              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
-            >
-              <div className="text-left">
-                <h4 className="font-bold text-gray-900">Rooms</h4>
-                <p className="text-xs text-gray-500">Manage room names, colors and order</p>
-              </div>
-              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-            </button>
-
-            <button
-              onClick={() => setView('retreats')}
-              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
-            >
-              <div className="text-left">
-                <h4 className="font-bold text-gray-900">Our Retreats</h4>
-                <p className="text-xs text-gray-500">Manage your retreat programs</p>
-              </div>
-              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-            </button>
-
-            <button
-              onClick={() => setView('roster')}
-              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
-            >
-              <div className="text-left">
-                <h4 className="font-bold text-gray-900">Team Roster</h4>
-                <p className="text-xs text-gray-500">Manage team positions and roster</p>
-              </div>
-              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-            </button>
-
+            {/* Interface */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Interface</p>
             <button
               onClick={() => setView('display')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
                 <h4 className="font-bold text-gray-900">Calendar Display</h4>
-                <p className="text-xs text-gray-500">Customize what information appears on calendar bars</p>
+                <p className="text-xs text-gray-500">Control which fields appear on booking bars</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
 
+            {/* Admin */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Admin</p>
             <button
               onClick={() => setView('activity')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
