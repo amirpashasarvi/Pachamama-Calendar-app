@@ -13,6 +13,7 @@ export function useBookingData() {
   const [deletedVenueHires, setDeletedVenueHires] = useState<VenueHire[]>([]);
   const [bookingTypes, setBookingTypes] = useState<ConfigOption[]>([]);
   const [bookingChannels, setBookingChannels] = useState<ConfigOption[]>([]);
+  const [paymentChannels, setPaymentChannels] = useState<ConfigOption[]>([]);
   const [teamPositions, setTeamPositions] = useState<TeamPosition[]>([]);
   const [teamAssignments, setTeamAssignments] = useState<TeamAssignment[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -31,6 +32,7 @@ export function useBookingData() {
       calendarDisplay: false,
       bookingTypes: false,
       bookingChannels: false,
+      paymentChannels: false,
       teamPositions: false,
       teamAssignments: false,
       users: false
@@ -155,6 +157,21 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'bookingChannels');
     });
 
+    const unsubPaymentChannels = onSnapshot(collection(db, 'paymentChannels'), (snap) => {
+      const data: ConfigOption[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as ConfigOption));
+      data.sort((a, b) => {
+        const ao = a.sortOrder ?? Infinity;
+        const bo = b.sortOrder ?? Infinity;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name);
+      });
+      setPaymentChannels(data);
+      checkLoading('paymentChannels');
+    }, (error) => {
+      checkLoading('paymentChannels');
+      handleFirestoreError(error, OperationType.LIST, 'paymentChannels');
+    });
+
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
       const byEmail = new Map<string, UserRecord>();
       snap.docs.forEach(d => {
@@ -241,16 +258,39 @@ export function useBookingData() {
       ];
       const defaultTeamRosterBarFields = [
         { id: 'name', label: 'Name', enabled: true },
-        { id: 'accommodationNotes', label: 'Accommodation Notes', enabled: false },
+        { id: 'accommodation', label: 'Accommodation', enabled: false },
+        { id: 'notes', label: 'Notes', enabled: false },
       ];
 
       const display = snap.docs.find(d => d.id === 'calendarDisplay');
       if (display) {
         const existing = display.data() as CalendarDisplaySettings;
-        const existingIds = new Set(existing.bookingBarFields.map((f: any) => f.id));
-        const missingFields = defaultBookingBarFields.filter(f => !existingIds.has(f.id));
-        if (missingFields.length > 0) {
-          const merged = { ...existing, bookingBarFields: [...existing.bookingBarFields, ...missingFields] };
+        let changed = false;
+
+        const existingBookingIds = new Set(existing.bookingBarFields.map((f: any) => f.id));
+        const missingBookingFields = defaultBookingBarFields.filter(f => !existingBookingIds.has(f.id));
+        let bookingBarFields = existing.bookingBarFields;
+        if (missingBookingFields.length > 0) {
+          bookingBarFields = [...existing.bookingBarFields, ...missingBookingFields];
+          changed = true;
+        }
+
+        let teamRosterBarFields = (existing.teamRosterBarFields || []).map(f => {
+          if (f.id === 'accommodationNotes') {
+            changed = true;
+            return { ...f, id: 'accommodation', label: 'Accommodation' };
+          }
+          return f;
+        });
+        const existingRosterIds = new Set(teamRosterBarFields.map(f => f.id));
+        const missingRosterFields = defaultTeamRosterBarFields.filter(f => !existingRosterIds.has(f.id));
+        if (missingRosterFields.length > 0) {
+          teamRosterBarFields = [...teamRosterBarFields, ...missingRosterFields];
+          changed = true;
+        }
+
+        if (changed) {
+          const merged = { ...existing, bookingBarFields, teamRosterBarFields };
           setCalendarDisplaySettings(merged);
           setDoc(doc(db, 'settings', 'calendarDisplay'), merged).catch(() => {});
         } else {
@@ -277,6 +317,7 @@ export function useBookingData() {
       unsubVenueHires();
       unsubTypes();
       unsubChannels();
+      unsubPaymentChannels();
       unsubUsers();
       unsubPositions();
       unsubAssignments();
@@ -284,5 +325,5 @@ export function useBookingData() {
     };
   }, []);
 
-  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, users, loading };
+  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, users, loading };
 }

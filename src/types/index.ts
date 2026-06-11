@@ -24,6 +24,8 @@ export interface Room {
 
 export type BookingStatus = 'Paid' | 'Partial' | 'Unpaid';
 
+export type LifecycleStatus = 'active' | 'cancelled';
+
 export interface Comment {
   author: string;
   text: string;
@@ -63,8 +65,12 @@ export interface Booking {
   channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
   commissionCustomAmount?: number;
   status: BookingStatus;
-  source: string;
+  lifecycleStatus?: LifecycleStatus;
+  cancelledAt?: string;
+  cancellationReason?: string;
   bookingChannel: string;
+  paymentChannel?: string;
+  source: string;
   isVenueHire?: boolean;
   createdAt?: string; // ISO Date
   updatedAt?: string; // ISO Date
@@ -128,8 +134,12 @@ export interface VenueHire {
   paidLater1: number;
   paidLater2: number;
   bookingChannel: string;
+  paymentChannel?: string;
   channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
   commissionCustomAmount?: number;
+  lifecycleStatus?: LifecycleStatus;
+  cancelledAt?: string;
+  cancellationReason?: string;
   createdAt?: string;
   updatedAt?: string;
   deletedAt?: string; // ISO Date — present when soft-deleted, absent when active
@@ -177,7 +187,7 @@ export interface TeamPosition {
   order: number;
 }
 
-export type ActivityAction = 'created' | 'updated' | 'deleted' | 'restored';
+export type ActivityAction = 'created' | 'updated' | 'deleted' | 'restored' | 'cancelled' | 'reactivated';
 export type ActivityEntityType = 'booking' | 'venueHire';
 
 export interface ActivityLogEntry {
@@ -196,11 +206,11 @@ export interface TeamAssignment {
   positionId: string;
   positionName: string;
   name: string;
-  email: string;
-  phone: string;
-  contactChannel: 'WhatsApp' | 'Email' | 'Phone' | 'Telegram' | 'Signal';
-  roomNotes: string;
+  accommodation: string;
+  notes: string;
   startDate: string; // ISO Date
   endDate: string; // ISO Date
   createdAt: string; // ISO Date
+  /** @deprecated legacy field — read-only fallback */
+  roomNotes?: string;
 }

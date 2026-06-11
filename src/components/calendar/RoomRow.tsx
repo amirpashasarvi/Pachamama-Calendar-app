@@ -69,7 +69,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
         </div>
 
         <div className="flex flex-col ml-4 flex-1 min-w-0">
-          <span className="text-xs font-bold truncate tracking-tight uppercase leading-tight">{String(room.name)}</span>
+          <span className="text-xs font-bold truncate tracking-tight leading-tight">{String(room.name)}</span>
           {housekeepingStatus && (
             <div className="flex items-center gap-1 mt-0.5">
               <div className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${

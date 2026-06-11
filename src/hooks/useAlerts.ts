@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Booking, Room, HousekeepingRecord } from '@/types';
+import { isActiveLifecycle } from '@/lib/bookingLifecycle';
 import {
   isToday, isSameDay, addDays, startOfToday,
   parseISO, differenceInDays,
@@ -50,11 +51,13 @@ export function useAlerts(
   housekeeping: HousekeepingRecord[] = [],
 ) {
 
+  const activeBookings = useMemo(() => bookings.filter(isActiveLifecycle), [bookings]);
+
   const arrivalAlerts = useMemo((): ArrivalAlert[] => {
     const today = startOfToday();
     const tomorrow = addDays(today, 1);
 
-    return bookings
+    return activeBookings
       .filter(b => isToday(parseISO(b.checkIn)) || isSameDay(parseISO(b.checkIn), tomorrow))
       .map(b => ({
         bookingId: b.id,
@@ -67,13 +70,13 @@ export function useAlerts(
         paymentStatus: b.status,
       }))
       .sort((a, b) => (a.isToday === b.isToday ? 0 : a.isToday ? -1 : 1));
-  }, [bookings, rooms]);
+  }, [activeBookings, rooms]);
 
   const balanceAlerts = useMemo((): BalanceAlert[] => {
     const today = startOfToday();
     const in7days = addDays(today, 7);
 
-    return bookings
+    return activeBookings
       .filter(b => {
         const d = parseISO(b.checkIn);
         return d >= today && d <= in7days && b.status !== 'Paid';
@@ -96,12 +99,12 @@ export function useAlerts(
         };
       })
       .sort((a, b) => a.daysUntilCheckIn - b.daysUntilCheckIn);
-  }, [bookings, rooms]);
+  }, [activeBookings, rooms]);
 
   // Staff comments saved within the last 24 hours
   const commentAlerts = useMemo((): CommentAlert[] => {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    return bookings
+    return activeBookings
       .filter(b => b.comments && b.commentsUpdatedAt && new Date(b.commentsUpdatedAt).getTime() > cutoff)
       .map(b => ({
         bookingId: b.id,
@@ -112,7 +115,7 @@ export function useAlerts(
         updatedAt: b.commentsUpdatedAt!,
       }))
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [bookings, rooms]);
+  }, [activeBookings, rooms]);
 
   // Notes added/updated within the last 24 hours
   const noteAlerts = useMemo((): NoteAlert[] => {

@@ -1,40 +1,27 @@
 import React, { useState, useMemo } from 'react';
-import { X, Calendar as CalendarIcon, TrendingUp, Wallet, Clock, Percent, Download, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { X, Download, Search, List, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DatePicker from '@/components/ui/DatePicker';
+import BookingModal from '@/components/modals/BookingModal';
+import VenueHireModal from '@/components/modals/VenueHireModal';
 import { Booking, Room, ConfigOption, VenueHire } from '@/types';
+import { useBooking } from '@/hooks/useBooking';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { stayOverlapsPeriod } from '@/lib/prorate';
+import {
+  resolveReportingFinancials,
+  isCancelledLifecycle,
+  checkInInPeriod,
+} from '@/lib/bookingLifecycle';
 import { exportBookingsToCSV, exportVenueHiresToCSV, exportFinancialSummaryToCSV } from '@/lib/exportUtils';
 import { 
   format, 
   subMonths, 
-  isWithinInterval, 
   startOfDay, 
   endOfDay, 
   parseISO, 
-  eachDayOfInterval, 
-  eachMonthOfInterval,
-  eachWeekOfInterval,
-  isSameDay,
-  differenceInDays,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  isSameMonth,
-  isSameWeek
 } from 'date-fns';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Cell,
-  LabelList
-} from 'recharts';
 
 interface StatisticsModalProps {
   isOpen: boolean;
@@ -43,11 +30,15 @@ interface StatisticsModalProps {
   venueHires?: VenueHire[];
   rooms: Room[];
   bookingChannels: ConfigOption[];
+  paymentChannels: ConfigOption[];
 }
 
 type Period = 'All' | '1M' | '3M' | '6M' | '12M' | 'Custom';
 
-export default function StatisticsModal({ isOpen, onClose, bookings, venueHires = [], rooms, bookingChannels }: StatisticsModalProps) {
+export default function StatisticsModal({ isOpen, onClose, bookings, venueHires = [], rooms, bookingChannels, paymentChannels }: StatisticsModalProps) {
+  const { settings, bookingTypes } = useBooking();
+  const { isAdmin, profile } = useAuth();
+
   const [period, setPeriod] = useState<Period>('1M');
   const [roomFilter, setRoomFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'checkIn' | 'createdAt'>('checkIn');
@@ -58,13 +49,32 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
   });
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
-  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [editingVenueHire, setEditingVenueHire] = useState<VenueHire | null>(null);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [isVenueHireModalOpen, setIsVenueHireModalOpen] = useState(false);
+
+  const handleEditItem = (item: { id: string; isVenueHire: boolean }) => {
+    if (item.isVenueHire) {
+      const vh = venueHires.find(v => v.id === item.id);
+      if (!vh) return;
+      setEditingVenueHire(vh);
+      setIsVenueHireModalOpen(true);
+      return;
+    }
+    const booking = bookings.find(b => b.id === item.id);
+    if (!booking) return;
+    setEditingBooking(booking);
+    setIsBookingModalOpen(true);
+  };
 
   const combinedItems = useMemo(() => {
     const mappedBookings = bookings.map(b => ({
       ...b,
       isVenueHire: false,
       type: b.type || 'Other',
+      lifecycleStatus: b.lifecycleStatus,
       financials: {
         price: b.price || 0,
         deposit: b.deposit || 0,
@@ -80,9 +90,11 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       checkIn: vh.startDate,
       checkOut: vh.endDate,
       bookingChannel: vh.bookingChannel,
+      paymentChannel: vh.paymentChannel,
       channelPaymentBasis: vh.channelPaymentBasis,
       commissionCustomAmount: vh.commissionCustomAmount,
       createdAt: vh.createdAt,
+      lifecycleStatus: vh.lifecycleStatus,
       isVenueHire: true,
       type: 'Venue Hire',
       roomId: 'venue-hire',
@@ -118,11 +130,21 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
     const filtered = combinedItems.filter(b => {
       const matchesRoom = roomFilter === 'all' || b.roomId === roomFilter;
-      if (period === 'All') return matchesRoom;
-      
-      const checkInDate = parseISO(b.checkIn);
-      const isWithinDate = isWithinInterval(checkInDate, { start, end });
-      return isWithinDate && matchesRoom;
+      if (!matchesRoom) return false;
+
+      const cancelled = isCancelledLifecycle(b);
+
+      if (period === 'All') {
+        if (cancelled) return showCancelled;
+        return true;
+      }
+
+      if (cancelled) {
+        if (!showCancelled) return false;
+        return checkInInPeriod(b.checkIn, start, end);
+      }
+
+      return stayOverlapsPeriod(b.checkIn, b.checkOut, start, end);
     });
 
     // Apply sorting
@@ -137,7 +159,12 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     });
 
     return { startDate: start, endDate: end, filteredItems: sorted };
-  }, [period, roomFilter, sortBy, customRange, combinedItems]);
+  }, [period, roomFilter, sortBy, customRange, combinedItems, showCancelled]);
+
+  const periodRange = useMemo(
+    () => ({ start: startDate, end: endDate }),
+    [startDate, endDate]
+  );
 
   const searchedItems = useMemo(() => {
     let result = filteredItems;
@@ -149,12 +176,13 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
     if (statusFilter !== 'all') {
       result = result.filter(b => {
+        if (isCancelledLifecycle(b)) return false;
         const total = b.financials.price + (b.financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-        const collected = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
-        const remaining = total - collected;
-        if (statusFilter === 'paid') return remaining === 0;
-        if (statusFilter === 'partial') return remaining > 0 && collected > 0;
-        if (statusFilter === 'unpaid') return collected === 0 && total > 0;
+        const paid = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
+        const remaining = total - paid;
+        if (statusFilter === 'paid') return remaining === 0 && total > 0;
+        if (statusFilter === 'partial') return remaining > 0 && paid > 0;
+        if (statusFilter === 'unpaid') return paid === 0 && total > 0;
         return true;
       });
     }
@@ -162,131 +190,33 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     return result;
   }, [filteredItems, searchQuery, statusFilter]);
 
-  const tableTotals = useMemo(() => {
-    let revenue = 0;
-    let collected = 0;
-    let commissions = 0;
+  const listTotals = useMemo(() => {
+    let total = 0;
+    let paid = 0;
 
     searchedItems.forEach(b => {
-      const extrasAmount = (b.financials.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-      revenue += b.financials.price + extrasAmount;
-      collected += b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
-
-      const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-      if (channel?.commission) {
-        const base = b.channelPaymentBasis === 'custom'
-          ? (b.commissionCustomAmount ?? 0)
-          : b.channelPaymentBasis === 'bookingPrice'
-            ? b.financials.price
-            : b.financials.deposit;
-        commissions += (base * channel.commission) / 100;
-      }
+      const amounts = resolveReportingFinancials(
+        b.checkIn,
+        b.checkOut,
+        periodRange,
+        b.financials,
+        b.lifecycleStatus
+      );
+      total += amounts.revenue;
+      paid += amounts.collected;
     });
 
-    return { revenue, collected, remaining: revenue - collected, commissions };
-  }, [searchedItems, bookingChannels]);
+    return { total, paid, remaining: total - paid };
+  }, [searchedItems, periodRange]);
 
-  const stats = useMemo(() => {
-    let totalRevenue = 0;
-    let totalCollected = 0;
-    let totalCommissions = 0;
-    let overdue = 0;
-    let expected = 0;
-    const today = startOfDay(new Date());
-
-    filteredItems.forEach(b => {
-      const extrasAmount = (b.financials.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-      const bookingTotal = b.financials.price + extrasAmount;
-      const collected = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
-      const remaining = bookingTotal - collected;
-
-      totalRevenue += bookingTotal;
-      totalCollected += collected;
-
-      if (remaining > 0) {
-        if (parseISO(b.checkOut) < today) {
-          overdue += remaining;
-        } else {
-          expected += remaining;
-        }
-      }
-
-      const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-      if (channel?.commission) {
-        const base = b.channelPaymentBasis === 'custom'
-          ? (b.commissionCustomAmount ?? 0)
-          : b.channelPaymentBasis === 'bookingPrice'
-            ? b.financials.price
-            : b.financials.deposit;
-        totalCommissions += (base * channel.commission) / 100;
-      }
-    });
-
-    return {
-      revenue: totalRevenue,
-      collected: totalCollected,
-      overdue,
-      expected,
-      commissions: totalCommissions,
-      count: filteredItems.length
-    };
-  }, [filteredItems, bookingChannels]);
-
-  const occupancyData = useMemo(() => {
-    const days = eachDayOfInterval({ start: startDate, end: endDate });
-    const isShortPeriod = differenceInDays(endDate, startDate) < 62;
-    
-    const intervals = isShortPeriod 
-      ? eachWeekOfInterval({ start: startDate, end: endDate })
-      : eachMonthOfInterval({ start: startDate, end: endDate });
-
-    const data = intervals.map(intervalStart => {
-      const intervalEnd = isShortPeriod ? endOfWeek(intervalStart) : endOfMonth(intervalStart);
-      const intervalDays = eachDayOfInterval({ 
-        start: intervalStart < startDate ? startDate : intervalStart, 
-        end: intervalEnd > endDate ? endDate : intervalEnd 
-      });
-
-      let occupiedNights = 0;
-      const roomsToConsider = roomFilter === 'all' ? rooms : rooms.filter(r => r.id === roomFilter);
-      const totalPossibleNights = intervalDays.length * roomsToConsider.length;
-
-      intervalDays.forEach(day => {
-        // A night is occupied if any booking covers that date for the selected room(s)
-        // Check-out date is not counted as occupied for that night
-        roomsToConsider.forEach(room => {
-          const isOccupied = bookings.some(b => {
-            if (b.roomId !== room.id) return false;
-            const bIn = parseISO(b.checkIn);
-            const bOut = parseISO(b.checkOut);
-            // Check if 'day' is between bIn and bOut (exclusive of bOut)
-            return day >= bIn && day < bOut;
-          });
-          if (isOccupied) occupiedNights++;
-        });
-      });
-
-      const percentage = totalPossibleNights > 0 ? (occupiedNights / totalPossibleNights) * 100 : 0;
-
-      return {
-        name: isShortPeriod ? `W${format(intervalStart, 'w')}` : format(intervalStart, 'MMM'),
-        fullName: isShortPeriod ? `Week of ${format(intervalStart, 'dd MMM')}` : format(intervalStart, 'MMMM yyyy'),
-        occupancy: Math.round(percentage)
-      };
-    });
-
-    return data;
-  }, [startDate, endDate, bookings, rooms, roomFilter]);
-
-  // Build filtered raw arrays from the period/room-filtered combinedItems IDs
   const handleExportBookings = () => {
     const ids = new Set(filteredItems.filter(i => !i.isVenueHire).map(i => i.id));
-    exportBookingsToCSV(bookings.filter(b => ids.has(b.id)), rooms, bookingChannels);
+    exportBookingsToCSV(bookings.filter(b => ids.has(b.id)), rooms, bookingChannels, paymentChannels, periodRange);
   };
 
   const handleExportVenueHires = () => {
     const ids = new Set(filteredItems.filter(i => i.isVenueHire).map(i => i.id));
-    exportVenueHiresToCSV(venueHires.filter(v => ids.has(v.id)), bookingChannels);
+    exportVenueHiresToCSV(venueHires.filter(v => ids.has(v.id)), bookingChannels, paymentChannels, periodRange);
   };
 
   const handleExportFinancial = () => {
@@ -296,23 +226,11 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       bookings.filter(b => bookingIds.has(b.id)),
       venueHires.filter(v => venueIds.has(v.id)),
       rooms,
-      bookingChannels
+      bookingChannels,
+      paymentChannels,
+      periodRange
     );
   };
-
-  const SummaryCard = ({ title, value, icon: Icon, colorClass }: { title: string, value: string, icon: any, colorClass: string }) => (
-    <div className="bg-white p-4 sm:p-6 rounded-2xl border shadow-sm flex flex-col gap-2 sm:gap-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-400">{title}</span>
-        <div className={cn("p-1.5 sm:p-2 rounded-xl", colorClass)}>
-          <Icon size={16} />
-        </div>
-      </div>
-      <div>
-        <h4 className="text-xl sm:text-2xl font-black tracking-tight">{value}</h4>
-      </div>
-    </div>
-  );
 
   return (
     <AnimatePresence>
@@ -327,9 +245,9 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
           <header className="h-14 bg-white border-b px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10">
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-gray-100 text-gray-600 rounded-lg">
-                <TrendingUp size={16} />
+                <List size={16} />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Business Statistics</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Booking List</h2>
             </div>
             <button 
               onClick={onClose}
@@ -401,109 +319,21 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                   ))}
                 </select>
               </div>
-            </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              <SummaryCard 
-                title="Total Revenue" 
-                value={`€${stats.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                icon={TrendingUp}
-                colorClass="bg-blue-50 text-blue-600"
-              />
-              <SummaryCard 
-                title="Collected" 
-                value={`€${stats.collected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                icon={Wallet}
-                colorClass="bg-green-50 text-green-600"
-              />
-              <SummaryCard 
-                title="Overdue (past)" 
-                value={`€${stats.overdue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                icon={Clock}
-                colorClass="bg-rose-50 text-rose-600"
-              />
-              <SummaryCard 
-                title="Expected (future)" 
-                value={`€${stats.expected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                icon={CalendarIcon}
-                colorClass="bg-amber-50 text-amber-600"
-              />
-              <div className="col-span-2 sm:col-span-1">
-                <SummaryCard 
-                  title="Channel Commissions" 
-                  value={`€${stats.commissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  icon={Percent}
-                  colorClass="bg-purple-50 text-purple-600"
-                />
-              </div>
-            </div>
-
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">
-              Based on {stats.count} records with check-in in this period
-            </div>
-
-            {/* Occupancy Chart */}
-            <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Occupancy</h3>
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                  <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-                  <span>Occupied %</span>
-                </div>
-              </div>
-              
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={occupancyData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
-                      dy={10}
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
-                      domain={[0, 100]}
-                      ticks={[0, 25, 50, 75, 100]}
-                    />
-                    <Tooltip 
-                      cursor={{ fill: '#f8fafc' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-black text-white p-3 rounded-xl shadow-xl border-none">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
-                                {payload[0].payload.fullName}
-                              </p>
-                              <p className="text-sm font-black">{payload[0].value}% Occupancy</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar 
-                      dataKey="occupancy" 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={40}
-                    >
-                      {occupancyData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill="#3b82f6" />
-                      ))}
-                      <LabelList 
-                        dataKey="occupancy" 
-                        position="top" 
-                        formatter={(v: number) => `${v}%`}
-                        style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-bold text-gray-400">Cancelled</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelled(v => !v)}
+                  className={cn(
+                    'px-4 py-2 border rounded-xl shadow-sm text-xs font-bold transition-colors',
+                    showCancelled
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-white text-gray-500 hover:text-gray-900 hover:border-gray-300'
+                  )}
+                >
+                  {showCancelled ? 'Showing cancelled' : 'Show cancelled'}
+                </button>
               </div>
             </div>
 
@@ -581,160 +411,96 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Guest</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Room</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Dates</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Channel</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Total</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Collected</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Paid</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Remaining</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Comm.</th>
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Status</th>
-                      <th className="w-10"></th>
+                      <th className="w-16"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {searchedItems.map(b => {
-                      const extrasAmount = (b.financials.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-                      const total = b.financials.price + extrasAmount;
-                      const collected = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
-                      const remaining = total - collected;
-                      
-                      const channel = bookingChannels.find(c => c.name === b.bookingChannel);
-                      const commBase = b.channelPaymentBasis === 'custom'
-                        ? (b.commissionCustomAmount ?? 0)
-                        : b.channelPaymentBasis === 'bookingPrice'
-                          ? b.financials.price
-                          : b.financials.deposit;
-                      const commission = channel?.commission ? (commBase * channel.commission) / 100 : 0;
+                      const cancelled = isCancelledLifecycle(b);
+                      const amounts = resolveReportingFinancials(
+                        b.checkIn,
+                        b.checkOut,
+                        periodRange,
+                        b.financials,
+                        b.lifecycleStatus
+                      );
+                      const fullTotal = b.financials.price + (b.financials.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+                      const paid = amounts.collected;
+                      const remaining = cancelled ? 0 : Math.max(0, fullTotal - paid);
 
-                      const isExpanded = expandedBookingId === b.id;
                       const roomName = b.isVenueHire 
                         ? <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[9px] font-black uppercase whitespace-nowrap">Venue Hire</span>
                         : rooms.find(r => r.id === b.roomId)?.name || 'Unknown';
 
                       return (
-                        <React.Fragment key={b.id}>
-                          <tr 
-                            onClick={() => setExpandedBookingId(isExpanded ? null : b.id)}
-                            className={cn(
-                              "group cursor-pointer transition-colors",
-                              isExpanded ? "bg-blue-50/30" : "hover:bg-gray-50/80"
+                        <tr key={b.id} className={cn('group hover:bg-gray-50/80 transition-colors', cancelled && 'opacity-75')}>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-bold text-gray-900">{b.guestName}</div>
+                            {!b.isVenueHire && b.type && (
+                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{b.type}</span>
                             )}
-                          >
-                            <td className="px-6 py-4">
-                              <div className="text-sm font-bold text-gray-900">{b.guestName}</div>
-                              {!b.isVenueHire && b.type && (
-                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{b.type}</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-xs font-bold text-gray-500 whitespace-nowrap">{roomName}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex flex-col items-center gap-0.5">
-                                <span className="text-[10px] font-black text-gray-900">{format(parseISO(b.checkIn), 'dd MMM')}</span>
-                                <span className="text-[9px] font-bold text-gray-400">to</span>
-                                <span className="text-[10px] font-black text-gray-900">{format(parseISO(b.checkOut), 'dd MMM')}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                <div 
-                                  className="w-2 h-2 rounded-full" 
-                                  style={{ backgroundColor: channel?.color || '#cbd5e1' }}
-                                />
-                                <span className="text-xs font-bold text-gray-600">{b.bookingChannel}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <span className="text-xs font-black">€{total.toLocaleString()}</span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <span className="text-xs font-bold text-gray-600">€{collected.toLocaleString()}</span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              {remaining > 0 ? (
-                                <span className="text-xs font-black text-amber-600">€{remaining.toLocaleString()}</span>
-                              ) : (
-                                <span className="text-xs font-bold text-green-600">—</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <span className="text-xs font-bold text-gray-500">€{commission.toLocaleString()}</span>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              {remaining === 0 ? (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-[10px] font-black uppercase">Paid</span>
-                              ) : collected > 0 ? (
-                                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-[10px] font-black uppercase">Partial</span>
-                              ) : (
-                                <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md text-[10px] font-black uppercase">Unpaid</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 text-gray-300 group-hover:text-gray-600">
-                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </td>
-                          </tr>
-                          
-                          {isExpanded && (
-                            <tr className="bg-blue-50/20">
-                              <td colSpan={10} className="px-8 py-4 border-t border-blue-50">
-                                <div className="grid grid-cols-2 gap-8 max-w-2xl">
-                                  <div className="space-y-2">
-                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Financial Breakdown</h4>
-                                    <div className="space-y-1">
-                                      <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">{b.isVenueHire ? 'Venue Price:' : 'Base Price:'}</span>
-                                        <span className="font-bold">€{b.financials.price.toLocaleString()}</span>
-                                      </div>
-                                      {(b.financials.extras || []).map((e, i) => (
-                                        <div key={i} className="flex justify-between text-xs">
-                                          <span className="text-gray-500">{e.label || 'Extra'}:</span>
-                                          <span className="font-bold text-blue-600">+ €{(e.amount || 0).toLocaleString()}</span>
-                                        </div>
-                                      ))}
-                                      <div className="pt-1 border-t flex justify-between text-xs font-black">
-                                        <span>Total:</span>
-                                        <span>€{total.toLocaleString()}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payments</h4>
-                                    <div className="space-y-1">
-                                      <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Deposit:</span>
-                                        <span className="font-bold">€{b.financials.deposit.toLocaleString()}</span>
-                                      </div>
-                                      <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Paid Later 1:</span>
-                                        <span className="font-bold">€{b.financials.paidLater1.toLocaleString()}</span>
-                                      </div>
-                                      <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Paid Later 2:</span>
-                                        <span className="font-bold">€{b.financials.paidLater2.toLocaleString()}</span>
-                                      </div>
-                                      <div className="pt-1 border-t flex justify-between text-xs font-black text-amber-600">
-                                        <span>Remaining:</span>
-                                        <span>€{remaining.toLocaleString()}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">{roomName}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-[10px] font-black text-gray-900">{format(parseISO(b.checkIn), 'dd MMM')}</span>
+                              <span className="text-[9px] font-bold text-gray-400">to</span>
+                              <span className="text-[10px] font-black text-gray-900">{format(parseISO(b.checkOut), 'dd MMM')}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="text-xs font-black">€{amounts.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="text-xs font-bold text-gray-600">€{paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {remaining > 0 ? (
+                              <span className="text-xs font-black text-amber-600">€{remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            ) : (
+                              <span className="text-xs font-bold text-green-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {cancelled ? (
+                              <span className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-[10px] font-black uppercase">Cancelled</span>
+                            ) : remaining === 0 && fullTotal > 0 ? (
+                              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-[10px] font-black uppercase">Paid</span>
+                            ) : paid > 0 ? (
+                              <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-[10px] font-black uppercase">Partial</span>
+                            ) : (
+                              <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md text-[10px] font-black uppercase">Unpaid</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleEditItem(b)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil size={12} />
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
                     <tr className="bg-gray-50/80 font-black">
-                      <td colSpan={4} className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400">Visible Totals</td>
-                      <td className="px-6 py-4 text-right text-sm">€{tableTotals.revenue.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-600">€{tableTotals.collected.toLocaleString()}</td>
+                      <td colSpan={3} className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400">Visible Totals</td>
+                      <td className="px-6 py-4 text-right text-sm">€{listTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-600">€{listTotals.paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-6 py-4 text-right text-sm text-amber-600">
-                        {tableTotals.remaining > 0 ? `€${tableTotals.remaining.toLocaleString()}` : '—'}
+                        {listTotals.remaining > 0 ? `€${listTotals.remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                       </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-400">€{tableTotals.commissions.toLocaleString()}</td>
                       <td colSpan={2}></td>
                     </tr>
                   </tfoot>
@@ -748,6 +514,41 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
               )}
             </div>
           </main>
+
+          <BookingModal
+            isOpen={isBookingModalOpen}
+            onClose={() => {
+              setIsBookingModalOpen(false);
+              setEditingBooking(null);
+            }}
+            booking={editingBooking}
+            rooms={rooms}
+            bookings={bookings}
+            venueHires={venueHires}
+            settings={settings}
+            bookingTypes={bookingTypes}
+            bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
+            isAdmin={isAdmin}
+            currentUserName={profile?.name}
+            currentUserEmail={profile?.email}
+            elevated
+          />
+
+          <VenueHireModal
+            isOpen={isVenueHireModalOpen}
+            onClose={() => {
+              setIsVenueHireModalOpen(false);
+              setEditingVenueHire(null);
+            }}
+            venueHire={editingVenueHire}
+            rooms={rooms}
+            bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
+            currentUserName={profile?.name}
+            currentUserEmail={profile?.email}
+            elevated
+          />
         </motion.div>
       )}
     </AnimatePresence>

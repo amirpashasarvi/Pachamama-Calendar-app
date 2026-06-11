@@ -14,6 +14,7 @@ interface BookingDataContextType {
   deletedVenueHires: VenueHire[];
   bookingTypes: ConfigOption[];
   bookingChannels: ConfigOption[];
+  paymentChannels: ConfigOption[];
   users: UserRecord[];
   settings: GlobalSettings | null;
   calendarDisplaySettings: CalendarDisplaySettings | null;

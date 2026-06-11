@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { X, TrendingUp, Wallet, Clock, ArrowUpRight, Users, LayoutDashboard } from 'lucide-react';
+import { X, BarChart3 } from 'lucide-react';
+import DatePicker from '@/components/ui/DatePicker';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
 import { useDashboardStats, DashboardPeriod, UpcomingItem } from '@/hooks/useDashboardStats';
 import { cn, formatCurrency } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, subMonths } from 'date-fns';
 
 interface DashboardModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface DashboardModalProps {
   venueHires: VenueHire[];
   rooms: Room[];
   bookingChannels: ConfigOption[];
+  paymentChannels: ConfigOption[];
 }
 
 type Tab = 'overview' | 'retreats' | 'coliving' | 'venue' | 'exchange';
@@ -126,11 +128,17 @@ function OverviewSection({ stats }: { stats: ReturnType<typeof useDashboardStats
   const maxTypeRevenue = g.revenueByType[0]?.revenue ?? 1;
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="Total Revenue" value={formatCurrency(g.totalRevenue)} tone="default" />
         <StatCard label="Collected" value={formatCurrency(g.totalCollected)} tone="green" />
-        <StatCard label="Outstanding" value={formatCurrency(g.totalOutstanding)} tone="amber" sub={`${g.unpaidCount} unpaid bookings`} />
-        <StatCard label="Future Expected" value={formatCurrency(g.futureOutstanding)} tone="blue" sub="Balance due on upcoming" />
+        <StatCard label="Overdue (past)" value={formatCurrency(g.overdueOutstanding)} tone="rose" />
+        <StatCard label="Expected (future)" value={formatCurrency(g.expectedOutstanding)} tone="amber" />
+        <StatCard label="Booking Channel Commissions" value={formatCurrency(g.bookingCommissions)} tone="blue" />
+        <StatCard label="Payment Channel Commissions" value={formatCurrency(g.paymentCommissions)} tone="blue" />
+      </div>
+
+      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">
+        Based on {g.bookingCount} records · active stays pro-rated · cancelled counted on check-in date
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -166,8 +174,12 @@ function OverviewSection({ stats }: { stats: ReturnType<typeof useDashboardStats
             ))
           )}
           <div className="pt-3 mt-3 border-t border-gray-100">
-            <MetricRow label="Channel commissions" value={formatCurrency(g.totalCommissions)} />
-            <MetricRow label="Total bookings" value={String(g.bookingCount)} />
+            <MetricRow label="Total commissions" value={formatCurrency(g.totalCommissions)} />
+            <MetricRow label="Booking channel commissions" value={formatCurrency(g.bookingCommissions)} />
+            <MetricRow label="Payment channel commissions" value={formatCurrency(g.paymentCommissions)} />
+            <MetricRow label="Outstanding balance" value={formatCurrency(g.totalOutstanding)} />
+            <MetricRow label="Unpaid bookings" value={String(g.unpaidCount)} />
+            <MetricRow label="Total records" value={String(g.bookingCount)} />
           </div>
         </div>
       </div>
@@ -327,19 +339,28 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const PERIODS: { id: DashboardPeriod; label: string }[] = [
-  { id: 'all', label: 'All time' },
-  { id: '90d', label: '90 days' },
-  { id: '12m', label: '12 months' },
-  { id: 'upcoming', label: 'Upcoming' },
+  { id: 'all', label: 'All' },
+  { id: '1m', label: '1M' },
+  { id: '3m', label: '3M' },
+  { id: '6m', label: '6M' },
+  { id: '12m', label: '12M' },
+  { id: 'custom', label: 'Custom' },
 ];
 
 export default function DashboardModal({
-  isOpen, onClose, bookings, venueHires, rooms, bookingChannels,
+  isOpen, onClose, bookings, venueHires, rooms, bookingChannels, paymentChannels,
 }: DashboardModalProps) {
   const [tab, setTab] = useState<Tab>('overview');
-  const [period, setPeriod] = useState<DashboardPeriod>('all');
+  const [period, setPeriod] = useState<DashboardPeriod>('1m');
+  const [customRange, setCustomRange] = useState<{ from: string; to: string }>({
+    from: format(subMonths(new Date(), 1), 'yyyy-MM-dd'),
+    to: format(new Date(), 'yyyy-MM-dd'),
+  });
 
-  const stats = useDashboardStats(bookings, venueHires, rooms, bookingChannels, period);
+  const stats = useDashboardStats(
+    bookings, venueHires, rooms, bookingChannels, paymentChannels, period,
+    period === 'custom' ? customRange : undefined
+  );
 
   return (
     <AnimatePresence>
@@ -354,9 +375,9 @@ export default function DashboardModal({
           <header className="h-14 bg-white border-b px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10 shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-gray-100 text-gray-600 rounded-lg">
-                <LayoutDashboard size={16} />
+                <BarChart3 size={16} />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Business Dashboard</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Reports</h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors">
               <X size={22} />
@@ -364,22 +385,44 @@ export default function DashboardModal({
           </header>
 
           {/* Period filter */}
-          <div className="bg-white border-b px-4 sm:px-8 py-2 flex items-center gap-2 shrink-0">
+          <div className="bg-white border-b px-4 sm:px-8 py-2 flex flex-wrap items-center gap-3 shrink-0">
             <span className="text-xs font-medium text-gray-400 shrink-0">Period:</span>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1 p-1 bg-gray-50 border rounded-xl">
               {PERIODS.map(p => (
                 <button
                   key={p.id}
                   onClick={() => setPeriod(p.id)}
                   className={cn(
                     'px-3 py-1 rounded-lg text-xs font-bold transition-all',
-                    period === p.id ? 'bg-black text-white' : 'text-gray-500 hover:bg-gray-100'
+                    period === p.id ? 'bg-black text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   )}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
+            {period === 'custom' && (
+              <div className="flex items-center gap-2 bg-white border p-1 rounded-xl shadow-sm">
+                <DatePicker
+                  value={customRange.from}
+                  onChange={val => {
+                    setCustomRange(prev => ({
+                      ...prev,
+                      from: val,
+                      to: (prev.to && val >= prev.to) ? '' : prev.to,
+                    }));
+                  }}
+                  className="border-none bg-transparent h-auto p-0 focus-within:ring-0"
+                />
+                <span className="text-gray-300">→</span>
+                <DatePicker
+                  value={customRange.to}
+                  min={customRange.from ? new Date(new Date(customRange.from).getTime() + 86400000).toISOString().split('T')[0] : ''}
+                  onChange={val => setCustomRange(prev => ({ ...prev, to: val }))}
+                  className="border-none bg-transparent h-auto p-0 focus-within:ring-0"
+                />
+              </div>
+            )}
           </div>
 
           {/* Tabs */}

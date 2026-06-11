@@ -1,8 +1,22 @@
 import { useMemo } from 'react';
-import { parseISO, differenceInDays, isBefore, isAfter, subDays, startOfToday } from 'date-fns';
+import { parseISO, isBefore, startOfToday, endOfDay, startOfDay } from 'date-fns';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
+import {
+  getDashboardPeriodRange,
+  stayIncludedInPeriod,
+  stayTotalNights,
+  DashboardPeriod,
+} from '@/lib/prorate';
+import {
+  isActiveLifecycle,
+  isCancelledLifecycle,
+  cancelledIncludedInPeriod,
+  resolveReportingFinancials,
+  commissionForReporting,
+  getCollectedAmount,
+} from '@/lib/bookingLifecycle';
 
-export type DashboardPeriod = 'all' | '90d' | '12m' | 'upcoming';
+export type { DashboardPeriod };
 
 export interface UpcomingItem {
   id: string;
@@ -19,7 +33,11 @@ export interface GlobalStats {
   totalRevenue: number;
   totalCollected: number;
   totalOutstanding: number;
+  overdueOutstanding: number;
+  expectedOutstanding: number;
   totalCommissions: number;
+  bookingCommissions: number;
+  paymentCommissions: number;
   bookingCount: number;
   unpaidCount: number;
   futureOutstanding: number;
@@ -69,131 +87,212 @@ export interface HomeExchangeStats {
   estimatedValue: number;
 }
 
-// ── Pure helpers ──────────────────────────────────────────────────────────────
-
-function calcNights(checkIn: string, checkOut: string): number {
-  try {
-    return Math.max(0, differenceInDays(parseISO(checkOut), parseISO(checkIn)));
-  } catch {
-    return 0;
-  }
+function bookingFinancials(b: Booking) {
+  return {
+    price: b.price || 0,
+    extras: b.extras || [],
+    deposit: b.deposit || 0,
+    paidLater1: b.paidLater1 || 0,
+    paidLater2: b.paidLater2 || 0,
+  };
 }
 
-function bookingRevenue(b: Booking): number {
-  return (b.price || 0) + (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
+function vhFinancials(vh: VenueHire) {
+  return {
+    price: vh.bookingPrice || 0,
+    extras: vh.extras || [],
+    deposit: vh.deposit || 0,
+    paidLater1: vh.paidLater1 || 0,
+    paidLater2: vh.paidLater2 || 0,
+  };
 }
 
-function bookingCollected(b: Booking): number {
-  return (b.deposit || 0) + (b.paidLater1 || 0) + (b.paidLater2 || 0);
+function commissionInputFromBooking(b: Booking) {
+  return {
+    price: b.price || 0,
+    deposit: b.deposit || 0,
+    channelPaymentBasis: b.channelPaymentBasis,
+    commissionCustomAmount: b.commissionCustomAmount,
+    bookingChannel: b.bookingChannel,
+    paymentChannel: b.paymentChannel,
+  };
 }
 
-function vhRevenue(vh: VenueHire): number {
-  return (vh.bookingPrice || 0) + (vh.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
+function commissionInputFromVenueHire(vh: VenueHire) {
+  return {
+    price: vh.bookingPrice || 0,
+    deposit: vh.deposit || 0,
+    channelPaymentBasis: vh.channelPaymentBasis,
+    commissionCustomAmount: vh.commissionCustomAmount,
+    bookingChannel: vh.bookingChannel,
+    paymentChannel: vh.paymentChannel,
+  };
 }
-
-function vhCollected(vh: VenueHire): number {
-  return (vh.deposit || 0) + (vh.paidLater1 || 0) + (vh.paidLater2 || 0);
-}
-
-function bookingCommission(b: Booking, channels: ConfigOption[]): number {
-  const ch = channels.find(c => c.name === b.bookingChannel);
-  if (!ch?.commission) return 0;
-  const base = b.channelPaymentBasis === 'custom'
-    ? (b.commissionCustomAmount ?? 0)
-    : b.channelPaymentBasis === 'bookingPrice'
-      ? (b.price || 0)
-      : (b.deposit || 0);
-  return (base * ch.commission) / 100;
-}
-
-function vhCommission(vh: VenueHire, channels: ConfigOption[]): number {
-  const ch = channels.find(c => c.name === vh.bookingChannel);
-  if (!ch?.commission) return 0;
-  const base = vh.channelPaymentBasis === 'custom'
-    ? (vh.commissionCustomAmount ?? 0)
-    : vh.channelPaymentBasis === 'bookingPrice'
-      ? (vh.bookingPrice || 0)
-      : (vh.deposit || 0);
-  return (base * ch.commission) / 100;
-}
-
-function inPeriod(dateStr: string, period: DashboardPeriod, today: Date): boolean {
-  try {
-    const d = parseISO(dateStr);
-    if (period === 'all') return true;
-    if (period === 'upcoming') return !isBefore(d, today);
-    if (period === '90d') return isAfter(d, subDays(today, 90));
-    if (period === '12m') return isAfter(d, subDays(today, 365));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ── Main hook ─────────────────────────────────────────────────────────────────
 
 export function useDashboardStats(
   bookings: Booking[],
   venueHires: VenueHire[],
   rooms: Room[],
   bookingChannels: ConfigOption[],
-  period: DashboardPeriod
+  paymentChannels: ConfigOption[],
+  period: DashboardPeriod,
+  customRange?: { from: string; to: string }
 ) {
   const today = startOfToday();
+  const periodRange = period === 'custom' && customRange?.from && customRange?.to
+    ? { start: startOfDay(parseISO(customRange.from)), end: endOfDay(parseISO(customRange.to)) }
+    : getDashboardPeriodRange(period, today);
   const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? 'Unknown';
 
+  const activeBookings = useMemo(
+    () => bookings.filter(isActiveLifecycle),
+    [bookings]
+  );
+
+  const cancelledBookings = useMemo(
+    () => bookings.filter(isCancelledLifecycle),
+    [bookings]
+  );
+
+  const activeVenueHires = useMemo(
+    () => venueHires.filter(isActiveLifecycle),
+    [venueHires]
+  );
+
+  const cancelledVenueHires = useMemo(
+    () => venueHires.filter(isCancelledLifecycle),
+    [venueHires]
+  );
+
   const filteredBookings = useMemo(
-    () => bookings.filter(b => inPeriod(b.checkIn, period, today)),
-    [bookings, period]
+    () => activeBookings.filter(b => stayIncludedInPeriod(b.checkIn, b.checkOut, periodRange)),
+    [activeBookings, periodRange]
+  );
+
+  const filteredCancelledBookings = useMemo(
+    () => cancelledBookings.filter(b => cancelledIncludedInPeriod(b.checkIn, periodRange)),
+    [cancelledBookings, periodRange]
   );
 
   const filteredVH = useMemo(
-    () => venueHires.filter(vh => inPeriod(vh.startDate, period, today)),
-    [venueHires, period]
+    () => activeVenueHires.filter(vh => stayIncludedInPeriod(vh.startDate, vh.endDate, periodRange)),
+    [activeVenueHires, periodRange]
   );
 
-  // ── Global ───────────────────────────────────────────────────────────────────
+  const filteredCancelledVH = useMemo(
+    () => cancelledVenueHires.filter(vh => cancelledIncludedInPeriod(vh.startDate, periodRange)),
+    [cancelledVenueHires, periodRange]
+  );
+
+  const applyReporting = (
+    checkIn: string,
+    checkOut: string,
+    financials: ReturnType<typeof bookingFinancials>,
+    lifecycleStatus: Booking['lifecycleStatus'] | VenueHire['lifecycleStatus'],
+    commissionInput: ReturnType<typeof commissionInputFromBooking>
+  ) => {
+    const amounts = resolveReportingFinancials(checkIn, checkOut, periodRange, financials, lifecycleStatus);
+    const collected = getCollectedAmount(financials);
+    const comm = commissionForReporting(
+      commissionInput,
+      collected,
+      bookingChannels,
+      paymentChannels,
+      checkIn,
+      checkOut,
+      periodRange,
+      lifecycleStatus
+    );
+    return { amounts, comm };
+  };
+
   const global = useMemo((): GlobalStats => {
-    let totalRevenue = 0, totalCollected = 0, totalCommissions = 0, unpaidCount = 0;
+    let totalRevenue = 0, totalCollected = 0, totalCommissions = 0;
+    let bookingCommissions = 0, paymentCommissions = 0;
+    let overdueOutstanding = 0, expectedOutstanding = 0;
+    let unpaidCount = 0;
     const byType: Record<string, { revenue: number; count: number }> = {};
     const byChannel: Record<string, { revenue: number; count: number }> = {};
 
+    const accumulate = (
+      checkIn: string,
+      checkOut: string,
+      financials: ReturnType<typeof bookingFinancials>,
+      lifecycleStatus: Booking['lifecycleStatus'] | VenueHire['lifecycleStatus'],
+      commissionInput: ReturnType<typeof commissionInputFromBooking>,
+      typeKey: string,
+      channelKey?: string,
+    ) => {
+      const { amounts, comm } = applyReporting(
+        checkIn, checkOut, financials, lifecycleStatus, commissionInput
+      );
+      totalRevenue += amounts.revenue;
+      totalCollected += amounts.collected;
+      totalCommissions += comm.total;
+      bookingCommissions += comm.booking;
+      paymentCommissions += comm.payment;
+      if (amounts.collected === 0 && amounts.revenue > 0) unpaidCount++;
+
+      if (!isCancelledLifecycle({ lifecycleStatus }) && amounts.remaining > 0) {
+        if (isBefore(parseISO(checkOut), today)) {
+          overdueOutstanding += amounts.remaining;
+        } else {
+          expectedOutstanding += amounts.remaining;
+        }
+      }
+
+      byType[typeKey] = {
+        revenue: (byType[typeKey]?.revenue ?? 0) + amounts.revenue,
+        count: (byType[typeKey]?.count ?? 0) + 1,
+      };
+
+      if (channelKey) {
+        byChannel[channelKey] = {
+          revenue: (byChannel[channelKey]?.revenue ?? 0) + amounts.revenue,
+          count: (byChannel[channelKey]?.count ?? 0) + 1,
+        };
+      }
+    };
+
     for (const b of filteredBookings) {
-      const rev = bookingRevenue(b);
-      const col = bookingCollected(b);
-      totalRevenue += rev;
-      totalCollected += col;
-      totalCommissions += bookingCommission(b, bookingChannels);
-      if (col === 0 && rev > 0) unpaidCount++;
-      const t = b.type || 'Other';
-      byType[t] = { revenue: (byType[t]?.revenue ?? 0) + rev, count: (byType[t]?.count ?? 0) + 1 };
-      const ch = b.bookingChannel || 'Direct';
-      byChannel[ch] = { revenue: (byChannel[ch]?.revenue ?? 0) + rev, count: (byChannel[ch]?.count ?? 0) + 1 };
+      accumulate(
+        b.checkIn, b.checkOut, bookingFinancials(b), b.lifecycleStatus,
+        commissionInputFromBooking(b), b.type || 'Other', b.bookingChannel || 'Direct'
+      );
+    }
+
+    for (const b of filteredCancelledBookings) {
+      accumulate(
+        b.checkIn, b.checkOut, bookingFinancials(b), b.lifecycleStatus,
+        commissionInputFromBooking(b), 'Cancelled'
+      );
     }
 
     for (const vh of filteredVH) {
-      const rev = vhRevenue(vh);
-      const col = vhCollected(vh);
-      totalRevenue += rev;
-      totalCollected += col;
-      totalCommissions += vhCommission(vh, bookingChannels);
-      if (col === 0 && rev > 0) unpaidCount++;
-      byType['Venue Hire'] = {
-        revenue: (byType['Venue Hire']?.revenue ?? 0) + rev,
-        count: (byType['Venue Hire']?.count ?? 0) + 1,
-      };
+      accumulate(
+        vh.startDate, vh.endDate, vhFinancials(vh), vh.lifecycleStatus,
+        commissionInputFromVenueHire(vh), 'Venue Hire'
+      );
     }
 
-    // Future outstanding — always computed from all data, regardless of period
+    for (const vh of filteredCancelledVH) {
+      accumulate(
+        vh.startDate, vh.endDate, vhFinancials(vh), vh.lifecycleStatus,
+        commissionInputFromVenueHire(vh), 'Cancelled Venue Hire'
+      );
+    }
+
     let futureOutstanding = 0;
-    for (const b of bookings) {
+    for (const b of activeBookings) {
       if (!isBefore(parseISO(b.checkIn), today)) {
-        futureOutstanding += Math.max(0, bookingRevenue(b) - bookingCollected(b));
+        const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
+        futureOutstanding += full.remaining;
       }
     }
-    for (const vh of venueHires) {
+    for (const vh of activeVenueHires) {
       if (!isBefore(parseISO(vh.startDate), today)) {
-        futureOutstanding += Math.max(0, vhRevenue(vh) - vhCollected(vh));
+        const full = resolveReportingFinancials(vh.startDate, vh.endDate, null, vhFinancials(vh), vh.lifecycleStatus);
+        futureOutstanding += full.remaining;
       }
     }
 
@@ -201,8 +300,12 @@ export function useDashboardStats(
       totalRevenue,
       totalCollected,
       totalOutstanding: Math.max(0, totalRevenue - totalCollected),
+      overdueOutstanding,
+      expectedOutstanding,
       totalCommissions,
-      bookingCount: filteredBookings.length + filteredVH.length,
+      bookingCommissions,
+      paymentCommissions,
+      bookingCount: filteredBookings.length + filteredVH.length + filteredCancelledBookings.length + filteredCancelledVH.length,
       unpaidCount,
       futureOutstanding,
       revenueByType: Object.entries(byType)
@@ -213,33 +316,35 @@ export function useDashboardStats(
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5),
     };
-  }, [filteredBookings, filteredVH, bookings, venueHires, bookingChannels]);
+  }, [filteredBookings, filteredCancelledBookings, filteredVH, filteredCancelledVH, activeBookings, activeVenueHires, bookingChannels, paymentChannels, periodRange, today]);
 
-  // ── Retreats ─────────────────────────────────────────────────────────────────
   const retreats = useMemo((): RetreatStats => {
     const rb = filteredBookings.filter(b => b.type?.toLowerCase() === 'retreat');
     let totalRevenue = 0, totalCollected = 0, totalGuests = 0, totalNights = 0;
     const channelCount: Record<string, number> = {};
 
     for (const b of rb) {
-      const rev = bookingRevenue(b);
-      totalRevenue += rev;
-      totalCollected += bookingCollected(b);
+      const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, periodRange, bookingFinancials(b), b.lifecycleStatus);
+      totalRevenue += amounts.revenue;
+      totalCollected += amounts.collected;
       totalGuests += (b.adults || 0) + (b.kids || 0);
-      totalNights += calcNights(b.checkIn, b.checkOut);
+      totalNights += amounts.overlapNights || stayTotalNights(b.checkIn, b.checkOut);
       const ch = b.bookingChannel || 'Direct';
       channelCount[ch] = (channelCount[ch] ?? 0) + 1;
     }
 
-    const upcoming: UpcomingItem[] = bookings
+    const upcoming: UpcomingItem[] = activeBookings
       .filter(b => b.type?.toLowerCase() === 'retreat' && !isBefore(parseISO(b.checkIn), today))
-      .map(b => ({
-        id: b.id, name: b.guestName, roomName: roomName(b.roomId),
-        checkIn: b.checkIn, checkOut: b.checkOut,
-        nights: calcNights(b.checkIn, b.checkOut),
-        revenue: bookingRevenue(b),
-        remaining: Math.max(0, bookingRevenue(b) - bookingCollected(b)),
-      }))
+      .map(b => {
+        const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
+        return {
+          id: b.id, name: b.guestName, roomName: roomName(b.roomId),
+          checkIn: b.checkIn, checkOut: b.checkOut,
+          nights: stayTotalNights(b.checkIn, b.checkOut),
+          revenue: full.revenue,
+          remaining: full.remaining,
+        };
+      })
       .filter(x => x.remaining > 0)
       .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
       .slice(0, 8);
@@ -255,9 +360,8 @@ export function useDashboardStats(
       topChannel: Object.entries(channelCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—',
       upcoming,
     };
-  }, [filteredBookings, bookings]);
+  }, [filteredBookings, bookings, periodRange]);
 
-  // ── Coliving ─────────────────────────────────────────────────────────────────
   const coliving = useMemo((): ColivingStats => {
     const cb = filteredBookings.filter(b => b.type?.toLowerCase() === 'coliving');
     let totalRevenue = 0, totalCollected = 0, totalNights = 0;
@@ -265,24 +369,27 @@ export function useDashboardStats(
     const roomCount: Record<string, number> = {};
 
     for (const b of cb) {
-      const rev = bookingRevenue(b);
-      const n = calcNights(b.checkIn, b.checkOut);
-      totalRevenue += rev;
-      totalCollected += bookingCollected(b);
-      totalNights += n;
+      const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, periodRange, bookingFinancials(b), b.lifecycleStatus);
+      const n = stayTotalNights(b.checkIn, b.checkOut);
+      totalRevenue += amounts.revenue;
+      totalCollected += amounts.collected;
+      totalNights += amounts.overlapNights || n;
       if (n > 0 && (b.price || 0) > 0) { rateSum += (b.price || 0) / n; rateCount++; }
       roomCount[b.roomId] = (roomCount[b.roomId] ?? 0) + 1;
     }
 
-    const upcoming: UpcomingItem[] = bookings
+    const upcoming: UpcomingItem[] = activeBookings
       .filter(b => b.type?.toLowerCase() === 'coliving' && !isBefore(parseISO(b.checkIn), today))
-      .map(b => ({
-        id: b.id, name: b.guestName, roomName: roomName(b.roomId),
-        checkIn: b.checkIn, checkOut: b.checkOut,
-        nights: calcNights(b.checkIn, b.checkOut),
-        revenue: bookingRevenue(b),
-        remaining: Math.max(0, bookingRevenue(b) - bookingCollected(b)),
-      }))
+      .map(b => {
+        const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
+        return {
+          id: b.id, name: b.guestName, roomName: roomName(b.roomId),
+          checkIn: b.checkIn, checkOut: b.checkOut,
+          nights: stayTotalNights(b.checkIn, b.checkOut),
+          revenue: full.revenue,
+          remaining: full.remaining,
+        };
+      })
       .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
       .slice(0, 8);
 
@@ -299,28 +406,31 @@ export function useDashboardStats(
         .slice(0, 5),
       upcoming,
     };
-  }, [filteredBookings, bookings]);
+  }, [filteredBookings, bookings, periodRange]);
 
-  // ── Venue Hire ───────────────────────────────────────────────────────────────
   const venueHire = useMemo((): VenueHireStats => {
     let totalRevenue = 0, totalCollected = 0, totalDuration = 0, totalGuests = 0;
 
     for (const vh of filteredVH) {
-      totalRevenue += vhRevenue(vh);
-      totalCollected += vhCollected(vh);
-      totalDuration += calcNights(vh.startDate, vh.endDate);
+      const amounts = resolveReportingFinancials(vh.startDate, vh.endDate, periodRange, vhFinancials(vh), vh.lifecycleStatus);
+      totalRevenue += amounts.revenue;
+      totalCollected += amounts.collected;
+      totalDuration += amounts.overlapNights || stayTotalNights(vh.startDate, vh.endDate);
       totalGuests += vh.guestCount || 0;
     }
 
-    const upcoming: UpcomingItem[] = venueHires
+    const upcoming: UpcomingItem[] = activeVenueHires
       .filter(vh => !isBefore(parseISO(vh.startDate), today))
-      .map(vh => ({
-        id: vh.id, name: vh.name || vh.organizer, roomName: 'Full property',
-        checkIn: vh.startDate, checkOut: vh.endDate,
-        nights: calcNights(vh.startDate, vh.endDate),
-        revenue: vhRevenue(vh),
-        remaining: Math.max(0, vhRevenue(vh) - vhCollected(vh)),
-      }))
+      .map(vh => {
+        const full = resolveReportingFinancials(vh.startDate, vh.endDate, null, vhFinancials(vh), vh.lifecycleStatus);
+        return {
+          id: vh.id, name: vh.name || vh.organizer, roomName: 'Full property',
+          checkIn: vh.startDate, checkOut: vh.endDate,
+          nights: stayTotalNights(vh.startDate, vh.endDate),
+          revenue: full.revenue,
+          remaining: full.remaining,
+        };
+      })
       .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
       .slice(0, 8);
 
@@ -333,25 +443,25 @@ export function useDashboardStats(
       avgGuestCount: filteredVH.length ? totalGuests / filteredVH.length : 0,
       upcoming,
     };
-  }, [filteredVH, venueHires]);
+  }, [filteredVH, venueHires, periodRange]);
 
-  // ── Home Exchange ────────────────────────────────────────────────────────────
   const homeExchange = useMemo((): HomeExchangeStats => {
     const hb = filteredBookings.filter(b => b.type?.toLowerCase().includes('exchange'));
     let totalNights = 0;
     const roomCount: Record<string, number> = {};
 
     for (const b of hb) {
-      totalNights += calcNights(b.checkIn, b.checkOut);
+      const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, periodRange, bookingFinancials(b), b.lifecycleStatus);
+      totalNights += amounts.overlapNights || stayTotalNights(b.checkIn, b.checkOut);
       roomCount[b.roomId] = (roomCount[b.roomId] ?? 0) + 1;
     }
 
-    const upcoming: UpcomingItem[] = bookings
+    const upcoming: UpcomingItem[] = activeBookings
       .filter(b => b.type?.toLowerCase().includes('exchange') && !isBefore(parseISO(b.checkIn), today))
       .map(b => ({
         id: b.id, name: b.guestName, roomName: roomName(b.roomId),
         checkIn: b.checkIn, checkOut: b.checkOut,
-        nights: calcNights(b.checkIn, b.checkOut),
+        nights: stayTotalNights(b.checkIn, b.checkOut),
         revenue: 0, remaining: 0,
       }))
       .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
@@ -368,7 +478,7 @@ export function useDashboardStats(
       upcoming,
       estimatedValue: totalNights * coliving.avgNightlyRate,
     };
-  }, [filteredBookings, bookings, coliving.avgNightlyRate]);
+  }, [filteredBookings, bookings, coliving.avgNightlyRate, periodRange]);
 
   return { global, retreats, coliving, venueHire, homeExchange };
 }

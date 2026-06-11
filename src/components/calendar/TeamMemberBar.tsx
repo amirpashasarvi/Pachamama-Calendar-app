@@ -1,5 +1,5 @@
 import React from 'react';
-import { differenceInDays, isAfter, isBefore, parseISO, startOfDay } from 'date-fns';
+import { differenceInDays, isAfter, isBefore, parseISO, startOfDay, endOfWeek, eachWeekOfInterval, max, min } from 'date-fns';
 import { TeamAssignment, TeamPosition } from '@/types';
 import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
@@ -54,9 +54,15 @@ export default function TeamMemberBar({ assignment, days, color, isOverlapping, 
     switch (fieldId) {
       case 'name':
         return assignment.name;
-      case 'accommodationNotes':
-        if (!assignment.roomNotes) return null;
-        return assignment.roomNotes.length > 20 ? assignment.roomNotes.substring(0, 20) + '...' : assignment.roomNotes;
+      case 'accommodation':
+      case 'accommodationNotes': {
+        const text = assignment.accommodation || assignment.roomNotes;
+        if (!text) return null;
+        return text.length > 20 ? text.substring(0, 20) + '...' : text;
+      }
+      case 'notes':
+        if (!assignment.notes) return null;
+        return assignment.notes.length > 20 ? assignment.notes.substring(0, 20) + '...' : assignment.notes;
       default:
         return null;
     }
@@ -71,6 +77,22 @@ export default function TeamMemberBar({ assignment, days, color, isOverlapping, 
   }).filter(Boolean);
 
   const displayText = content.join(' · ');
+
+  // One label per calendar week (Sun–Sat), centered in that week's portion of the bar
+  const weekSegments = eachWeekOfInterval({ start, end }, { weekStartsOn: 0 })
+    .map(weekStart => {
+      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
+      const overlapStart = max([start, weekStart]);
+      const overlapEnd = min([end, weekEnd]);
+      if (overlapStart > overlapEnd) return null;
+
+      const segLeft = differenceInDays(overlapStart, start) * dayWidth;
+      const segDays = differenceInDays(overlapEnd, overlapStart) + 1;
+      const segWidth = segDays * dayWidth;
+
+      return { left: segLeft, width: segWidth };
+    })
+    .filter((s): s is { left: number; width: number } => s !== null);
 
   const polygonPath = `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
 
@@ -103,8 +125,25 @@ export default function TeamMemberBar({ assignment, days, color, isOverlapping, 
         }} 
       />
 
-      {/* 3. Content layer */}
-      <span className="relative z-10 text-[10px] font-bold truncate px-10 whitespace-nowrap italic">{displayText}</span>
+      {/* 3. Content layer — repeated once per calendar week */}
+      {displayText && (
+        <div className="relative z-10 h-full w-full pointer-events-none">
+          {weekSegments.map((seg, i) => (
+            <div
+              key={i}
+              className="absolute top-0 bottom-0 flex items-center justify-center"
+              style={{ left: seg.left, width: seg.width }}
+            >
+              <span
+                className="text-[10px] font-bold italic truncate px-1"
+                style={{ maxWidth: Math.max(0, seg.width - 8) }}
+              >
+                {displayText}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -4,7 +4,6 @@ import { TeamAssignment, TeamPosition } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { Save, Trash2 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 
 interface TeamAssignmentModalProps {
   isOpen: boolean;
@@ -26,27 +25,25 @@ export default function TeamAssignmentModal({
   const DEFAULT_FORM_STATE = {
     positionId: '',
     name: '',
-    email: '',
-    phone: '',
-    contactChannel: 'WhatsApp' as TeamAssignment['contactChannel'],
-    roomNotes: '',
+    accommodation: '',
+    notes: '',
     startDate: '',
     endDate: '',
   };
 
   const [formData, setFormData] = useState(DEFAULT_FORM_STATE);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [nameError, setNameError] = useState(false);
 
   useEffect(() => {
     setShowConfirmDelete(false);
+    setNameError(false);
     if (assignment) {
       setFormData({
         positionId: assignment.positionId,
         name: assignment.name,
-        email: assignment.email,
-        phone: assignment.phone,
-        contactChannel: assignment.contactChannel,
-        roomNotes: assignment.roomNotes,
+        accommodation: assignment.accommodation || assignment.roomNotes || '',
+        notes: assignment.notes || '',
         startDate: assignment.startDate,
         endDate: assignment.endDate,
       });
@@ -65,12 +62,22 @@ export default function TeamAssignmentModal({
   }, [assignment, initialData, isOpen]);
 
   const handleSave = async () => {
-    if (!formData.positionId || !formData.name) return;
+    if (!formData.positionId) return;
+    if (!formData.name.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
 
     const matchedPosition = positions.find(p => p.id === formData.positionId);
     
     const data = {
-      ...formData,
+      positionId: formData.positionId,
+      name: formData.name.trim(),
+      accommodation: formData.accommodation.trim(),
+      notes: formData.notes.trim(),
+      startDate: formData.startDate,
+      endDate: formData.endDate,
       positionName: matchedPosition?.name || '',
       updatedAt: new Date().toISOString(),
     };
@@ -125,64 +132,22 @@ export default function TeamAssignmentModal({
           </div>
 
           <div className="col-span-2">
-            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Person's Name</label>
+            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">
+              Person's Name <span className="text-rose-500">*</span>
+            </label>
             <input
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${nameError ? 'border-rose-400 ring-1 ring-rose-200' : ''}`}
               value={formData.name}
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              onChange={e => {
+                setFormData({ ...formData, name: e.target.value });
+                if (nameError && e.target.value.trim()) setNameError(false);
+              }}
               placeholder="e.g. Maria Clara"
               disabled={!isAdmin && !!assignment}
             />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Email</label>
-            <input
-              type="email"
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              value={formData.email}
-              onChange={e => setFormData({ ...formData, email: e.target.value })}
-              placeholder="email@example.com"
-              disabled={!isAdmin && !!assignment}
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Phone</label>
-            <input
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              value={formData.phone}
-              onChange={e => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+34..."
-              disabled={!isAdmin && !!assignment}
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Contact Channel</label>
-            <select
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-              value={formData.contactChannel}
-              onChange={e => setFormData({ ...formData, contactChannel: e.target.value as any })}
-              disabled={!isAdmin && !!assignment}
-            >
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Email">Email</option>
-              <option value="Phone">Phone</option>
-              <option value="Telegram">Telegram</option>
-              <option value="Signal">Signal</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Accommodation Notes</label>
-            <input
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              value={formData.roomNotes}
-              onChange={e => setFormData({ ...formData, roomNotes: e.target.value })}
-              placeholder="Room 2, etc."
-              disabled={!isAdmin && !!assignment}
-            />
+            {nameError && (
+              <p className="text-[11px] text-rose-500 font-semibold mt-1">Please enter a person's name.</p>
+            )}
           </div>
 
           <div>
@@ -203,6 +168,29 @@ export default function TeamAssignmentModal({
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               value={formData.endDate}
               onChange={e => setFormData({ ...formData, endDate: e.target.value })}
+              disabled={!isAdmin && !!assignment}
+            />
+          </div>
+
+          <div className="col-span-2">
+            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Accommodation</label>
+            <input
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              value={formData.accommodation}
+              onChange={e => setFormData({ ...formData, accommodation: e.target.value })}
+              placeholder="e.g. Cherry Cabin"
+              disabled={!isAdmin && !!assignment}
+            />
+          </div>
+
+          <div className="col-span-2">
+            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">Notes</label>
+            <textarea
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-gray-400 placeholder:font-normal"
+              rows={3}
+              value={formData.notes}
+              onChange={e => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Any additional notes..."
               disabled={!isAdmin && !!assignment}
             />
           </div>

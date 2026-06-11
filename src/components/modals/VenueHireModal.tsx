@@ -4,11 +4,14 @@ import DatePicker from '@/components/ui/DatePicker';
 import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
 import { db } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
-import { calculateNights, cn } from '@/lib/utils';
+import { calculateNights, cn, findPeriodOverlapError } from '@/lib/utils';
+import { calcTotalCommission } from '@/lib/commission';
 import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
+import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle';
 import CurrencyInput from '@/components/ui/CurrencyInput';
-import { AlertTriangle, Trash2, Save, Plus, X } from 'lucide-react';
+import { AlertTriangle, Trash2, Save, Plus, X, Ban, RotateCcw } from 'lucide-react';
+import { useBooking } from '@/hooks/useBooking';
 
 interface VenueHireModalProps {
   isOpen: boolean;
@@ -16,8 +19,10 @@ interface VenueHireModalProps {
   venueHire?: VenueHire | null;
   rooms: Room[];
   bookingChannels: ConfigOption[];
+  paymentChannels: ConfigOption[];
   currentUserName?: string;
   currentUserEmail?: string;
+  elevated?: boolean;
 }
 
 export default function VenueHireModal({ 
@@ -26,9 +31,12 @@ export default function VenueHireModal({
   venueHire, 
   rooms, 
   bookingChannels,
+  paymentChannels,
   currentUserName = '',
   currentUserEmail = '',
+  elevated = false,
 }: VenueHireModalProps) {
+  const { retreats, venueHires } = useBooking();
   const [formData, setFormData] = useState<Partial<VenueHire>>({
     name: '',
     organizer: '',
@@ -43,6 +51,7 @@ export default function VenueHireModal({
     paidLater1: 0,
     paidLater2: 0,
     bookingChannel: '',
+    paymentChannel: '',
     channelPaymentBasis: 'bookingPrice',
     commissionCustomAmount: 0,
   });
@@ -50,7 +59,13 @@ export default function VenueHireModal({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirmCancel, setShowConfirmCancel] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isReactivating, setIsReactivating] = useState(false);
+
+  const isCancelled = isCancelledLifecycle(venueHire ?? {});
 
   useEffect(() => {
     if (venueHire) {
@@ -75,6 +90,7 @@ export default function VenueHireModal({
         paidLater1: 0,
         paidLater2: 0,
         bookingChannel: '',
+        paymentChannel: '',
         channelPaymentBasis: 'bookingPrice',
         commissionCustomAmount: 0,
       });
@@ -82,9 +98,25 @@ export default function VenueHireModal({
     setError(null);
     setIsSaving(false);
     setShowConfirmDelete(false);
-    setDeleteConfirmText('');
+    setIsDeleting(false);
+    setShowConfirmCancel(false);
+    setIsCancelling(false);
+    setCancelReason('');
+    setIsReactivating(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venueHire?.id, isOpen]);
+
+  useEffect(() => {
+    if (!showConfirmDelete && !showConfirmCancel) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowConfirmDelete(false);
+        setShowConfirmCancel(false);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [showConfirmDelete, showConfirmCancel]);
 
   const totalExtras = (formData.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
   const total = (formData.bookingPrice || 0) + totalExtras;
@@ -95,8 +127,10 @@ export default function VenueHireModal({
   if (remaining <= 0 && total > 0) calculatedStatus = 'Paid';
   else if ((formData.deposit || 0) > 0 || (formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) calculatedStatus = 'Partial';
 
-  const selectedChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
-  const channelCommissionRate = selectedChannel?.commission ?? 0;
+  const selectedBookingChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
+  const selectedPaymentChannel = paymentChannels.find(c => c.name === formData.paymentChannel);
+  const bookingChannelRate = selectedBookingChannel?.commission ?? 0;
+  const paymentChannelRate = selectedPaymentChannel?.commission ?? 0;
 
   const commissionBase = formData.channelPaymentBasis === 'custom'
     ? (formData.commissionCustomAmount ?? 0)
@@ -104,14 +138,45 @@ export default function VenueHireModal({
       ? (formData.bookingPrice || 0)
       : (formData.deposit || 0);
 
-  const liveCommission = useMemo(() => {
-    if (!channelCommissionRate) return 0;
-    return (commissionBase * channelCommissionRate) / 100;
-  }, [commissionBase, channelCommissionRate]);
+  const liveCommission = useMemo(() => calcTotalCommission(
+    {
+      price: formData.bookingPrice || 0,
+      deposit: formData.deposit || 0,
+      channelPaymentBasis: formData.channelPaymentBasis || 'bookingPrice',
+      commissionCustomAmount: formData.commissionCustomAmount,
+      bookingChannel: formData.bookingChannel || '',
+      paymentChannel: formData.paymentChannel || '',
+    },
+    bookingChannels,
+    paymentChannels
+  ), [
+    formData.channelPaymentBasis,
+    formData.bookingPrice,
+    formData.deposit,
+    formData.commissionCustomAmount,
+    formData.bookingChannel,
+    formData.paymentChannel,
+    bookingChannels,
+    paymentChannels,
+  ]);
+
+  const overlapWarning = useMemo(() => {
+    if (!formData.startDate || !formData.endDate) return null;
+    return findPeriodOverlapError(formData.startDate, formData.endDate, {
+      retreats,
+      venueHires: venueHires.filter(isActiveLifecycle),
+      excludeVenueHireId: venueHire?.id,
+    });
+  }, [formData.startDate, formData.endDate, retreats, venueHires, venueHire?.id]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (overlapWarning) {
+      setError(overlapWarning);
+      return;
+    }
 
     const removeUndefinedDeep = (obj: unknown): unknown => {
       if (Array.isArray(obj)) return obj.map(removeUndefinedDeep);
@@ -153,13 +218,78 @@ export default function VenueHireModal({
   };
 
   const handleDelete = async () => {
-    if (!venueHire?.id) return;
+    if (!venueHire?.id || isDeleting) return;
+    setIsDeleting(true);
     try {
       await updateDoc(doc(db, 'venueHires', venueHire.id), { deletedAt: new Date().toISOString() });
       logActivity({ action: 'deleted', entityType: 'venueHire', entityId: venueHire.id, summary: `Venue Hire deleted · ${venueHire.name}`, userName: currentUserName || currentUserEmail, userEmail: currentUserEmail });
+      setShowConfirmDelete(false);
       onClose();
     } catch (err) {
+      setIsDeleting(false);
+      setShowConfirmDelete(false);
       const msg = err instanceof Error ? err.message : 'Failed to delete. Please try again.';
+      setError(msg);
+    }
+  };
+
+  const handleCancelVenueHire = async () => {
+    if (!venueHire?.id || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'venueHires', venueHire.id), {
+        lifecycleStatus: 'cancelled',
+        cancelledAt: now,
+        cancellationReason: cancelReason.trim() || '',
+        updatedAt: now,
+      });
+      logActivity({
+        action: 'cancelled',
+        entityType: 'venueHire',
+        entityId: venueHire.id,
+        summary: `Venue Hire cancelled · ${venueHire.name}`,
+        userName: currentUserName || currentUserEmail,
+        userEmail: currentUserEmail,
+      });
+      setShowConfirmCancel(false);
+      onClose();
+    } catch (err) {
+      setIsCancelling(false);
+      const msg = err instanceof Error ? err.message : 'Failed to cancel venue hire.';
+      setError(msg);
+    }
+  };
+
+  const handleReactivateVenueHire = async () => {
+    if (!venueHire?.id || isReactivating) return;
+
+    if (overlapWarning) {
+      setError(`Cannot reactivate: ${overlapWarning}`);
+      return;
+    }
+
+    setIsReactivating(true);
+    try {
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'venueHires', venueHire.id), {
+        lifecycleStatus: 'active',
+        cancelledAt: null,
+        cancellationReason: '',
+        updatedAt: now,
+      });
+      logActivity({
+        action: 'reactivated',
+        entityType: 'venueHire',
+        entityId: venueHire.id,
+        summary: `Venue Hire reactivated · ${venueHire.name}`,
+        userName: currentUserName || currentUserEmail,
+        userEmail: currentUserEmail,
+      });
+      onClose();
+    } catch (err) {
+      setIsReactivating(false);
+      const msg = err instanceof Error ? err.message : 'Failed to reactivate venue hire.';
       setError(msg);
     }
   };
@@ -186,8 +316,17 @@ export default function VenueHireModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={venueHire ? 'Edit Venue Hire' : 'Add Venue Hire'}>
+    <Modal isOpen={isOpen} onClose={onClose} title={venueHire ? (isCancelled ? 'Cancelled Venue Hire' : 'Edit Venue Hire') : 'Add Venue Hire'} elevated={elevated}>
       <form onSubmit={handleSave} className="space-y-8">
+
+        {isCancelled && (
+          <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600">
+            This venue hire is cancelled and hidden from the calendar.
+            {venueHire?.cancellationReason && (
+              <span className="block mt-1 font-medium text-slate-500">Reason: {venueHire.cancellationReason}</span>
+            )}
+          </div>
+        )}
         
         {/* Details Section */}
         <section className="space-y-4">
@@ -222,6 +361,7 @@ export default function VenueHireModal({
                     startDate: val,
                     endDate: (!prev.endDate || val >= prev.endDate) ? autoEndDate : prev.endDate
                   }));
+                  setError(null);
                 }}
               />
             </div>
@@ -231,9 +371,18 @@ export default function VenueHireModal({
                 value={formData.endDate || ''}
                 min={formData.startDate ? new Date(new Date(formData.startDate).getTime() + 86400000).toISOString().split('T')[0] : ''}
                 defaultMonth={formData.startDate || undefined}
-                onChange={val => setFormData({ ...formData, endDate: val })}
+                onChange={val => {
+                  setFormData({ ...formData, endDate: val });
+                  setError(null);
+                }}
               />
             </div>
+            {overlapWarning && (
+              <div className="col-span-2 flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg">
+                <AlertTriangle size={14} className="text-rose-500 shrink-0 mt-0.5" />
+                <span className="text-xs font-bold text-rose-700">{overlapWarning}</span>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1">Number of Guests</label>
               <input 
@@ -417,11 +566,24 @@ export default function VenueHireModal({
                   className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
                   value={formData.bookingChannel || ''}
                   onChange={e => setFormData({ ...formData, bookingChannel: e.target.value })}
+                  aria-label="Booking channel"
                 >
                   <option value="">Direct</option>
                   {bookingChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
 
+                <select
+                  className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
+                  value={formData.paymentChannel || ''}
+                  onChange={e => setFormData({ ...formData, paymentChannel: e.target.value })}
+                  aria-label="Payment channel"
+                >
+                  <option value="">Direct</option>
+                  {paymentChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="flex gap-1 p-0.5 bg-gray-100 rounded-xl shrink-0">
                   {([
                     { value: 'bookingPrice', label: 'Full Booking' },
@@ -460,11 +622,23 @@ export default function VenueHireModal({
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-400 font-mono">
-                {channelCommissionRate}% commission
-                <span className="mx-1.5 text-gray-200">·</span>
-                €{liveCommission.toFixed(2)}
-              </p>
+              <div className="space-y-0.5 text-xs text-gray-400 font-mono">
+                <p>
+                  Booking channel {bookingChannelRate}% of base
+                  <span className="mx-1.5 text-gray-200">·</span>
+                  €{liveCommission.booking.toFixed(2)}
+                </p>
+                <p>
+                  Payment channel {paymentChannelRate}% of base
+                  <span className="mx-1.5 text-gray-200">·</span>
+                  €{liveCommission.payment.toFixed(2)}
+                </p>
+                <p className="font-bold text-gray-500">
+                  Total commission
+                  <span className="mx-1.5 text-gray-200">·</span>
+                  €{liveCommission.total.toFixed(2)}
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -480,67 +654,150 @@ export default function VenueHireModal({
         {/* Actions */}
         <div className="flex items-center justify-between pt-6 border-t">
           {venueHire && (
-             <button 
+            <div className="flex items-center gap-2">
+              {isCancelled ? (
+                <button
+                  type="button"
+                  onClick={handleReactivateVenueHire}
+                  disabled={isReactivating}
+                  className="flex items-center gap-2 px-4 py-2 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
+                >
+                  {isReactivating ? (
+                    <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-700 rounded-full animate-spin" />
+                  ) : (
+                    <RotateCcw size={16} />
+                  )}
+                  Reactivate
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmCancel(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors text-sm font-bold"
+                >
+                  <Ban size={16} /> Cancel Event
+                </button>
+              )}
+              <button
                 type="button"
                 onClick={() => setShowConfirmDelete(true)}
                 className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-sm font-bold"
               >
                 <Trash2 size={16} /> Delete
-             </button>
+              </button>
+            </div>
           )}
           
           <div className="flex gap-3 ml-auto">
-            {showConfirmDelete ? (
-              <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-right-2">
-                <span className="text-[10px] font-bold text-gray-500">
-                  Type <span className="text-rose-600 font-black">{venueHire?.name || 'DELETE'}</span> to confirm
-                </span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={deleteConfirmText}
-                    onChange={e => setDeleteConfirmText(e.target.value)}
-                    placeholder={venueHire?.name || 'DELETE'}
-                    className="border rounded-lg px-2 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-rose-300"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={deleteConfirmText.trim().toLowerCase() !== (venueHire?.name || 'DELETE').toLowerCase()}
-                    className="px-3 py-2 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowConfirmDelete(false); setDeleteConfirmText(''); }}
-                    className="px-3 py-2 bg-gray-100 text-gray-500 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <button 
-                  type="button" 
-                  onClick={onClose}
-                  className="px-6 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="flex items-center gap-2 px-8 py-2 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
-                >
-                  <Save size={16} /> {venueHire ? 'Update' : 'Create'} Venue Hire
-                </button>
-              </>
-            )}
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="px-6 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              disabled={isSaving || !!overlapWarning}
+              className="flex items-center gap-2 px-8 py-2 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save size={16} /> {venueHire ? 'Update' : 'Create'} Venue Hire
+            </button>
           </div>
         </div>
       </form>
+
+      {showConfirmCancel && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          onMouseDown={() => !isCancelling && setShowConfirmCancel(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm animate-in fade-in zoom-in-95 duration-150"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1 mb-4">
+              <h3 className="text-base font-bold text-gray-900">Cancel this venue hire?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                The event will be removed from the calendar. Any deposit or payments received will count toward revenue on the start date.
+              </p>
+            </div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Reason (optional)</label>
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              rows={2}
+              className="w-full mb-5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-100 resize-none"
+              placeholder="Event postponed, client cancelled, etc."
+            />
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmCancel(false)}
+                disabled={isCancelling}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Keep Event
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelVenueHire}
+                disabled={isCancelling}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isCancelling ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Ban size={14} />
+                )}
+                {isCancelling ? 'Cancelling…' : 'Cancel Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmDelete && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          onMouseDown={() => !isDeleting && setShowConfirmDelete(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm animate-in fade-in zoom-in-95 duration-150"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1 mb-5">
+              <h3 className="text-base font-bold text-gray-900">Delete this venue hire?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                <span className="font-semibold text-gray-700">{venueHire?.name}</span> will be moved to Trash and can be restored later.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(false)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                {isDeleting ? 'Deleting…' : 'Delete Venue Hire'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

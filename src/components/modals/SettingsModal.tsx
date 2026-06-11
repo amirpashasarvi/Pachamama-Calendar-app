@@ -30,6 +30,7 @@ interface SettingsModalProps {
   onClose: () => void;
   bookingTypes: ConfigOption[];
   bookingChannels: ConfigOption[];
+  paymentChannels: ConfigOption[];
   users: UserRecord[];
   rooms: Room[];
   retreatTypes: RetreatType[];
@@ -41,7 +42,7 @@ const COLORS = APP_COLOR_PALETTE;
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const userDocIdFromEmail = (email: string) => normalizeEmail(email);
 
-type SettingsView = 'menu' | 'types' | 'channels' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
+type SettingsView = 'menu' | 'types' | 'channels' | 'paymentChannels' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
 
 function SortableItem({ id, children, disabled }: { id: string, children: React.ReactNode, key?: string, disabled?: boolean }) {
   const {
@@ -70,7 +71,7 @@ function SortableItem({ id, children, disabled }: { id: string, children: React.
   );
 }
 
-export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, users, rooms, retreatTypes, teamPositions, displaySettings }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, users, rooms, retreatTypes, teamPositions, displaySettings }: SettingsModalProps) {
   const [view, setView] = useState<SettingsView>('menu');
   const [limitWarning, setLimitWarning] = useState<boolean>(false);
 
@@ -130,7 +131,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       color: formData.color 
     };
     
-    if (collectionName === 'bookingChannels') {
+    if (collectionName === 'bookingChannels' || collectionName === 'paymentChannels') {
       data.commission = Number(formData.commission) || 0;
     }
 
@@ -151,8 +152,12 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       data.order = teamPositions.length;
     }
 
-    if ((collectionName === 'bookingTypes' || collectionName === 'bookingChannels') && !editingId) {
-      const currentOptions = collectionName === 'bookingTypes' ? bookingTypes : bookingChannels;
+    if ((collectionName === 'bookingTypes' || collectionName === 'bookingChannels' || collectionName === 'paymentChannels') && !editingId) {
+      const currentOptions = collectionName === 'bookingTypes'
+        ? bookingTypes
+        : collectionName === 'bookingChannels'
+          ? bookingChannels
+          : paymentChannels;
       data.sortOrder = currentOptions.length;
     }
 
@@ -726,7 +731,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
   const renderConfigList = (rawOptions: ConfigOption[], collectionName: string, label: string) => {
     const options = localOrders[collectionName] ?? rawOptions;
-    const isChannel = collectionName === 'bookingChannels';
+    const isChannel = collectionName === 'bookingChannels' || collectionName === 'paymentChannels';
     
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200">
@@ -1226,6 +1231,17 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
 
+            <button
+              onClick={() => setView('paymentChannels')}
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
+            >
+              <div className="text-left">
+                <h4 className="font-bold text-gray-900">Payment Channels</h4>
+                <p className="text-xs text-gray-500">Payment processors and commission rates</p>
+              </div>
+              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+            </button>
+
             {/* Team & People */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Team & People</p>
             <button
@@ -1280,6 +1296,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
         {view === 'types' && renderConfigList(bookingTypes, 'bookingTypes', 'Booking Types')}
         {view === 'channels' && renderConfigList(bookingChannels, 'bookingChannels', 'Booking Channels')}
+        {view === 'paymentChannels' && renderConfigList(paymentChannels, 'paymentChannels', 'Payment Channels')}
         {view === 'users' && renderUserManagement()}
         {view === 'rooms' && renderRoomsManagement()}
         {view === 'retreats' && renderRetreatsManagement()}

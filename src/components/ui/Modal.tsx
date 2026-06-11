@@ -9,9 +9,13 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   dismissible?: boolean;
+  elevated?: boolean;
 }
 
-export default function Modal({ isOpen, onClose, title, children, footer, dismissible = true }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, footer, dismissible = true, elevated = false }: ModalProps) {
+  const backdropZ = elevated ? 'z-[210]' : 'z-[100]';
+  const contentZ = elevated ? 'z-[220]' : 'z-[110]';
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -22,7 +26,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={dismissible ? onClose : undefined}
-            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[100] hidden sm:block"
+            className={`fixed inset-0 bg-black/40 backdrop-blur-[2px] ${backdropZ} hidden sm:block`}
           />
 
           {/* Content
@@ -32,7 +36,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-2xl bg-white sm:rounded-2xl shadow-2xl z-[110] overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[90vh]"
+            className={`fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-2xl bg-white sm:rounded-2xl shadow-2xl ${contentZ} overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[90vh]`}
           >
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b">

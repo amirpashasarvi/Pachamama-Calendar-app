@@ -41,20 +41,26 @@ import {
 } from '@dnd-kit/sortable';
 import { doc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
+import { isActiveLifecycle } from '@/lib/bookingLifecycle';
 
 interface CalendarProps {
   rooms?: Room[];
   bookings?: Booking[];
   housekeeping?: HousekeepingRecord[];
+  showSummary?: boolean;
+  showTeamRoster?: boolean;
 }
 
-export default function Calendar({ rooms: propRooms, bookings: propBookings, housekeeping: propHousekeeping }: CalendarProps) {
-  const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, teamPositions, teamAssignments, loading } = useBooking();
+export default function Calendar({ rooms: propRooms, bookings: propBookings, housekeeping: propHousekeeping, showSummary = false, showTeamRoster = false }: CalendarProps) {
+  const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, loading } = useBooking();
   const { isAdmin, profile } = useAuth();
   
   const rooms = propRooms || localRooms;
   const bookings = propBookings || localBookings;
   const housekeeping = propHousekeeping || [];
+
+  const activeBookings = useMemo(() => bookings.filter(isActiveLifecycle), [bookings]);
+  const activeVenueHires = useMemo(() => venueHires.filter(isActiveLifecycle), [venueHires]);
   
   // Modal states
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -76,8 +82,6 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
 
   // Date state — always Jan 1 of the viewed year
   const [viewStartDate, setViewStartDate] = useState(() => new Date(new Date().getFullYear(), 0, 1));
-  const [showSummary, setShowSummary] = useState(true);
-  const [showTeamRoster, setShowTeamRoster] = useState(true);
 
   // Tracks which month index (0–11) is currently dominant in the viewport
   const [visibleMonth, setVisibleMonth] = useState(startOfToday().getMonth());
@@ -249,24 +253,24 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
 
   const venueHireTintDates = useMemo(() => {
     const dates = new Set<string>();
-    venueHires.forEach(vh => {
+    activeVenueHires.forEach(vh => {
       const start = parseISO(vh.startDate);
       const end = parseISO(vh.endDate);
       const interval = eachDayOfInterval({ start, end });
       interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
     });
     return Array.from(dates);
-  }, [venueHires]);
+  }, [activeVenueHires]);
 
   const venueHireBoundaryDates = useMemo(() => {
     const start = new Set<string>();
     const end = new Set<string>();
-    venueHires.forEach(vh => {
+    activeVenueHires.forEach(vh => {
       start.add(format(parseISO(vh.startDate), 'yyyy-MM-dd'));
       end.add(format(parseISO(vh.endDate), 'yyyy-MM-dd'));
     });
     return { start: Array.from(start), end: Array.from(end) };
-  }, [venueHires]);
+  }, [activeVenueHires]);
 
   const retreatTintDates = useMemo(() => {
     const dates = new Set<string>();
@@ -316,7 +320,16 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
           {/* Header Row (Dates) */}
           <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-200 shadow-sm">
             <div className="w-28 sm:w-48 sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center p-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
+              {isAdmin ? (
+                <button
+                  onClick={() => handleAddBooking()}
+                  className="flex items-center justify-center gap-1 w-full px-2 py-2 bg-black text-white rounded-xl text-[10px] sm:text-xs font-bold hover:bg-gray-800 transition-colors"
+                >
+                  <Plus size={12} /> Add Booking
+                </button>
+              ) : (
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
+              )}
             </div>
             {days.map((day, idx) => (
               <div 
@@ -332,7 +345,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
           <RetreatBar 
             days={days} 
             retreats={retreats} 
-            venueHires={venueHires}
+            venueHires={activeVenueHires}
             onAdd={handleAddRetreat} 
             onEdit={handleEditRetreat} 
             onAddVenue={handleAddVenueHire}
@@ -362,7 +375,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
                       key={`room-${room.id}`} 
                       room={room} 
                       days={days} 
-                      bookings={bookings.filter(b => b.roomId === room.id)}
+                      bookings={activeBookings.filter(b => b.roomId === room.id)}
                       housekeepingStatus={housekeeping.find(h => h.roomId === room.id)?.status}
                       onEditRoom={() => handleEditRoom(room)}
                       onEditBooking={handleEditBooking}
@@ -382,7 +395,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
           {showSummary && (
             <SummaryRow 
               days={days} 
-              bookings={bookings} 
+              bookings={activeBookings} 
               rooms={rooms}
             />
           )}
@@ -401,40 +414,6 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         </div>
       </div>
 
-      <div className="h-12 border-t border-gray-200 bg-white flex items-center px-4 justify-between">
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-2">
-            <input 
-              type="checkbox" 
-              checked={showSummary} 
-              onChange={(e) => setShowSummary(e.target.checked)} 
-              id="summary-toggle"
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-            />
-            <label htmlFor="summary-toggle" className="cursor-pointer text-xs text-gray-400 font-medium">Summary</label>
-          </div>
-          <div className="flex items-center gap-2">
-            <input 
-              type="checkbox" 
-              checked={showTeamRoster} 
-              onChange={(e) => setShowTeamRoster(e.target.checked)} 
-              id="roster-toggle"
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-            />
-            <label htmlFor="roster-toggle" className="cursor-pointer text-xs text-gray-400 font-medium">Team Roster</label>
-          </div>
-        </div>
-
-        {isAdmin && (
-          <button 
-            onClick={() => handleAddBooking()}
-            className="flex items-center gap-1.5 px-5 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
-          >
-            <Plus size={14} /> Add Booking
-          </button>
-        )}
-      </div>
-
       <BookingModal 
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
@@ -446,6 +425,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         settings={settings}
         bookingTypes={bookingTypes}
         bookingChannels={bookingChannels}
+        paymentChannels={paymentChannels}
         isAdmin={isAdmin}
         currentUserName={profile?.name}
         currentUserEmail={profile?.email}
@@ -470,6 +450,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         venueHire={selectedVenueHire}
         rooms={rooms}
         bookingChannels={bookingChannels}
+        paymentChannels={paymentChannels}
         currentUserName={profile?.name}
         currentUserEmail={profile?.email}
       />

@@ -3,6 +3,7 @@ import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { HousekeepingRecord, HousekeepingHistoryEntry, Room, Booking } from '@/types';
 import { format, parseISO, startOfToday } from 'date-fns';
+import { isActiveLifecycle } from '@/lib/bookingLifecycle';
 
 export function useHousekeeping(rooms: Room[], bookings: Booking[], currentUserName?: string) {
   const [housekeeping, setHousekeeping] = useState<HousekeepingRecord[]>([]);
@@ -111,6 +112,7 @@ export function useHousekeeping(rooms: Room[], bookings: Booking[], currentUserN
     // rooms and bookings are stable within a single run — only housekeeping is re-read
     // fresh per room to avoid stale-capture clobbering concurrent user actions.
     const { rooms: currentRooms, bookings: currentBookings } = stateRef.current;
+    const activeBookings = currentBookings.filter(isActiveLifecycle);
     const today = startOfToday();
     const todayStr = format(today, 'yyyy-MM-dd');
 
@@ -119,7 +121,7 @@ export function useHousekeeping(rooms: Room[], bookings: Booking[], currentUserN
       // onSnapshot fire and update stateRef, so this reflects the latest known state.
       const liveHk = stateRef.current.housekeeping;
 
-      const checkoutToday = currentBookings.find(
+      const checkoutToday = activeBookings.find(
         b => b.roomId === room.id && b.checkOut === todayStr
       );
 
@@ -139,7 +141,7 @@ export function useHousekeeping(rooms: Room[], bookings: Booking[], currentUserN
       const liveHkAfter = stateRef.current.housekeeping;
       const record = liveHkAfter.find(h => h.roomId === room.id);
 
-      const nextCheckin = currentBookings
+      const nextCheckin = activeBookings
         .filter(b => b.roomId === room.id && parseISO(b.checkIn) >= today)
         .sort((a, b) => parseISO(a.checkIn).getTime() - parseISO(b.checkIn).getTime())[0]?.checkIn ?? null;
 

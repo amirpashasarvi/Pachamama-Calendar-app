@@ -5,10 +5,12 @@ import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire }
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
+import { calcTotalCommission } from '@/lib/commission';
 import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
+import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle';
 import CurrencyInput from '@/components/ui/CurrencyInput';
-import { Trash2, Save, Plus, X, AlertTriangle } from 'lucide-react';
+import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw } from 'lucide-react';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -20,10 +22,12 @@ interface BookingModalProps {
   settings: GlobalSettings | null;
   bookingTypes: ConfigOption[];
   bookingChannels: ConfigOption[];
+  paymentChannels: ConfigOption[];
   initialData?: Partial<Booking>;
   isAdmin?: boolean;
   currentUserName?: string;
   currentUserEmail?: string;
+  elevated?: boolean;
 }
 
 export default function BookingModal({ 
@@ -35,11 +39,13 @@ export default function BookingModal({
   settings, 
   bookingTypes, 
   bookingChannels, 
+  paymentChannels,
   venueHires = [],
   initialData,
   isAdmin = false,
   currentUserName = '',
   currentUserEmail = '',
+  elevated = false,
 }: BookingModalProps) {
   const INITIAL_BOOKING_STATE = {
     guestName: '',
@@ -64,6 +70,7 @@ export default function BookingModal({
     commissionCustomAmount: 0,
     source: '',
     bookingChannel: '',
+    paymentChannel: '',
     status: 'Unpaid' as BookingStatus,
     comments: ''
   };
@@ -74,7 +81,13 @@ export default function BookingModal({
   const [isSaving, setIsSaving] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirmCancel, setShowConfirmCancel] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isReactivating, setIsReactivating] = useState(false);
   const [showBedConfig, setShowBedConfig] = useState(false);
+
+  const isCancelled = isCancelledLifecycle(booking ?? {});
 
   useEffect(() => {
     if (booking) {
@@ -104,15 +117,24 @@ export default function BookingModal({
     setIsSaving(false);
     setShowConfirmDelete(false);
     setIsDeleting(false);
+    setShowConfirmCancel(false);
+    setIsCancelling(false);
+    setCancelReason('');
+    setIsReactivating(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id, initialData, isOpen]);
 
   useEffect(() => {
-    if (!showConfirmDelete) return;
-    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowConfirmDelete(false); };
+    if (!showConfirmDelete && !showConfirmCancel) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowConfirmDelete(false);
+        setShowConfirmCancel(false);
+      }
+    };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [showConfirmDelete]);
+  }, [showConfirmDelete, showConfirmCancel]);
 
   // Set default booking channel for new bookings
   useEffect(() => {
@@ -134,8 +156,10 @@ export default function BookingModal({
 
   const nights = calculateNights(formData.checkIn || '', formData.checkOut || '');
 
-  const selectedChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
-  const channelCommissionRate = selectedChannel?.commission ?? 0;
+  const selectedBookingChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
+  const selectedPaymentChannel = paymentChannels.find(c => c.name === formData.paymentChannel);
+  const bookingChannelRate = selectedBookingChannel?.commission ?? 0;
+  const paymentChannelRate = selectedPaymentChannel?.commission ?? 0;
 
   const commissionBase = formData.channelPaymentBasis === 'custom'
     ? (formData.commissionCustomAmount ?? 0)
@@ -143,25 +167,35 @@ export default function BookingModal({
       ? (formData.price || 0)
       : (formData.deposit || 0);
 
-  const liveCommission = useMemo(() => {
-    if (!channelCommissionRate) return 0;
-    const base = formData.channelPaymentBasis === 'custom'
-      ? (formData.commissionCustomAmount ?? 0)
-      : formData.channelPaymentBasis === 'bookingPrice'
-        ? (formData.price || 0)
-        : (formData.deposit || 0);
-    return (base * channelCommissionRate) / 100;
-  }, [formData.channelPaymentBasis, formData.price, formData.deposit, formData.commissionCustomAmount, channelCommissionRate]);
+  const liveCommission = useMemo(() => calcTotalCommission(
+    {
+      price: formData.price || 0,
+      deposit: formData.deposit || 0,
+      channelPaymentBasis: formData.channelPaymentBasis || 'bookingPrice',
+      commissionCustomAmount: formData.commissionCustomAmount,
+      bookingChannel: formData.bookingChannel || '',
+      paymentChannel: formData.paymentChannel || '',
+    },
+    bookingChannels,
+    paymentChannels
+  ), [
+    formData.channelPaymentBasis,
+    formData.price,
+    formData.deposit,
+    formData.commissionCustomAmount,
+    formData.bookingChannel,
+    formData.paymentChannel,
+    bookingChannels,
+    paymentChannels,
+  ]);
 
 
   const checkOverlaps = (targetRoomId: string) => {
     if (!targetRoomId || !formData.checkIn || !formData.checkOut) return null;
 
     const overlappingBooking = bookings.find(existing => {
-      // Skip the current booking being edited
       if (booking?.id && existing.id === booking.id) return false;
-      
-      // Only check target room
+      if (!isActiveLifecycle(existing)) return false;
       if (existing.roomId !== targetRoomId) return false;
 
       const newIn = formData.checkIn!;
@@ -183,6 +217,7 @@ export default function BookingModal({
   const getVenueHireOverlap = () => {
     if (!formData.checkIn || !formData.checkOut) return null;
     const vh = venueHires.find(vh => {
+      if (!isActiveLifecycle(vh)) return false;
       const newIn = formData.checkIn!;
       const newOut = formData.checkOut!;
       const vhIn = vh.startDate;
@@ -313,6 +348,69 @@ export default function BookingModal({
     }
   };
 
+  const handleCancelBooking = async () => {
+    if (!booking?.id || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        lifecycleStatus: 'cancelled',
+        cancelledAt: now,
+        cancellationReason: cancelReason.trim() || '',
+        updatedAt: now,
+      });
+      const roomName = rooms.find(r => r.id === booking.roomId)?.name ?? '';
+      logActivity({
+        action: 'cancelled',
+        entityType: 'booking',
+        entityId: booking.id,
+        summary: `Booking cancelled for ${booking.guestName}${roomName ? ` · ${roomName}` : ''}`,
+        userName: currentUserName || currentUserEmail,
+        userEmail: currentUserEmail,
+      });
+      setShowConfirmCancel(false);
+      onClose();
+    } catch (err) {
+      setIsCancelling(false);
+      const msg = err instanceof Error ? err.message : 'Failed to cancel booking.';
+      setError(msg);
+    }
+  };
+
+  const handleReactivateBooking = async () => {
+    if (!booking?.id || isReactivating) return;
+
+    const overlapMessage = checkOverlaps(booking.roomId);
+    if (overlapMessage) {
+      setError(`Cannot reactivate: ${overlapMessage}`);
+      return;
+    }
+
+    setIsReactivating(true);
+    try {
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        lifecycleStatus: 'active',
+        cancelledAt: null,
+        cancellationReason: '',
+        updatedAt: now,
+      });
+      logActivity({
+        action: 'reactivated',
+        entityType: 'booking',
+        entityId: booking.id,
+        summary: `Booking reactivated for ${booking.guestName}`,
+        userName: currentUserName || currentUserEmail,
+        userEmail: currentUserEmail,
+      });
+      onClose();
+    } catch (err) {
+      setIsReactivating(false);
+      const msg = err instanceof Error ? err.message : 'Failed to reactivate booking.';
+      setError(msg);
+    }
+  };
+
   const addExtra = () => {
     if ((formData.extras || []).length >= 5) return;
     setFormData(prev => ({
@@ -345,6 +443,29 @@ export default function BookingModal({
     <div className="flex items-center justify-between">
       {booking && isAdmin && (
         <div className="flex items-center gap-2">
+          {isCancelled ? (
+            <button
+              type="button"
+              onClick={handleReactivateBooking}
+              disabled={isReactivating}
+              className="flex items-center gap-2 px-4 py-3 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
+            >
+              {isReactivating ? (
+                <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-700 rounded-full animate-spin" />
+              ) : (
+                <RotateCcw size={16} />
+              )}
+              Reactivate
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowConfirmCancel(true)}
+              className="flex items-center gap-2 px-4 py-3 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors text-sm font-bold"
+            >
+              <Ban size={16} /> Cancel Booking
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowConfirmDelete(true)}
@@ -377,8 +498,17 @@ export default function BookingModal({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? 'Edit Booking' : 'Booking Details') : 'New Booking'} footer={modalFooter} dismissible={!error}>
+    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? (isCancelled ? 'Cancelled Booking' : 'Edit Booking') : 'Booking Details') : 'New Booking'} footer={modalFooter} dismissible={!error} elevated={elevated}>
       <form id="booking-form" onSubmit={handleSave} autoComplete="off" className="space-y-5">
+
+        {isCancelled && (
+          <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600">
+            This booking is cancelled and hidden from the calendar.
+            {booking?.cancellationReason && (
+              <span className="block mt-1 font-medium text-slate-500">Reason: {booking.cancellationReason}</span>
+            )}
+          </div>
+        )}
         
         {/* Basic Info */}
         <section className="space-y-3">
@@ -479,12 +609,15 @@ export default function BookingModal({
                 <DatePicker 
                   value={formData.checkIn || ''}
                   onChange={val => {
-                    const autoCheckOut = val ? format(addDays(parseISO(val), 6), 'yyyy-MM-dd') : '';
-                    setFormData(prev => ({
-                      ...prev,
-                      checkIn: val,
-                      checkOut: (!prev.checkOut || val >= prev.checkOut) ? autoCheckOut : prev.checkOut
-                    }));
+                    setFormData(prev => {
+                      const prevNights = calculateNights(prev.checkIn || '', prev.checkOut || '');
+                      const n = prevNights > 0 ? prevNights : 7;
+                      return {
+                        ...prev,
+                        checkIn: val,
+                        checkOut: val ? format(addDays(parseISO(val), n), 'yyyy-MM-dd') : '',
+                      };
+                    });
                     setError(null);
                   }}
                 />
@@ -512,8 +645,50 @@ export default function BookingModal({
                 </div>
               )}
             </div>
-            <div className="col-span-2 text-xs bg-sky-50 text-sky-700 px-3 py-1.5 rounded-lg font-bold">
-              Total Stay: {nights} nights
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Number of nights</label>
+              {isAdmin ? (
+                <div className="flex items-center w-full border border-gray-200 rounded-xl bg-gray-50 overflow-hidden">
+                  <button
+                    type="button"
+                    disabled={!formData.checkIn || nights <= 1}
+                    onClick={() => {
+                      if (!formData.checkIn) return;
+                      const newNights = Math.max(1, nights - 1);
+                      setFormData(prev => ({
+                        ...prev,
+                        checkOut: format(addDays(parseISO(prev.checkIn!), newNights), 'yyyy-MM-dd'),
+                      }));
+                      setError(null);
+                    }}
+                    className="px-4 py-2.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-r border-gray-200 font-bold text-lg leading-none"
+                  >
+                    −
+                  </button>
+                  <div className="flex-1 text-center text-sm font-bold text-gray-900 py-2.5">
+                    {nights}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!formData.checkIn}
+                    onClick={() => {
+                      if (!formData.checkIn) return;
+                      setFormData(prev => ({
+                        ...prev,
+                        checkOut: format(addDays(parseISO(prev.checkIn!), nights + 1), 'yyyy-MM-dd'),
+                      }));
+                      setError(null);
+                    }}
+                    className="px-4 py-2.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-l border-gray-200 font-bold text-lg leading-none"
+                  >
+                    +
+                  </button>
+                </div>
+              ) : (
+                <div className="px-3 py-2.5 bg-gray-100/50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 italic text-center">
+                  {nights} nights
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
@@ -754,17 +929,31 @@ export default function BookingModal({
               <div className="space-y-2 pt-2 border-t border-gray-100">
                 <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400">Channel &amp; Commission</h4>
 
-                {/* Row 1: Channel dropdown | basis pills | custom amount input */}
+                {/* Row 1: Booking + Payment channel dropdowns */}
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
                     value={formData.bookingChannel || ''}
                     onChange={e => setFormData({ ...formData, bookingChannel: e.target.value })}
+                    aria-label="Booking channel"
                   >
                     <option value="">Direct</option>
                     {bookingChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
 
+                  <select
+                    className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
+                    value={formData.paymentChannel || ''}
+                    onChange={e => setFormData({ ...formData, paymentChannel: e.target.value })}
+                    aria-label="Payment channel"
+                  >
+                    <option value="">Direct</option>
+                    {paymentChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Row 2: basis pills | custom amount input */}
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="flex gap-1 p-0.5 bg-gray-100 rounded-xl shrink-0">
                     {([
                       { value: 'bookingPrice', label: 'Full Booking' },
@@ -804,12 +993,24 @@ export default function BookingModal({
                   )}
                 </div>
 
-                {/* Row 2: Always-visible commission result — even for 0% / direct */}
-                <p className="text-xs text-gray-400 font-mono">
-                  {channelCommissionRate}% commission
-                  <span className="mx-1.5 text-gray-200">·</span>
-                  €{liveCommission.toFixed(2)}
-                </p>
+                {/* Row 3: Commission breakdown */}
+                <div className="space-y-0.5 text-xs text-gray-400 font-mono">
+                  <p>
+                    Booking channel {bookingChannelRate}% of base
+                    <span className="mx-1.5 text-gray-200">·</span>
+                    €{liveCommission.booking.toFixed(2)}
+                  </p>
+                  <p>
+                    Payment channel {paymentChannelRate}% of base
+                    <span className="mx-1.5 text-gray-200">·</span>
+                    €{liveCommission.payment.toFixed(2)}
+                  </p>
+                  <p className="font-bold text-gray-500">
+                    Total commission
+                    <span className="mx-1.5 text-gray-200">·</span>
+                    €{liveCommission.total.toFixed(2)}
+                  </p>
+                </div>
               </div>
 
             </div>
@@ -828,6 +1029,57 @@ export default function BookingModal({
         )}
 
       </form>
+
+      {/* Cancel confirmation overlay */}
+      {showConfirmCancel && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          onMouseDown={() => !isCancelling && setShowConfirmCancel(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm animate-in fade-in zoom-in-95 duration-150"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1 mb-4">
+              <h3 className="text-base font-bold text-gray-900">Cancel this booking?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                The booking will be removed from the calendar. Any deposit or payments received will count toward revenue on the check-in date.
+              </p>
+            </div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Reason (optional)</label>
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              rows={2}
+              className="w-full mb-5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-100 resize-none"
+              placeholder="Guest cancelled, date change, etc."
+            />
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmCancel(false)}
+                disabled={isCancelling}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Keep Booking
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelBooking}
+                disabled={isCancelling}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isCancelling ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Ban size={14} />
+                )}
+                {isCancelling ? 'Cancelling…' : 'Cancel Booking'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation overlay */}
       {showConfirmDelete && (

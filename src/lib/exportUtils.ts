@@ -1,5 +1,16 @@
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
+import {
+  PeriodRange,
+  stayTotalNights,
+} from '@/lib/prorate';
+import {
+  resolveReportingFinancials,
+  commissionForReporting,
+  getCollectedAmount,
+  getLifecycleStatus,
+} from '@/lib/bookingLifecycle';
+import { LifecycleStatus } from '@/types';
 
 // Wrap a field in quotes if it contains commas, quotes, or newlines
 function escapeField(value: string | number | null | undefined): string {
@@ -10,8 +21,6 @@ function escapeField(value: string | number | null | undefined): string {
   return str;
 }
 
-// Trigger a UTF-8 CSV file download in the browser
-// UTF-8 BOM (\uFEFF) ensures Excel opens the file with correct encoding
 function downloadCSV(filename: string, rows: (string | number | null | undefined)[][]): void {
   const csv = rows.map(row => row.map(escapeField).join(',')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -32,27 +41,36 @@ function fmtDate(iso: string | undefined): string {
   catch { return iso ?? ''; }
 }
 
-function calcNights(checkIn: string, checkOut: string): number {
-  try { return Math.max(0, differenceInDays(parseISO(checkOut), parseISO(checkIn))); }
-  catch { return 0; }
+function paymentBasisLabel(basis: string): string {
+  return basis === 'bookingPrice' ? 'Full Booking' : basis === 'deposit' ? 'Deposit Only' : 'Custom';
 }
 
-function calcCommission(
-  price: number,
-  deposit: number,
-  channelName: string,
-  paymentBasis: string,
-  channels: ConfigOption[],
-  customBase?: number
-): number {
-  const ch = channels.find(c => c.name === channelName);
-  if (!ch?.commission) return 0;
-  const base = paymentBasis === 'custom'
-    ? (customBase ?? 0)
-    : paymentBasis === 'bookingPrice'
-      ? price
-      : deposit;
-  return (base * ch.commission) / 100;
+function lifecycleLabel(status?: LifecycleStatus): string {
+  return getLifecycleStatus({ lifecycleStatus: status }) === 'cancelled' ? 'Cancelled' : 'Active';
+}
+
+function displayChannel(name: string | undefined): string {
+  return name || 'Direct';
+}
+
+function bookingFinancials(b: Booking) {
+  return {
+    price: b.price || 0,
+    extras: b.extras || [],
+    deposit: b.deposit || 0,
+    paidLater1: b.paidLater1 || 0,
+    paidLater2: b.paidLater2 || 0,
+  };
+}
+
+function venueFinancials(v: VenueHire) {
+  return {
+    price: v.bookingPrice || 0,
+    extras: v.extras || [],
+    deposit: v.deposit || 0,
+    paidLater1: v.paidLater1 || 0,
+    paidLater2: v.paidLater2 || 0,
+  };
 }
 
 // ── Bookings ──────────────────────────────────────────────────────────────────
@@ -60,36 +78,65 @@ function calcCommission(
 export function exportBookingsToCSV(
   bookings: Booking[],
   rooms: Room[],
-  channels: ConfigOption[]
+  bookingChannels: ConfigOption[],
+  paymentChannels: ConfigOption[],
+  period?: PeriodRange
 ): void {
   const headers = [
     'Guest Name', 'Additional Names', 'Type',
-    'Check In', 'Check Out', 'Nights',
+    'Check In', 'Check Out', 'Nights', 'Nights in Period',
     'Room', 'Adults', 'Kids', 'Total Guests',
     'Price (€)', 'Deposit (€)', 'Paid Later 1 (€)', 'Paid Later 2 (€)', 'Extras (€)',
     'Total (€)', 'Collected (€)', 'Remaining (€)', 'Commission (€)',
-    'Status', 'Booking Channel', 'Payment Basis',
+    'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Payment Basis',
     'Dietary', 'Bed Setting', 'Source', 'Notes', 'Created At',
   ];
 
   const rows = bookings.map(b => {
-    const extrasTotal = (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const total = (b.price || 0) + extrasTotal;
-    const collected = (b.deposit || 0) + (b.paidLater1 || 0) + (b.paidLater2 || 0);
-    const remaining = total - collected;
+    const financials = bookingFinancials(b);
+    const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, period ?? null, financials, b.lifecycleStatus);
+    const collected = getCollectedAmount(financials);
+    const comm = commissionForReporting(
+      {
+        price: b.price || 0,
+        deposit: b.deposit || 0,
+        channelPaymentBasis: b.channelPaymentBasis,
+        commissionCustomAmount: b.commissionCustomAmount,
+        bookingChannel: b.bookingChannel,
+        paymentChannel: b.paymentChannel,
+      },
+      collected,
+      bookingChannels,
+      paymentChannels,
+      b.checkIn,
+      b.checkOut,
+      period ?? null,
+      b.lifecycleStatus
+    );
     const room = rooms.find(r => r.id === b.roomId)?.name || '';
-        const commission = calcCommission(b.price || 0, b.deposit || 0, b.bookingChannel, b.channelPaymentBasis, channels, b.commissionCustomAmount);
+    const fullTotal = (b.price || 0) + (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
+    const status = b.lifecycleStatus === 'cancelled'
+      ? 'Cancelled'
+      : amounts.remaining <= 0 && fullTotal > 0 ? 'Paid'
+        : collected > 0 ? 'Partial' : 'Unpaid';
+    const extrasTotal = (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
 
     return [
       b.guestName, b.additionalNames, b.type,
-      fmtDate(b.checkIn), fmtDate(b.checkOut), calcNights(b.checkIn, b.checkOut),
+      fmtDate(b.checkIn), fmtDate(b.checkOut),
+      stayTotalNights(b.checkIn, b.checkOut),
+      amounts.overlapNights,
       room, b.adults, b.kids, b.totalGuests,
       (b.price || 0).toFixed(2), (b.deposit || 0).toFixed(2),
       (b.paidLater1 || 0).toFixed(2), (b.paidLater2 || 0).toFixed(2),
-      extrasTotal.toFixed(2), total.toFixed(2),
-      collected.toFixed(2), remaining.toFixed(2), commission.toFixed(2),
-      b.status, b.bookingChannel,
-           b.channelPaymentBasis === 'bookingPrice' ? 'Full Booking' : b.channelPaymentBasis === 'deposit' ? 'Deposit Only' : 'Custom',
+      extrasTotal.toFixed(2),
+      fullTotal.toFixed(2), collected.toFixed(2),
+      b.lifecycleStatus === 'cancelled' ? '0.00' : Math.max(0, fullTotal - collected).toFixed(2),
+      comm.total.toFixed(2),
+      lifecycleLabel(b.lifecycleStatus),
+      status,
+      displayChannel(b.bookingChannel), displayChannel(b.paymentChannel),
+      paymentBasisLabel(b.channelPaymentBasis),
       b.dietary, b.bedSetting, b.source, b.notes,
       fmtDate(b.createdAt),
     ];
@@ -102,32 +149,60 @@ export function exportBookingsToCSV(
 
 export function exportVenueHiresToCSV(
   venueHires: VenueHire[],
-  channels: ConfigOption[]
+  bookingChannels: ConfigOption[],
+  paymentChannels: ConfigOption[],
+  period?: PeriodRange
 ): void {
   const headers = [
-    'Event Name', 'Organizer', 'Start Date', 'End Date', 'Days', 'Guests',
+    'Event Name', 'Organizer', 'Start Date', 'End Date', 'Days', 'Days in Period', 'Guests',
     'Price (€)', 'Extras (€)', 'Total (€)',
     'Deposit (€)', 'Paid Later 1 (€)', 'Paid Later 2 (€)',
     'Collected (€)', 'Remaining (€)', 'Commission (€)',
-    'Status', 'Booking Channel', 'Payment Basis', 'Notes', 'Created At',
+    'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Payment Basis', 'Notes', 'Created At',
   ];
 
   const rows = venueHires.map(v => {
+    const financials = venueFinancials(v);
+    const amounts = resolveReportingFinancials(v.startDate, v.endDate, period ?? null, financials, v.lifecycleStatus);
+    const collected = getCollectedAmount(financials);
+    const comm = commissionForReporting(
+      {
+        price: v.bookingPrice || 0,
+        deposit: v.deposit || 0,
+        channelPaymentBasis: v.channelPaymentBasis,
+        commissionCustomAmount: v.commissionCustomAmount,
+        bookingChannel: v.bookingChannel,
+        paymentChannel: v.paymentChannel,
+      },
+      collected,
+      bookingChannels,
+      paymentChannels,
+      v.startDate,
+      v.endDate,
+      period ?? null,
+      v.lifecycleStatus
+    );
     const extrasTotal = (v.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const total = (v.bookingPrice || 0) + extrasTotal;
-    const collected = (v.deposit || 0) + (v.paidLater1 || 0) + (v.paidLater2 || 0);
-    const remaining = total - collected;
-        const commission = calcCommission(v.bookingPrice || 0, v.deposit || 0, v.bookingChannel, v.channelPaymentBasis, channels, v.commissionCustomAmount);
-    const status = remaining <= 0 && total > 0 ? 'Paid' : collected > 0 ? 'Partial' : 'Unpaid';
+    const fullTotal = (v.bookingPrice || 0) + extrasTotal;
+    const status = v.lifecycleStatus === 'cancelled'
+      ? 'Cancelled'
+      : collected >= fullTotal && fullTotal > 0 ? 'Paid'
+        : collected > 0 ? 'Partial' : 'Unpaid';
 
     return [
       v.name, v.organizer,
-      fmtDate(v.startDate), fmtDate(v.endDate), calcNights(v.startDate, v.endDate), v.guestCount,
-      (v.bookingPrice || 0).toFixed(2), extrasTotal.toFixed(2), total.toFixed(2),
+      fmtDate(v.startDate), fmtDate(v.endDate),
+      stayTotalNights(v.startDate, v.endDate),
+      amounts.overlapNights,
+      v.guestCount,
+      (v.bookingPrice || 0).toFixed(2), extrasTotal.toFixed(2), fullTotal.toFixed(2),
       (v.deposit || 0).toFixed(2), (v.paidLater1 || 0).toFixed(2), (v.paidLater2 || 0).toFixed(2),
-      collected.toFixed(2), remaining.toFixed(2), commission.toFixed(2),
-      status, v.bookingChannel,
-           v.channelPaymentBasis === 'bookingPrice' ? 'Full Booking' : v.channelPaymentBasis === 'deposit' ? 'Deposit Only' : 'Custom',
+      collected.toFixed(2),
+      v.lifecycleStatus === 'cancelled' ? '0.00' : Math.max(0, fullTotal - collected).toFixed(2),
+      comm.total.toFixed(2),
+      lifecycleLabel(v.lifecycleStatus),
+      status, displayChannel(v.bookingChannel), displayChannel(v.paymentChannel),
+      paymentBasisLabel(v.channelPaymentBasis),
       v.notes, fmtDate(v.createdAt),
     ];
   });
@@ -141,46 +216,90 @@ export function exportFinancialSummaryToCSV(
   bookings: Booking[],
   venueHires: VenueHire[],
   rooms: Room[],
-  channels: ConfigOption[]
+  bookingChannels: ConfigOption[],
+  paymentChannels: ConfigOption[],
+  period?: PeriodRange
 ): void {
   const headers = [
     'Record Type', 'Name / Guest', 'Booking Type',
-    'Start Date', 'End Date', 'Nights / Days',
+    'Start Date', 'End Date', 'Nights / Days', 'Nights in Period',
     'Room / Organizer', 'Revenue (€)', 'Collected (€)', 'Remaining (€)',
-    'Commission (€)', 'Status', 'Booking Channel', 'Created At',
+    'Commission (€)', 'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Created At',
   ];
 
   const bookingRows = bookings.map(b => {
-    const extrasTotal = (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const total = (b.price || 0) + extrasTotal;
-    const collected = (b.deposit || 0) + (b.paidLater1 || 0) + (b.paidLater2 || 0);
-    const remaining = total - collected;
+    const financials = bookingFinancials(b);
+    const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, period ?? null, financials, b.lifecycleStatus);
+    const collected = getCollectedAmount(financials);
+    const comm = commissionForReporting(
+      {
+        price: b.price || 0,
+        deposit: b.deposit || 0,
+        channelPaymentBasis: b.channelPaymentBasis,
+        commissionCustomAmount: b.commissionCustomAmount,
+        bookingChannel: b.bookingChannel,
+        paymentChannel: b.paymentChannel,
+      },
+      collected,
+      bookingChannels,
+      paymentChannels,
+      b.checkIn,
+      b.checkOut,
+      period ?? null,
+      b.lifecycleStatus
+    );
     const room = rooms.find(r => r.id === b.roomId)?.name || '';
-        const commission = calcCommission(b.price || 0, b.deposit || 0, b.bookingChannel, b.channelPaymentBasis, channels, b.commissionCustomAmount);
+    const status = b.lifecycleStatus === 'cancelled' ? 'Cancelled'
+      : amounts.remaining <= 0 && amounts.revenue > 0 ? 'Paid'
+        : collected > 0 ? 'Partial' : 'Unpaid';
     return [
       'Booking', b.guestName, b.type,
-      fmtDate(b.checkIn), fmtDate(b.checkOut), calcNights(b.checkIn, b.checkOut),
-      room, total.toFixed(2), collected.toFixed(2), remaining.toFixed(2),
-      commission.toFixed(2), b.status, b.bookingChannel, fmtDate(b.createdAt),
+      fmtDate(b.checkIn), fmtDate(b.checkOut),
+      stayTotalNights(b.checkIn, b.checkOut),
+      amounts.overlapNights,
+      room, amounts.revenue.toFixed(2), amounts.collected.toFixed(2), amounts.remaining.toFixed(2),
+      comm.total.toFixed(2), lifecycleLabel(b.lifecycleStatus), status,
+      displayChannel(b.bookingChannel), displayChannel(b.paymentChannel),
+      fmtDate(b.createdAt),
     ];
   });
 
   const venueRows = venueHires.map(v => {
-    const extrasTotal = (v.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const total = (v.bookingPrice || 0) + extrasTotal;
-    const collected = (v.deposit || 0) + (v.paidLater1 || 0) + (v.paidLater2 || 0);
-    const remaining = total - collected;
-        const commission = calcCommission(v.bookingPrice || 0, v.deposit || 0, v.bookingChannel, v.channelPaymentBasis, channels, v.commissionCustomAmount);
-    const status = remaining <= 0 && total > 0 ? 'Paid' : collected > 0 ? 'Partial' : 'Unpaid';
+    const financials = venueFinancials(v);
+    const amounts = resolveReportingFinancials(v.startDate, v.endDate, period ?? null, financials, v.lifecycleStatus);
+    const collected = getCollectedAmount(financials);
+    const comm = commissionForReporting(
+      {
+        price: v.bookingPrice || 0,
+        deposit: v.deposit || 0,
+        channelPaymentBasis: v.channelPaymentBasis,
+        commissionCustomAmount: v.commissionCustomAmount,
+        bookingChannel: v.bookingChannel,
+        paymentChannel: v.paymentChannel,
+      },
+      collected,
+      bookingChannels,
+      paymentChannels,
+      v.startDate,
+      v.endDate,
+      period ?? null,
+      v.lifecycleStatus
+    );
+    const status = v.lifecycleStatus === 'cancelled' ? 'Cancelled'
+      : amounts.remaining <= 0 && amounts.revenue > 0 ? 'Paid'
+        : collected > 0 ? 'Partial' : 'Unpaid';
     return [
       'Venue Hire', v.name, 'Venue Hire',
-      fmtDate(v.startDate), fmtDate(v.endDate), calcNights(v.startDate, v.endDate),
-      v.organizer, total.toFixed(2), collected.toFixed(2), remaining.toFixed(2),
-      commission.toFixed(2), status, v.bookingChannel, fmtDate(v.createdAt),
+      fmtDate(v.startDate), fmtDate(v.endDate),
+      stayTotalNights(v.startDate, v.endDate),
+      amounts.overlapNights,
+      v.organizer, amounts.revenue.toFixed(2), amounts.collected.toFixed(2), amounts.remaining.toFixed(2),
+      comm.total.toFixed(2), lifecycleLabel(v.lifecycleStatus), status,
+      displayChannel(v.bookingChannel), displayChannel(v.paymentChannel),
+      fmtDate(v.createdAt),
     ];
   });
 
-  // Sort combined rows by start date ascending
   const allRows = [...bookingRows, ...venueRows].sort((a, b) =>
     String(a[3]).localeCompare(String(b[3]))
   );

@@ -1,7 +1,7 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BarChart2, BrushCleaning, Bell, AlertTriangle, LayoutDashboard, Trash2, MessageSquare } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, List, BrushCleaning, Bell, AlertTriangle, BarChart3, Trash2, MessageSquare, Eye } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import SettingsModal from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
@@ -16,7 +16,7 @@ import { cn } from './lib/utils';
 
 function AppContent() {
   const { profile, logout, isAdmin } = useAuth();
-  const { bookingTypes, bookingChannels, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
+  const { bookingTypes, bookingChannels, paymentChannels, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
   const { housekeeping, updateStatus, checkAutoDirty } = useHousekeeping(rooms, bookings, profile?.name || profile?.email);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -27,13 +27,20 @@ function AppContent() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [showTeamRoster, setShowTeamRoster] = useState(false);
 
   // Close menus on click outside
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
+      }
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
+        setIsViewOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -71,6 +78,45 @@ function AppContent() {
                   </span>
                 )}
               </button>
+            </div>
+
+            {/* View — visible to all staff */}
+            <div className="relative border-l border-gray-100 ml-1 pl-2" ref={viewMenuRef}>
+              <button
+                onClick={() => setIsViewOpen(!isViewOpen)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
+                title="View"
+              >
+                <Eye size={18} />
+              </button>
+
+              {isViewOpen && (
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3 py-2 border-b border-gray-50">
+                    <span className="text-xs font-bold text-gray-500">Calendar View</span>
+                  </div>
+                  <div className="py-1 space-y-0.5">
+                    <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showSummary}
+                        onChange={(e) => setShowSummary(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Summary</span>
+                    </label>
+                    <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showTeamRoster}
+                        onChange={(e) => setShowTeamRoster(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Team Roster</span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Admin-only controls */}
@@ -191,16 +237,16 @@ function AppContent() {
                   <button
                     onClick={() => setIsDashboardOpen(true)}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
-                    title="Business Dashboard"
+                    title="Reports"
                   >
-                    <LayoutDashboard size={18} />
+                    <BarChart3 size={18} />
                   </button>
                   <button
                     onClick={() => setIsStatsOpen(true)}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
-                    title="Statistics"
+                    title="Booking List"
                   >
-                    <BarChart2 size={18} />
+                    <List size={18} />
                   </button>
                   <button
                     onClick={() => setIsTrashOpen(true)}
@@ -271,7 +317,13 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="flex-1 relative overflow-hidden">
-        <Calendar rooms={rooms} bookings={bookings} housekeeping={housekeeping} />
+        <Calendar
+          rooms={rooms}
+          bookings={bookings}
+          housekeeping={housekeeping}
+          showSummary={showSummary}
+          showTeamRoster={showTeamRoster}
+        />
       </main>
 
       <HousekeepingModal
@@ -298,6 +350,7 @@ function AppContent() {
             onClose={() => setIsSettingsOpen(false)}
             bookingTypes={bookingTypes}
             bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
             users={users}
             rooms={rooms}
             retreatTypes={retreatTypes}
@@ -311,6 +364,7 @@ function AppContent() {
             venueHires={venueHires}
             rooms={rooms}
             bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
           />
           <TrashedItemsModal
             isOpen={isTrashOpen}
@@ -327,6 +381,7 @@ function AppContent() {
             venueHires={venueHires}
             rooms={rooms}
             bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
           />
         </>
       )}
