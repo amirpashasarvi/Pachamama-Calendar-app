@@ -13,6 +13,11 @@ import { BookingDataProvider, useBooking } from './hooks/useBooking';
 import { useHousekeeping } from './hooks/useHousekeeping';
 import { useAlerts } from './hooks/useAlerts';
 import { cn } from './lib/utils';
+import {
+  loadCompactCalendarPreference,
+  saveCompactCalendarPreference,
+  calendarLayoutClasses,
+} from './lib/calendarLayout';
 
 function AppContent() {
   const { profile, logout, isAdmin } = useAuth();
@@ -30,6 +35,14 @@ function AppContent() {
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showTeamRoster, setShowTeamRoster] = useState(false);
+  const [compactCalendar, setCompactCalendar] = useState(loadCompactCalendarPreference);
+
+  const layout = calendarLayoutClasses(compactCalendar);
+
+  const handleCompactCalendarChange = (compact: boolean) => {
+    setCompactCalendar(compact);
+    saveCompactCalendarPreference(compact);
+  };
 
   // Close menus on click outside
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -48,17 +61,15 @@ function AppContent() {
   }, []);
 
   const { arrivalAlerts, balanceAlerts, noteAlerts, commentAlerts, criticalCount, totalCount } = useAlerts(bookings, rooms, housekeeping);
-  const dirtyRoomCount = housekeeping.filter(h => h.status !== 'clean').length;
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden print:h-auto print:overflow-visible">
       {/* Header bar */}
-      <header className="h-14 border-b flex items-center justify-between px-6 bg-white relative z-[150] print:hidden">
-        <div className="flex items-center gap-4">
-          <h1 className="font-bold text-xl tracking-tight">Pachamama</h1>
-          <span className="hidden md:block py-1 px-2.5 bg-gray-100 rounded text-[10px] font-bold uppercase tracking-wider text-gray-500">
-            Operations
-          </span>
+      <header className={cn('border-b flex items-center justify-between bg-white relative z-[150] print:hidden', layout.appHeader, layout.appHeaderPx)}>
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className={cn('font-bold tracking-tight leading-tight truncate', compactCalendar ? 'text-sm' : 'text-base sm:text-lg')}>
+            Pachamama Booking Management
+          </h1>
         </div>
 
         <div className="flex items-center gap-6">
@@ -68,15 +79,10 @@ function AppContent() {
             <div className="relative">
               <button
                 onClick={() => setIsHousekeepingOpen(true)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600 relative"
+                className={cn('hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600 relative', layout.appIconBtn)}
                 title="Housekeeping"
               >
-                <BrushCleaning size={18} />
-                {dirtyRoomCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white">
-                    {dirtyRoomCount}
-                  </span>
-                )}
+                <BrushCleaning size={layout.appIconSize} />
               </button>
             </div>
 
@@ -84,10 +90,10 @@ function AppContent() {
             <div className="relative border-l border-gray-100 ml-1 pl-2" ref={viewMenuRef}>
               <button
                 onClick={() => setIsViewOpen(!isViewOpen)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
+                className={cn('hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600', layout.appIconBtn)}
                 title="View"
               >
-                <Eye size={18} />
+                <Eye size={layout.appIconSize} />
               </button>
 
               {isViewOpen && (
@@ -96,6 +102,15 @@ function AppContent() {
                     <span className="text-xs font-bold text-gray-500">Calendar View</span>
                   </div>
                   <div className="py-1 space-y-0.5">
+                    <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={compactCalendar}
+                        onChange={(e) => handleCompactCalendarChange(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Compact calendar</span>
+                    </label>
                     <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
                       <input
                         type="checkbox"
@@ -112,7 +127,7 @@ function AppContent() {
                         onChange={(e) => setShowTeamRoster(e.target.checked)}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
                       />
-                      <span className="text-xs font-medium text-gray-700">Team Roster</span>
+                      <span className="text-xs font-medium text-gray-700">Staff & Volunteers</span>
                     </label>
                   </div>
                 </div>
@@ -128,10 +143,10 @@ function AppContent() {
                   <div className="relative">
                     <button
                       onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600 relative"
+                      className={cn('hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600 relative', layout.appIconBtn)}
                       title="Alerts"
                     >
-                      <Bell size={18} />
+                      <Bell size={layout.appIconSize} />
                       {criticalCount > 0 && (
                         <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white">
                           {criticalCount}
@@ -236,24 +251,24 @@ function AppContent() {
 
                   <button
                     onClick={() => setIsDashboardOpen(true)}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
+                    className={cn('hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600', layout.appIconBtn)}
                     title="Reports"
                   >
-                    <BarChart3 size={18} />
+                    <BarChart3 size={layout.appIconSize} />
                   </button>
                   <button
                     onClick={() => setIsStatsOpen(true)}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
+                    className={cn('hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600', layout.appIconBtn)}
                     title="Booking List"
                   >
-                    <List size={18} />
+                    <List size={layout.appIconSize} />
                   </button>
                   <button
                     onClick={() => setIsTrashOpen(true)}
-                    className="relative p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-rose-500"
+                    className={cn('relative hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-rose-500', layout.appIconBtn)}
                     title="Recently Deleted"
                   >
-                    <Trash2 size={18} />
+                    <Trash2 size={layout.appIconSize} />
                     {(deletedBookings.length + deletedVenueHires.length) > 0 && (
                       <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
                     )}
@@ -264,10 +279,10 @@ function AppContent() {
                 <div className="flex items-center border-l border-gray-100 ml-1 pl-2">
                   <button
                     onClick={() => setIsSettingsOpen(true)}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600"
+                    className={cn('hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600', layout.appIconBtn)}
                     title="Settings"
                   >
-                    <Settings size={18} />
+                    <Settings size={layout.appIconSize} />
                   </button>
                 </div>
               </>
@@ -323,6 +338,7 @@ function AppContent() {
           housekeeping={housekeeping}
           showSummary={showSummary}
           showTeamRoster={showTeamRoster}
+          compact={compactCalendar}
         />
       </main>
 

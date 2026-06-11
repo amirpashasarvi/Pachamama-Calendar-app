@@ -1,5 +1,7 @@
 import { addYears, subYears } from 'date-fns';
 import { ChevronLeft, ChevronRight, Printer } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { calendarLayoutClasses } from '@/lib/calendarLayout';
 
 interface HeaderProps {
   viewStartDate: Date;
@@ -7,49 +9,53 @@ interface HeaderProps {
   onToday: () => void;
   onScrollToDate: (date: Date) => void;
   visibleMonth: number;
+  compact?: boolean;
 }
 
-export default function Header({ viewStartDate, setViewStartDate, onToday, onScrollToDate, visibleMonth }: HeaderProps) {
+export default function Header({ viewStartDate, setViewStartDate, onToday, onScrollToDate, visibleMonth, compact = true }: HeaderProps) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const viewYear = viewStartDate.getFullYear();
+  const layout = calendarLayoutClasses(compact);
+
+  const monthBtnClass = (active: boolean) => cn(
+    layout.monthBtn,
+    active ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'
+  );
 
   return (
     <div className="bg-[#f0f2f5] border-b print:hidden">
-      {/* Main controls row */}
-      <div className="h-14 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2 sm:gap-4">
+      <div className={cn('flex items-center justify-between px-4', layout.calHeaderRow)}>
+        <div className="flex items-center gap-2 sm:gap-3">
 
-          {/* Year Navigator */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewStartDate(subYears(viewStartDate, 1))}
-              className="p-2 sm:p-1 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+              className="p-1.5 sm:p-1 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={compact ? 12 : 14} />
             </button>
-            <span className="text-sm font-bold px-2 min-w-[44px] text-center">{viewYear}</span>
+            <span className={cn('font-bold px-2 min-w-[44px] text-center', compact ? 'text-xs' : 'text-sm')}>{viewYear}</span>
             <button
               onClick={() => setViewStartDate(addYears(viewStartDate, 1))}
-              className="p-2 sm:p-1 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+              className="p-1.5 sm:p-1 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={compact ? 12 : 14} />
             </button>
           </div>
 
           <button
             onClick={onToday}
-            className="text-xs font-bold px-3 py-2 sm:py-1 border border-gray-400 rounded hover:bg-gray-200 active:scale-95 transition-transform text-gray-700 uppercase"
+            className={cn('font-bold border border-gray-400 rounded hover:bg-gray-200 active:scale-95 transition-transform text-gray-700 uppercase', layout.todayBtn)}
           >
             today
           </button>
 
-          {/* Month shortcuts — desktop */}
-          <div className="hidden sm:flex items-center gap-1 ml-2">
+          <div className="hidden sm:flex items-center gap-0.5 ml-1">
             {months.map((m, i) => (
               <button
                 key={m}
                 onClick={() => onScrollToDate(new Date(viewYear, i, 1))}
-                className={`px-3 py-1.5 rounded-md text-sm font-bold transition-all ${i === visibleMonth ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'}`}
+                className={monthBtnClass(i === visibleMonth)}
               >
                 {m}
               </button>
@@ -57,23 +63,21 @@ export default function Header({ viewStartDate, setViewStartDate, onToday, onScr
           </div>
         </div>
 
-        {/* Print button */}
         <button
-          className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
+          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
           title="Print Calendar"
           onClick={() => window.print()}
         >
-          <Printer size={18} />
+          <Printer size={compact ? 16 : 18} />
         </button>
       </div>
 
-      {/* Mobile-only month shortcuts — horizontally scrollable */}
-      <div className="flex sm:hidden overflow-x-auto px-2 pb-2 gap-0.5">
+      <div className={cn('flex sm:hidden overflow-x-auto px-2 gap-0.5', compact ? 'pb-1' : 'pb-2')}>
         {months.map((m, i) => (
           <button
             key={m}
             onClick={() => onScrollToDate(new Date(viewYear, i, 1))}
-            className={`shrink-0 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${i === visibleMonth ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'}`}
+            className={cn('shrink-0', monthBtnClass(i === visibleMonth))}
           >
             {m}
           </button>

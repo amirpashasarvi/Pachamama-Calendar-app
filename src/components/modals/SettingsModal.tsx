@@ -427,11 +427,11 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           )}
         </div>
 
-        {/* Team Roster Bars Section */}
+        {/* Staff & Volunteers Bars Section */}
         <div className="space-y-4">
           <div>
-            <h4 className="text-sm font-bold text-gray-900 mb-1">Team Roster Bars</h4>
-            <p className="text-[10px] text-gray-500">Customize fields for team assignment bars</p>
+            <h4 className="text-sm font-bold text-gray-900 mb-1">Staff & Volunteers Bars</h4>
+            <p className="text-[10px] text-gray-500">Customize fields for staff & volunteer assignment bars</p>
           </div>
 
           <div className="space-y-2">
@@ -1041,7 +1041,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
           <ChevronLeft size={20} className="text-gray-500" />
         </button>
-        <h3 className="font-bold text-lg">Team Roster</h3>
+        <h3 className="font-bold text-lg">Staff & Volunteers</h3>
       </div>
 
       {!isAdding && !editingId && (
@@ -1178,7 +1178,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Operational Settings">
+    <Modal isOpen={isOpen} onClose={onClose} title="Settings">
       <div className="min-h-[400px]">
         {view === 'menu' && (
           <div className="space-y-1 animate-in fade-in slide-in-from-left-4 duration-200">
@@ -1249,8 +1249,8 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
-                <h4 className="font-bold text-gray-900">Team Roster</h4>
-                <p className="text-xs text-gray-500">Staff positions and calendar assignments</p>
+                <h4 className="font-bold text-gray-900">Staff & Volunteers</h4>
+                <p className="text-xs text-gray-500">Staff & volunteer positions and calendar assignments</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { X, BarChart3 } from 'lucide-react';
+import { X, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
 import DatePicker from '@/components/ui/DatePicker';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
-import { useDashboardStats, DashboardPeriod, UpcomingItem } from '@/hooks/useDashboardStats';
+import { useDashboardStats, UpcomingItem } from '@/hooks/useDashboardStats';
 import { cn, formatCurrency } from '@/lib/utils';
-import { format, parseISO, subMonths } from 'date-fns';
+import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
+import { MONTH_LABELS, FILTER_CTRL, monthRange, isFullMonthRange } from '@/lib/reportPeriod';
 
 interface DashboardModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface DashboardModalProps {
 }
 
 type Tab = 'overview' | 'retreats' | 'coliving' | 'venue' | 'exchange';
+type Period = 'All' | 'Month';
 
 // ── Shared UI primitives ──────────────────────────────────────────────────────
 
@@ -338,28 +340,40 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'exchange', label: 'Home Exchange' },
 ];
 
-const PERIODS: { id: DashboardPeriod; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: '1m', label: '1M' },
-  { id: '3m', label: '3M' },
-  { id: '6m', label: '6M' },
-  { id: '12m', label: '12M' },
-  { id: 'custom', label: 'Custom' },
-];
-
 export default function DashboardModal({
   isOpen, onClose, bookings, venueHires, rooms, bookingChannels, paymentChannels,
 }: DashboardModalProps) {
+  const now = new Date();
   const [tab, setTab] = useState<Tab>('overview');
-  const [period, setPeriod] = useState<DashboardPeriod>('1m');
-  const [customRange, setCustomRange] = useState<{ from: string; to: string }>({
-    from: format(subMonths(new Date(), 1), 'yyyy-MM-dd'),
-    to: format(new Date(), 'yyyy-MM-dd'),
-  });
+  const [period, setPeriod] = useState<Period>('Month');
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [dateRange, setDateRange] = useState(() => monthRange(now.getFullYear(), now.getMonth()));
+
+  const selectMonth = (year: number, month: number) => {
+    setSelectedYear(year);
+    setSelectedMonth(month);
+    setDateRange(monthRange(year, month));
+    setPeriod('Month');
+  };
+
+  const periodRange = useMemo(() => {
+    if (period === 'All') return null;
+    if (dateRange.from && dateRange.to) {
+      return {
+        start: startOfDay(parseISO(dateRange.from)),
+        end: endOfDay(parseISO(dateRange.to)),
+      };
+    }
+    const fallback = monthRange(selectedYear, selectedMonth);
+    return {
+      start: startOfDay(parseISO(fallback.from)),
+      end: endOfDay(parseISO(fallback.to)),
+    };
+  }, [period, dateRange, selectedYear, selectedMonth]);
 
   const stats = useDashboardStats(
-    bookings, venueHires, rooms, bookingChannels, paymentChannels, period,
-    period === 'custom' ? customRange : undefined
+    bookings, venueHires, rooms, bookingChannels, paymentChannels, periodRange,
   );
 
   return (
@@ -385,44 +399,96 @@ export default function DashboardModal({
           </header>
 
           {/* Period filter */}
-          <div className="bg-white border-b px-4 sm:px-8 py-2 flex flex-wrap items-center gap-3 shrink-0">
-            <span className="text-xs font-medium text-gray-400 shrink-0">Period:</span>
-            <div className="flex flex-wrap gap-1 p-1 bg-gray-50 border rounded-xl">
-              {PERIODS.map(p => (
+          <div className="bg-white border-b px-4 sm:px-8 py-3 shrink-0">
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold text-gray-400">Period</span>
+              <div className="flex flex-wrap items-center gap-2 min-h-7">
                 <button
-                  key={p.id}
-                  onClick={() => setPeriod(p.id)}
+                  type="button"
+                  onClick={() => setPeriod('All')}
                   className={cn(
-                    'px-3 py-1 rounded-lg text-xs font-bold transition-all',
-                    period === p.id ? 'bg-black text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    FILTER_CTRL,
+                    'transition-all shrink-0 inline-flex items-center',
+                    period === 'All'
+                      ? 'bg-black text-white border-black'
+                      : 'text-gray-500 hover:text-gray-900'
                   )}
                 >
-                  {p.label}
+                  All
                 </button>
-              ))}
-            </div>
-            {period === 'custom' && (
-              <div className="flex items-center gap-2 bg-white border p-1 rounded-xl shadow-sm">
-                <DatePicker
-                  value={customRange.from}
-                  onChange={val => {
-                    setCustomRange(prev => ({
-                      ...prev,
-                      from: val,
-                      to: (prev.to && val >= prev.to) ? '' : prev.to,
-                    }));
-                  }}
-                  className="border-none bg-transparent h-auto p-0 focus-within:ring-0"
-                />
-                <span className="text-gray-300">→</span>
-                <DatePicker
-                  value={customRange.to}
-                  min={customRange.from ? new Date(new Date(customRange.from).getTime() + 86400000).toISOString().split('T')[0] : ''}
-                  onChange={val => setCustomRange(prev => ({ ...prev, to: val }))}
-                  className="border-none bg-transparent h-auto p-0 focus-within:ring-0"
-                />
+
+                <div className="flex items-center h-7 gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const y = selectedYear - 1;
+                      setSelectedYear(y);
+                      if (period === 'Month') selectMonth(y, selectedMonth);
+                    }}
+                    className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="text-xs font-bold px-1 min-w-[36px] text-center leading-none">{selectedYear}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const y = selectedYear + 1;
+                      setSelectedYear(y);
+                      if (period === 'Month') selectMonth(y, selectedMonth);
+                    }}
+                    className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-0.5 min-w-0">
+                  {MONTH_LABELS.map((m, i) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => selectMonth(selectedYear, i)}
+                      className={cn(
+                        'h-7 px-2 inline-flex items-center rounded-lg text-[11px] font-bold transition-all',
+                        period === 'Month' && isFullMonthRange(dateRange.from, dateRange.to, selectedYear, i)
+                          ? 'bg-green-600 text-white shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center h-7 gap-1 bg-white border border-gray-200 px-1.5 rounded-lg shadow-sm shrink-0">
+                  <DatePicker
+                    compact
+                    value={dateRange.from}
+                    onChange={val => {
+                      setPeriod('Month');
+                      setDateRange(prev => ({
+                        ...prev,
+                        from: val,
+                        to: (prev.to && val >= prev.to) ? '' : prev.to,
+                      }));
+                    }}
+                    className="w-[88px] [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none [&>div]:focus-within:ring-0"
+                  />
+                  <span className="text-gray-300 text-[10px]">→</span>
+                  <DatePicker
+                    compact
+                    value={dateRange.to}
+                    min={dateRange.from ? new Date(new Date(dateRange.from).getTime() + 86400000).toISOString().split('T')[0] : ''}
+                    onChange={val => {
+                      setPeriod('Month');
+                      setDateRange(prev => ({ ...prev, to: val }));
+                    }}
+                    className="w-[88px] [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none [&>div]:focus-within:ring-0"
+                  />
+                </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Tabs */}

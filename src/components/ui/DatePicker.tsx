@@ -25,11 +25,12 @@ interface DatePickerProps {
   placeholder?: string;
   required?: boolean;
   className?: string;
+  compact?: boolean;
 }
 
 const DROPDOWN_HEIGHT = 380;
 
-export default function DatePicker({ value, onChange, min, defaultMonth, placeholder, required, className }: DatePickerProps) {
+export default function DatePicker({ value, onChange, min, defaultMonth, placeholder, required, className, compact = false }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const initialMonth = value ? parseISO(value) : (defaultMonth && isValid(parseISO(defaultMonth)) ? parseISO(defaultMonth) : startOfToday());
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
@@ -194,12 +195,15 @@ export default function DatePicker({ value, onChange, min, defaultMonth, placeho
     <div className={cn("relative", className)} ref={containerRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full px-4 py-2 bg-gray-50 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500 cursor-pointer transition-all"
+        className={cn(
+          'flex items-center justify-between w-full bg-gray-50 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500 cursor-pointer transition-all',
+          compact ? 'px-2 py-0.5 gap-1' : 'px-4 py-2'
+        )}
       >
-        <span className={cn("text-sm", !value && "text-gray-400")}>
-          {value ? format(parseISO(value), 'dd.MM.yyyy') : (placeholder || 'Select date')}
+        <span className={cn(compact ? 'text-[11px]' : 'text-sm', !value && 'text-gray-400')}>
+          {value ? format(parseISO(value), compact ? 'dd.MM.yy' : 'dd.MM.yyyy') : (placeholder || 'Select date')}
         </span>
-        <CalendarIcon size={16} className="text-gray-400" />
+        <CalendarIcon size={compact ? 12 : 16} className="text-gray-400 shrink-0" />
       </div>
 
       {createPortal(dropdown, document.body)}

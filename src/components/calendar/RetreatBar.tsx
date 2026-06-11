@@ -1,6 +1,8 @@
 import { isSameDay, isAfter, isBefore, differenceInDays, isWeekend } from 'date-fns';
 import { Retreat, VenueHire } from '@/types';
 import { Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { calendarLayoutClasses } from '@/lib/calendarLayout';
 
 interface RetreatBarProps {
   days: Date[];
@@ -10,6 +12,7 @@ interface RetreatBarProps {
   onEdit: (retreat: Retreat) => void;
   onAddVenue: () => void;
   onEditVenue: (venueHire: VenueHire) => void;
+  compact?: boolean;
 }
 
 function diagonalClip(width: number, slope = 6): string {
@@ -21,15 +24,16 @@ function diagonalClip(width: number, slope = 6): string {
   return `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
 }
 
-export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue }: RetreatBarProps) {
+export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue, compact = true }: RetreatBarProps) {
   const dayWidth = 56;
   const calendarStart = days[0];
   const calendarEnd = days[days.length - 1];
+  const layout = calendarLayoutClasses(compact);
 
   return (
-    <div className="flex h-12 border-b border-gray-400 sticky top-12 z-[85] bg-gray-200 group border-l border-gray-400">
+    <div className={cn('flex h-12 border-b border-gray-400 sticky z-[85] bg-gray-200 group border-l border-gray-400', layout.retreatStickyTop)}>
       <div 
-        className="w-28 sm:w-48 sticky left-0 z-[80] bg-gray-200 border-r border-gray-400 p-2 flex flex-col justify-center gap-1 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+        className={cn('sticky left-0 z-[80] bg-gray-200 border-r border-gray-400 p-2 flex flex-col justify-center gap-1 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]', layout.roomLabelCol)}
       >
         <button 
           onClick={onAdd}

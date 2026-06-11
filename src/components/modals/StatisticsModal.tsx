@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Download, Search, List, Pencil } from 'lucide-react';
+import { X, Download, Search, List, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DatePicker from '@/components/ui/DatePicker';
 import BookingModal from '@/components/modals/BookingModal';
@@ -14,12 +14,15 @@ import {
   isCancelledLifecycle,
   checkInInPeriod,
 } from '@/lib/bookingLifecycle';
+import { MONTH_LABELS, FILTER_CTRL, monthRange, isFullMonthRange } from '@/lib/reportPeriod';
 import { exportBookingsToCSV, exportVenueHiresToCSV, exportFinancialSummaryToCSV } from '@/lib/exportUtils';
 import { 
   format, 
   subMonths, 
   startOfDay, 
-  endOfDay, 
+  endOfDay,
+  startOfMonth,
+  endOfMonth,
   parseISO, 
 } from 'date-fns';
 
@@ -33,20 +36,20 @@ interface StatisticsModalProps {
   paymentChannels: ConfigOption[];
 }
 
-type Period = 'All' | '1M' | '3M' | '6M' | '12M' | 'Custom';
+type Period = 'All' | 'Month';
 
 export default function StatisticsModal({ isOpen, onClose, bookings, venueHires = [], rooms, bookingChannels, paymentChannels }: StatisticsModalProps) {
   const { settings, bookingTypes } = useBooking();
   const { isAdmin, profile } = useAuth();
 
-  const [period, setPeriod] = useState<Period>('1M');
+  const now = new Date();
+  const [period, setPeriod] = useState<Period>('Month');
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [roomFilter, setRoomFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'checkIn' | 'createdAt'>('checkIn');
   const [searchQuery, setSearchQuery] = useState('');
-  const [customRange, setCustomRange] = useState<{ from: string; to: string }>({
-    from: format(subMonths(new Date(), 1), 'yyyy-MM-dd'),
-    to: format(new Date(), 'yyyy-MM-dd')
-  });
+  const [dateRange, setDateRange] = useState(() => monthRange(now.getFullYear(), now.getMonth()));
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
   const [showCancelled, setShowCancelled] = useState(false);
@@ -110,9 +113,16 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     return [...mappedBookings, ...mappedVenueHires];
   }, [bookings, venueHires]);
 
+  const selectMonth = (year: number, month: number) => {
+    setSelectedYear(year);
+    setSelectedMonth(month);
+    setDateRange(monthRange(year, month));
+    setPeriod('Month');
+  };
+
   const { startDate, endDate, filteredItems } = useMemo(() => {
     let start: Date;
-    let end = endOfDay(new Date());
+    let end: Date;
 
     if (period === 'All') {
       const allCheckIns = combinedItems.map(b => parseISO(b.checkIn)).filter(d => !isNaN(d.getTime()));
@@ -120,12 +130,13 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       
       start = allCheckIns.length > 0 ? startOfDay(new Date(Math.min(...allCheckIns.map(d => d.getTime())))) : startOfDay(subMonths(new Date(), 1));
       end = allCheckOuts.length > 0 ? endOfDay(new Date(Math.max(...allCheckOuts.map(d => d.getTime())))) : endOfDay(new Date());
-    } else if (period === 'Custom') {
-      start = startOfDay(parseISO(customRange.from));
-      end = endOfDay(parseISO(customRange.to));
+    } else if (dateRange.from && dateRange.to) {
+      start = startOfDay(parseISO(dateRange.from));
+      end = endOfDay(parseISO(dateRange.to));
     } else {
-      const months = parseInt(period);
-      start = startOfDay(subMonths(new Date(), months));
+      const fallback = monthRange(selectedYear, selectedMonth);
+      start = startOfDay(parseISO(fallback.from));
+      end = endOfDay(parseISO(fallback.to));
     }
 
     const filtered = combinedItems.filter(b => {
@@ -159,7 +170,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     });
 
     return { startDate: start, endDate: end, filteredItems: sorted };
-  }, [period, roomFilter, sortBy, customRange, combinedItems, showCancelled]);
+  }, [period, roomFilter, sortBy, dateRange, combinedItems, showCancelled, selectedYear, selectedMonth]);
 
   const periodRange = useMemo(
     () => ({ start: startDate, end: endDate }),
@@ -259,59 +270,103 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
           <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-8">
             {/* Filters */}
-            <div className="flex flex-wrap items-center justify-between gap-6 pb-2">
-              <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pb-2">
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
                 <span className="text-xs font-bold text-gray-400">Period</span>
-                <div className="flex p-1 bg-white border rounded-xl shadow-sm">
-                  {(['All', '1M', '3M', '6M', '12M', 'Custom'] as Period[]).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPeriod(p)}
-                      className={cn(
-                        "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
-                        period === p 
-                          ? "bg-black text-white shadow-md" 
-                          : "text-gray-500 hover:text-gray-900"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                <div className="flex flex-wrap items-center gap-2 min-h-7">
+                  <button
+                    type="button"
+                    onClick={() => setPeriod('All')}
+                    className={cn(
+                      FILTER_CTRL,
+                      'transition-all shrink-0 inline-flex items-center',
+                      period === 'All'
+                        ? 'bg-black text-white border-black'
+                        : 'text-gray-500 hover:text-gray-900'
+                    )}
+                  >
+                    All
+                  </button>
 
-              {period === 'Custom' && (
-                <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2 transition-all">
-                  <span className="text-xs font-bold text-gray-400">Custom Dates</span>
-                  <div className="flex items-center gap-2 bg-white border p-1 rounded-xl shadow-sm">
-                    <DatePicker 
-                      value={customRange.from}
+                  <div className="flex items-center h-7 gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const y = selectedYear - 1;
+                        setSelectedYear(y);
+                        if (period === 'Month') selectMonth(y, selectedMonth);
+                      }}
+                      className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="text-xs font-bold px-1 min-w-[36px] text-center leading-none">{selectedYear}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const y = selectedYear + 1;
+                        setSelectedYear(y);
+                        if (period === 'Month') selectMonth(y, selectedMonth);
+                      }}
+                      className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-0.5 min-w-0">
+                    {MONTH_LABELS.map((m, i) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => selectMonth(selectedYear, i)}
+                        className={cn(
+                          'h-7 px-2 inline-flex items-center rounded-lg text-[11px] font-bold transition-all',
+                          period === 'Month' && isFullMonthRange(dateRange.from, dateRange.to, selectedYear, i)
+                            ? 'bg-green-600 text-white shadow-sm'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        )}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center h-7 gap-1 bg-white border border-gray-200 px-1.5 rounded-lg shadow-sm shrink-0">
+                    <DatePicker
+                      compact
+                      value={dateRange.from}
                       onChange={val => {
-                        setCustomRange(prev => ({
+                        setPeriod('Month');
+                        setDateRange(prev => ({
                           ...prev,
                           from: val,
-                          to: (prev.to && val >= prev.to) ? '' : prev.to
+                          to: (prev.to && val >= prev.to) ? '' : prev.to,
                         }));
                       }}
-                      className="border-none bg-transparent h-auto p-0 focus-within:ring-0"
+                      className="w-[88px] [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none [&>div]:focus-within:ring-0"
                     />
-                    <span className="text-gray-300">→</span>
-                    <DatePicker 
-                      value={customRange.to}
-                      min={customRange.from ? new Date(new Date(customRange.from).getTime() + 86400000).toISOString().split('T')[0] : ''}
-                      onChange={val => setCustomRange(prev => ({ ...prev, to: val }))}
-                      className="border-none bg-transparent h-auto p-0 focus-within:ring-0"
+                    <span className="text-gray-300 text-[10px]">→</span>
+                    <DatePicker
+                      compact
+                      value={dateRange.to}
+                      min={dateRange.from ? new Date(new Date(dateRange.from).getTime() + 86400000).toISOString().split('T')[0] : ''}
+                      onChange={val => {
+                        setPeriod('Month');
+                        setDateRange(prev => ({ ...prev, to: val }));
+                      }}
+                      className="w-[88px] [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none [&>div]:focus-within:ring-0"
                     />
                   </div>
                 </div>
-              )}
+              </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 shrink-0">
                 <span className="text-xs font-bold text-gray-400">Room Filter</span>
                 <select
                   value={roomFilter}
                   onChange={e => setRoomFilter(e.target.value)}
-                  className="px-4 py-2 bg-white border rounded-xl shadow-sm text-xs font-bold outline-none cursor-pointer hover:border-gray-300 transition-colors"
+                  className={cn(FILTER_CTRL, 'outline-none cursor-pointer hover:border-gray-300 transition-colors min-w-[120px]')}
                 >
                   <option value="all">All Rooms</option>
                   {rooms.map(room => (
@@ -320,16 +375,17 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                 </select>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 shrink-0">
                 <span className="text-xs font-bold text-gray-400">Cancelled</span>
                 <button
                   type="button"
                   onClick={() => setShowCancelled(v => !v)}
                   className={cn(
-                    'px-4 py-2 border rounded-xl shadow-sm text-xs font-bold transition-colors',
+                    FILTER_CTRL,
+                    'inline-flex items-center transition-colors whitespace-nowrap',
                     showCancelled
                       ? 'bg-slate-800 text-white border-slate-800'
-                      : 'bg-white text-gray-500 hover:text-gray-900 hover:border-gray-300'
+                      : 'text-gray-500 hover:text-gray-900 hover:border-gray-300'
                   )}
                 >
                   {showCancelled ? 'Showing cancelled' : 'Show cancelled'}
@@ -494,12 +550,29 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-gray-50/80 font-black">
-                      <td colSpan={3} className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400">Visible Totals</td>
-                      <td className="px-6 py-4 text-right text-sm">€{listTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-600">€{listTotals.paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 text-right text-sm text-amber-600">
-                        {listTotals.remaining > 0 ? `€${listTotals.remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    <tr className="border-t-2 border-gray-200 bg-gray-100">
+                      <td colSpan={3} className="px-6 py-5 text-xs font-black uppercase tracking-widest text-gray-900">
+                        Visible Totals
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        <span className="text-base font-black text-gray-900 tabular-nums">
+                          €{listTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        <span className="text-base font-black text-gray-700 tabular-nums">
+                          €{listTotals.paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        <span className={cn(
+                          'text-base font-black tabular-nums',
+                          listTotals.remaining > 0 ? 'text-amber-700' : 'text-green-700'
+                        )}>
+                          {listTotals.remaining > 0
+                            ? `€${listTotals.remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : '—'}
+                        </span>
                       </td>
                       <td colSpan={2}></td>
                     </tr>

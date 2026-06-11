@@ -1,4 +1,4 @@
-import { addDays, differenceInDays, endOfDay, parseISO, startOfDay, subMonths } from 'date-fns';
+import { addDays, differenceInDays, endOfDay, parseISO, startOfDay } from 'date-fns';
 import { calcTotalCommission, CommissionInput } from '@/lib/commission';
 import { ConfigOption } from '@/types';
 
@@ -23,8 +23,6 @@ export interface ProratedStayAmounts {
   overlapNights: number;
   totalNights: number;
 }
-
-export type DashboardPeriod = 'all' | '1m' | '3m' | '6m' | '12m' | 'custom';
 
 /** Occupied nights are [checkIn, checkOut) — checkout day is not an occupied night. */
 export function stayTotalNights(checkIn: string, checkOut: string): number {
@@ -145,15 +143,6 @@ export function proratedCommission(
     payment: full.payment * ratio,
     total: full.total * ratio,
   };
-}
-
-export function getDashboardPeriodRange(
-  period: DashboardPeriod,
-  today: Date = startOfDay(new Date())
-): PeriodRange | null {
-  if (period === 'all' || period === 'custom') return null;
-  const months = period === '1m' ? 1 : period === '3m' ? 3 : period === '6m' ? 6 : 12;
-  return { start: startOfDay(subMonths(today, months)), end: endOfDay(today) };
 }
 
 export function stayIncludedInPeriod(

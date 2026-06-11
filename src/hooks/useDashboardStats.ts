@@ -2,10 +2,9 @@ import { useMemo } from 'react';
 import { parseISO, isBefore, startOfToday, endOfDay, startOfDay } from 'date-fns';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
 import {
-  getDashboardPeriodRange,
+  PeriodRange,
   stayIncludedInPeriod,
   stayTotalNights,
-  DashboardPeriod,
 } from '@/lib/prorate';
 import {
   isActiveLifecycle,
@@ -16,7 +15,7 @@ import {
   getCollectedAmount,
 } from '@/lib/bookingLifecycle';
 
-export type { DashboardPeriod };
+export type { PeriodRange };
 
 export interface UpcomingItem {
   id: string;
@@ -135,13 +134,9 @@ export function useDashboardStats(
   rooms: Room[],
   bookingChannels: ConfigOption[],
   paymentChannels: ConfigOption[],
-  period: DashboardPeriod,
-  customRange?: { from: string; to: string }
+  periodRange: PeriodRange | null,
 ) {
   const today = startOfToday();
-  const periodRange = period === 'custom' && customRange?.from && customRange?.to
-    ? { start: startOfDay(parseISO(customRange.from)), end: endOfDay(parseISO(customRange.to)) }
-    : getDashboardPeriodRange(period, today);
   const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? 'Unknown';
 
   const activeBookings = useMemo(

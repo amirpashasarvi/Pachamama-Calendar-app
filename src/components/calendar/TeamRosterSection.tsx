@@ -4,6 +4,7 @@ import { TeamAssignment, TeamPosition } from '@/types';
 import TeamMemberBar from './TeamMemberBar';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { calendarLayoutClasses } from '@/lib/calendarLayout';
 
 interface TeamRosterSectionProps {
   days: Date[];
@@ -12,6 +13,7 @@ interface TeamRosterSectionProps {
   onAddAssignment: (positionId: string, date: Date) => void;
   onEditAssignment: (assignment: TeamAssignment) => void;
   isAdmin: boolean;
+  compact?: boolean;
 }
 
 export default function TeamRosterSection({ 
@@ -20,9 +22,10 @@ export default function TeamRosterSection({
   assignments, 
   onAddAssignment, 
   onEditAssignment,
-  isAdmin
+  isAdmin,
+  compact = true,
 }: TeamRosterSectionProps) {
-  
+  const layout = calendarLayoutClasses(compact);
   const getDayCoverage = (assignment: TeamAssignment, day: Date) => {
     const start = startOfDay(parseISO(assignment.startDate)).getTime();
     const end = startOfDay(parseISO(assignment.endDate)).getTime();
@@ -75,9 +78,9 @@ export default function TeamRosterSection({
   return (
     <div className="flex flex-col">
       {/* Label Row */}
-      <div className="flex bg-gray-50 border-b border-gray-400 h-8 items-center">
-        <div className="w-28 sm:w-48 sticky left-0 z-[85] bg-gray-100 border-r border-gray-400 h-full flex items-center px-4 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
-          <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Team Roster</span>
+      <div className={cn('flex bg-gray-50 border-b border-gray-400 items-center', layout.teamLabelRow)}>
+        <div className={cn('sticky left-0 z-[85] bg-gray-100 border-r border-gray-400 h-full flex items-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]', layout.roomLabelCol, compact ? 'px-2' : 'px-4')}>
+          <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Staff & Volunteers</span>
         </div>
         <div className="flex-1 h-full bg-gray-50/50" />
       </div>
@@ -86,9 +89,9 @@ export default function TeamRosterSection({
         const posAssignments = assignments.filter(a => a.positionId === pos.id);
         
         return (
-          <div key={pos.id} className="flex relative border-b border-gray-300 h-14 bg-white group">
+          <div key={pos.id} className={cn('flex relative border-b border-gray-300 bg-white group', layout.teamRow)}>
             {/* Position Label */}
-            <div className="w-28 sm:w-48 sticky left-0 z-[80] bg-white border-r border-gray-400 p-2 flex items-center gap-2 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">
+            <div className={cn('sticky left-0 z-[80] bg-white border-r border-gray-400 flex items-center gap-2 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]', layout.roomLabelCol, layout.roomLabelPad)}>
               <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pos.color }} />
               <span className="text-[10px] font-bold text-gray-600 uppercase tracking-tight truncate">{pos.name}</span>
             </div>
@@ -136,7 +139,7 @@ export default function TeamRosterSection({
                   >
                     {isOverlapping && (
                       <div 
-                        className="absolute h-9 top-2.5 left-0 right-0 z-10 pointer-events-none"
+                        className={cn('absolute left-0 right-0 z-10 pointer-events-none', layout.teamMemberBar)}
                         style={{ 
                           backgroundColor: pos.color,
                           clipPath
@@ -144,7 +147,7 @@ export default function TeamRosterSection({
                       />
                     )}
                     {isAdmin && !isOccupied && (
-                      <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <Plus size={layout.cellPlusSize} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                     )}
                   </div>
                 );
@@ -160,6 +163,7 @@ export default function TeamRosterSection({
                     color={pos.color}
                     isOverlapping={checkOverlap(a, posAssignments)}
                     onEdit={() => onEditAssignment(a)}
+                    compact={compact}
                   />
                 ))}
               </div>

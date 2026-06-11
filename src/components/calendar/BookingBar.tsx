@@ -2,6 +2,7 @@ import React from 'react';
 import { differenceInDays, isAfter, isBefore, parseISO, startOfDay } from 'date-fns';
 import { Booking, ConfigOption } from '@/types';
 import { cn } from '@/lib/utils';
+import { calendarLayoutClasses } from '@/lib/calendarLayout';
 import { motion } from 'motion/react';
 import { Pin } from 'lucide-react';
 import { useBooking } from '@/hooks/useBooking';
@@ -12,10 +13,12 @@ interface BookingBarProps {
   days: Date[];
   roomColor: string;
   onEdit: () => void;
+  compact?: boolean;
 }
 
-export default function BookingBar({ booking, days, roomColor, onEdit }: BookingBarProps) {
+export default function BookingBar({ booking, days, roomColor, onEdit, compact = true }: BookingBarProps) {
   const { bookingTypes, calendarDisplaySettings } = useBooking();
+  const layout = calendarLayoutClasses(compact);
   const dayWidth = 56;
   const halfDay = dayWidth / 2;
   
@@ -137,7 +140,8 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
       initial={{ opacity: 0, scaleY: 0.8 }}
       animate={{ opacity: 1, scaleY: 1 }}
       className={cn(
-        "absolute h-11 top-1.5 z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden",
+        'absolute z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden',
+        layout.bookingBar,
       )}
       style={{
         left: `${left - 1}px`, // Slight bleed to cover border
@@ -159,7 +163,7 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
       />
 
       {/* 3. Content layer */}
-      <div className="relative z-10 flex flex-col items-center justify-center h-full w-full px-10 text-black text-[10px] font-bold leading-none pb-1">
+      <div className={cn('relative z-10 flex flex-col items-center justify-center h-full w-full px-10 text-black font-bold leading-none', layout.bookingBarText, compact ? 'pb-0.5' : 'pb-1')}>
         <div className="truncate w-full text-center flex items-center justify-center gap-0.5 whitespace-nowrap overflow-hidden italic">
           {joinedContent}
         </div>
@@ -170,12 +174,12 @@ export default function BookingBar({ booking, days, roomColor, onEdit }: Booking
           className="absolute top-1/2 -translate-y-[calc(50%+2px)] z-30 pointer-events-none text-red-500"
           style={{ right: `${halfDay}px` }}
         >
-          <Pin size={12} fill="currentColor" />
+          <Pin size={layout.bookingBarPinSize} fill="currentColor" />
         </div>
       )}
       
       {/* Thick status line at bottom */}
-      <div className={cn("absolute bottom-0 left-0 right-0 h-1 z-20", statusLineColor)} />
+      <div className={cn('absolute bottom-0 left-0 right-0 z-20', layout.bookingBarStatusLine, statusLineColor)} />
     </motion.div>
   );
 }

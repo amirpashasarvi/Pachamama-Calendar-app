@@ -6,6 +6,7 @@ import { Plus, GripVertical } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
+import { calendarLayoutClasses, housekeepingStatusLabel } from '@/lib/calendarLayout';
 
 interface BoundaryDates { start: string[]; end: string[]; }
 
@@ -23,11 +24,12 @@ interface RoomRowProps {
   retreatTintDates?: string[];
   retreatBoundaryDates?: BoundaryDates;
   isAdmin?: boolean;
+  compact?: boolean;
 }
 
 const EMPTY_BOUNDARY: BoundaryDates = { start: [], end: [] };
 
-export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], venueHireBoundaryDates = EMPTY_BOUNDARY, retreatTintDates = [], retreatBoundaryDates = EMPTY_BOUNDARY, isAdmin = false }: RoomRowProps) {
+export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], venueHireBoundaryDates = EMPTY_BOUNDARY, retreatTintDates = [], retreatBoundaryDates = EMPTY_BOUNDARY, isAdmin = false, compact = true }: RoomRowProps) {
   const {
     attributes,
     listeners,
@@ -45,15 +47,21 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
     position: 'relative' as const
   };
 
+  const layout = calendarLayoutClasses(compact);
+
   return (
     <div 
       ref={setNodeRef}
       style={style}
-      className="flex relative border-b border-gray-200 group h-14 bg-white"
+      className={cn('flex relative border-b border-gray-200 group bg-white', layout.roomRow)}
     >
-      {/* Room Label Column */}
       <div 
-        className={cn("w-28 sm:w-48 sticky left-0 z-[80] bg-white border-r border-gray-200 p-2 flex items-center gap-2 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] overflow-hidden", isAdmin ? "cursor-pointer hover:bg-gray-50" : "cursor-default")}
+        className={cn(
+          'sticky left-0 z-[80] bg-white border-r border-gray-200 flex items-center gap-1.5 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] overflow-hidden',
+          layout.roomLabelCol,
+          layout.roomLabelPad,
+          isAdmin ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'
+        )}
         onClick={isAdmin ? onEditRoom : undefined}
       >
         {/* Thicker Color Strip Drag Handle */}
@@ -68,26 +76,44 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
           <GripVertical size={12} className="text-white opacity-0 group-hover/handle:opacity-100 transition-opacity" />
         </div>
 
-        <div className="flex flex-col ml-4 flex-1 min-w-0">
-          <span className="text-xs font-bold truncate tracking-tight leading-tight">{String(room.name)}</span>
-          {housekeepingStatus && (
-            <div className="flex items-center gap-1 mt-0.5">
-              <div className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
-                housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
-                (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
-                'bg-green-500 shadow-green-200'
-              }`} />
-              <span className={`text-[9px] font-bold uppercase tracking-tight leading-none ${
-                housekeepingStatus === 'dirty' ? 'text-rose-500' :
-                (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'text-amber-500' :
-                'text-green-500'
-              }`}>
-                {housekeepingStatus === 'dirty' ? 'Dirty' :
-                 housekeepingStatus === 'cleaned' ? 'Cleaned' :
-                 housekeepingStatus === 'inspected' ? 'Inspected' :
-                 'Clean'}
-              </span>
-            </div>
+        <div className={cn('flex flex-1 min-w-0', compact ? cn('items-center gap-1.5', layout.roomNameMl) : cn('flex-col', layout.roomNameMl))}>
+          {compact ? (
+            <>
+              {housekeepingStatus && (
+                <div
+                  className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
+                    housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
+                    (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
+                    'bg-green-500 shadow-green-200'
+                  }`}
+                  title={housekeepingStatusLabel(housekeepingStatus)}
+                />
+              )}
+              <span className={cn('font-bold truncate tracking-tight leading-tight', layout.roomName)}>{String(room.name)}</span>
+            </>
+          ) : (
+            <>
+              <span className={cn('font-bold truncate tracking-tight leading-tight', layout.roomName)}>{String(room.name)}</span>
+              {housekeepingStatus && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  <div
+                    className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
+                      housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
+                      (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
+                      'bg-green-500 shadow-green-200'
+                    }`}
+                    title={housekeepingStatusLabel(housekeepingStatus)}
+                  />
+                  <span className={`text-[9px] font-bold uppercase tracking-tight leading-none ${
+                    housekeepingStatus === 'dirty' ? 'text-rose-500' :
+                    (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'text-amber-500' :
+                    'text-green-500'
+                  }`}>
+                    {housekeepingStatusLabel(housekeepingStatus)}
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -146,7 +172,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
               {isVHEnd   && <div className="absolute inset-0 pointer-events-none" style={{ background: vhColor, clipPath: endClip }} />}
               {isRStart  && <div className="absolute inset-0 pointer-events-none" style={{ background: retColor, clipPath: startClip }} />}
               {isREnd    && <div className="absolute inset-0 pointer-events-none" style={{ background: retColor, clipPath: endClip }} />}
-              {isAdmin && !isOccupied && <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity relative z-10" />}
+              {isAdmin && !isOccupied && <Plus size={layout.cellPlusSize} className="opacity-0 group-hover:opacity-100 transition-opacity relative z-10" />}
             </div>
           );
         })}
@@ -160,6 +186,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
               days={days} 
               roomColor={String(room.color)}
               onEdit={() => onEditBooking(booking)}
+              compact={compact}
             />
           ))}
         </div>

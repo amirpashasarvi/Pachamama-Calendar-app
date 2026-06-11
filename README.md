@@ -1,6 +1,6 @@
-# Pachamama Calendar App
+# Pachamama Booking Management
 
-Operations dashboard for Pachamama bookings, rooms, housekeeping, venue hires, retreats, and team assignments.
+Booking management for Pachamama — rooms, calendar, housekeeping, venue hires, retreats, and team assignments.
 
 ## Run Locally
 

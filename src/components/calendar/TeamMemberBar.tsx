@@ -2,6 +2,7 @@ import React from 'react';
 import { differenceInDays, isAfter, isBefore, parseISO, startOfDay, endOfWeek, eachWeekOfInterval, max, min } from 'date-fns';
 import { TeamAssignment, TeamPosition } from '@/types';
 import { cn } from '@/lib/utils';
+import { calendarLayoutClasses } from '@/lib/calendarLayout';
 import { motion } from 'motion/react';
 import { useBooking } from '@/hooks/useBooking';
 
@@ -12,10 +13,12 @@ interface TeamMemberBarProps {
   color: string;
   isOverlapping: boolean;
   onEdit: () => void;
+  compact?: boolean;
 }
 
-export default function TeamMemberBar({ assignment, days, color, isOverlapping, onEdit }: TeamMemberBarProps) {
+export default function TeamMemberBar({ assignment, days, color, isOverlapping, onEdit, compact = true }: TeamMemberBarProps) {
   const { calendarDisplaySettings } = useBooking();
+  const layout = calendarLayoutClasses(compact);
   const dayWidth = 56;
   const halfDay = dayWidth / 2;
   
@@ -101,7 +104,8 @@ export default function TeamMemberBar({ assignment, days, color, isOverlapping, 
       initial={{ opacity: 0, scaleY: 0.8 }}
       animate={{ opacity: 1, scaleY: 1 }}
       className={cn(
-        "absolute h-9 top-2.5 z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden flex items-center justify-center text-black"
+        'absolute z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden flex items-center justify-center text-black',
+        layout.teamMemberBar,
       )}
       style={{
         left: `${left - 1}px`, // Slight bleed to cover border

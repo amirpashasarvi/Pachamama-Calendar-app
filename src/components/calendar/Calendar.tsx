@@ -21,6 +21,7 @@ import TeamRosterSection from './TeamRosterSection';
 import { Room, Booking, Retreat, HousekeepingRecord, VenueHire, TeamPosition, TeamAssignment } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { isWithinInterval, parseISO } from 'date-fns';
 
 // Sorting imports
@@ -42,6 +43,7 @@ import {
 import { doc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { isActiveLifecycle } from '@/lib/bookingLifecycle';
+import { calendarLayoutClasses } from '@/lib/calendarLayout';
 
 interface CalendarProps {
   rooms?: Room[];
@@ -49,9 +51,10 @@ interface CalendarProps {
   housekeeping?: HousekeepingRecord[];
   showSummary?: boolean;
   showTeamRoster?: boolean;
+  compact?: boolean;
 }
 
-export default function Calendar({ rooms: propRooms, bookings: propBookings, housekeeping: propHousekeeping, showSummary = false, showTeamRoster = false }: CalendarProps) {
+export default function Calendar({ rooms: propRooms, bookings: propBookings, housekeeping: propHousekeeping, showSummary = false, showTeamRoster = false, compact = true }: CalendarProps) {
   const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, loading } = useBooking();
   const { isAdmin, profile } = useAuth();
   
@@ -61,6 +64,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
 
   const activeBookings = useMemo(() => bookings.filter(isActiveLifecycle), [bookings]);
   const activeVenueHires = useMemo(() => venueHires.filter(isActiveLifecycle), [venueHires]);
+  const layout = calendarLayoutClasses(compact);
   
   // Modal states
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -309,6 +313,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
         onToday={handleToday}
         onScrollToDate={scrollToDate}
         visibleMonth={visibleMonth}
+        compact={compact}
       />
 
       <div 
@@ -319,13 +324,13 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
           
           {/* Header Row (Dates) */}
           <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-200 shadow-sm">
-            <div className="w-28 sm:w-48 sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center p-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+            <div className={cn('sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]', layout.roomLabelCol, layout.roomLabelPad)}>
               {isAdmin ? (
                 <button
                   onClick={() => handleAddBooking()}
-                  className="flex items-center justify-center gap-1 w-full px-2 py-2 bg-black text-white rounded-xl text-[10px] sm:text-xs font-bold hover:bg-gray-800 transition-colors"
+                  className={cn('flex items-center justify-center gap-1 w-full bg-black text-white hover:bg-gray-800 transition-colors', layout.addBookingBtn)}
                 >
-                  <Plus size={12} /> Add Booking
+                  <Plus size={compact ? 10 : 12} /> Add Booking
                 </button>
               ) : (
                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
@@ -334,10 +339,15 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
             {days.map((day, idx) => (
               <div 
                 key={`header-${day.toISOString()}-${idx}`} 
-                className={`w-14 h-12 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono text-[10px] ${isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'}`}
+                className={cn(
+                  'w-14 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono',
+                  layout.dateHeaderRow,
+                  layout.dateHeaderWeekday,
+                  isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'
+                )}
               >
                 <span className="uppercase font-bold tracking-tighter opacity-60">{format(day, 'EEE')}</span>
-                <span className="text-sm font-bold text-gray-800">{format(day, 'd')}</span>
+                <span className={cn('font-bold text-gray-800', layout.dateHeaderDayNum)}>{format(day, 'd')}</span>
               </div>
             ))}
           </div>
@@ -350,6 +360,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
             onEdit={handleEditRetreat} 
             onAddVenue={handleAddVenueHire}
             onEditVenue={handleEditVenueHire}
+            compact={compact}
           />
           
           <DndContext
@@ -385,6 +396,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
                       retreatTintDates={retreatTintDates}
                       retreatBoundaryDates={retreatBoundaryDates}
                       isAdmin={isAdmin}
+                      compact={compact}
                     />
                   ))}
                 </SortableContext>
@@ -397,6 +409,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
               days={days} 
               bookings={activeBookings} 
               rooms={rooms}
+              compact={compact}
             />
           )}
 
@@ -408,6 +421,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
               onAddAssignment={handleAddTeamAssignment}
               onEditAssignment={handleEditTeamAssignment}
               isAdmin={isAdmin}
+              compact={compact}
             />
           )}
 
