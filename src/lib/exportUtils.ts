@@ -10,6 +10,13 @@ import {
   getCollectedAmount,
   getLifecycleStatus,
 } from '@/lib/bookingLifecycle';
+import {
+  bookingBasisLabel,
+  paymentBasisLabel,
+  commissionInputFromRecord,
+  resolveBookingChannelBasis,
+  resolvePaymentChannelBasis,
+} from '@/lib/commission';
 import { LifecycleStatus } from '@/types';
 
 // Wrap a field in quotes if it contains commas, quotes, or newlines
@@ -39,10 +46,6 @@ function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
   try { return format(parseISO(iso), 'dd/MM/yyyy'); }
   catch { return iso ?? ''; }
-}
-
-function paymentBasisLabel(basis: string): string {
-  return basis === 'bookingPrice' ? 'Full Booking' : basis === 'deposit' ? 'Deposit Only' : 'Custom';
 }
 
 function lifecycleLabel(status?: LifecycleStatus): string {
@@ -88,7 +91,7 @@ export function exportBookingsToCSV(
     'Room', 'Adults', 'Kids', 'Total Guests',
     'Price (€)', 'Deposit (€)', 'Paid Later 1 (€)', 'Paid Later 2 (€)', 'Extras (€)',
     'Total (€)', 'Collected (€)', 'Remaining (€)', 'Commission (€)',
-    'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Payment Basis',
+    'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Booking Basis', 'Payment Basis',
     'Dietary', 'Bed Setting', 'Source', 'Notes', 'Created At',
   ];
 
@@ -97,14 +100,7 @@ export function exportBookingsToCSV(
     const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, period ?? null, financials, b.lifecycleStatus);
     const collected = getCollectedAmount(financials);
     const comm = commissionForReporting(
-      {
-        price: b.price || 0,
-        deposit: b.deposit || 0,
-        channelPaymentBasis: b.channelPaymentBasis,
-        commissionCustomAmount: b.commissionCustomAmount,
-        bookingChannel: b.bookingChannel,
-        paymentChannel: b.paymentChannel,
-      },
+      commissionInputFromRecord(b),
       collected,
       bookingChannels,
       paymentChannels,
@@ -136,7 +132,8 @@ export function exportBookingsToCSV(
       lifecycleLabel(b.lifecycleStatus),
       status,
       displayChannel(b.bookingChannel), displayChannel(b.paymentChannel),
-      paymentBasisLabel(b.channelPaymentBasis),
+      bookingBasisLabel(resolveBookingChannelBasis(commissionInputFromRecord(b))),
+      paymentBasisLabel(resolvePaymentChannelBasis(commissionInputFromRecord(b))),
       b.dietary, b.bedSetting, b.source, b.notes,
       fmtDate(b.createdAt),
     ];
@@ -158,7 +155,7 @@ export function exportVenueHiresToCSV(
     'Price (€)', 'Extras (€)', 'Total (€)',
     'Deposit (€)', 'Paid Later 1 (€)', 'Paid Later 2 (€)',
     'Collected (€)', 'Remaining (€)', 'Commission (€)',
-    'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Payment Basis', 'Notes', 'Created At',
+    'Lifecycle', 'Status', 'Booking Channel', 'Payment Channel', 'Booking Basis', 'Payment Basis', 'Notes', 'Created At',
   ];
 
   const rows = venueHires.map(v => {
@@ -166,14 +163,7 @@ export function exportVenueHiresToCSV(
     const amounts = resolveReportingFinancials(v.startDate, v.endDate, period ?? null, financials, v.lifecycleStatus);
     const collected = getCollectedAmount(financials);
     const comm = commissionForReporting(
-      {
-        price: v.bookingPrice || 0,
-        deposit: v.deposit || 0,
-        channelPaymentBasis: v.channelPaymentBasis,
-        commissionCustomAmount: v.commissionCustomAmount,
-        bookingChannel: v.bookingChannel,
-        paymentChannel: v.paymentChannel,
-      },
+      commissionInputFromRecord(v),
       collected,
       bookingChannels,
       paymentChannels,
@@ -188,6 +178,7 @@ export function exportVenueHiresToCSV(
       ? 'Cancelled'
       : collected >= fullTotal && fullTotal > 0 ? 'Paid'
         : collected > 0 ? 'Partial' : 'Unpaid';
+    const commInput = commissionInputFromRecord(v);
 
     return [
       v.name, v.organizer,
@@ -202,7 +193,8 @@ export function exportVenueHiresToCSV(
       comm.total.toFixed(2),
       lifecycleLabel(v.lifecycleStatus),
       status, displayChannel(v.bookingChannel), displayChannel(v.paymentChannel),
-      paymentBasisLabel(v.channelPaymentBasis),
+      bookingBasisLabel(resolveBookingChannelBasis(commInput)),
+      paymentBasisLabel(resolvePaymentChannelBasis(commInput)),
       v.notes, fmtDate(v.createdAt),
     ];
   });
@@ -232,14 +224,7 @@ export function exportFinancialSummaryToCSV(
     const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, period ?? null, financials, b.lifecycleStatus);
     const collected = getCollectedAmount(financials);
     const comm = commissionForReporting(
-      {
-        price: b.price || 0,
-        deposit: b.deposit || 0,
-        channelPaymentBasis: b.channelPaymentBasis,
-        commissionCustomAmount: b.commissionCustomAmount,
-        bookingChannel: b.bookingChannel,
-        paymentChannel: b.paymentChannel,
-      },
+      commissionInputFromRecord(b),
       collected,
       bookingChannels,
       paymentChannels,
@@ -269,14 +254,7 @@ export function exportFinancialSummaryToCSV(
     const amounts = resolveReportingFinancials(v.startDate, v.endDate, period ?? null, financials, v.lifecycleStatus);
     const collected = getCollectedAmount(financials);
     const comm = commissionForReporting(
-      {
-        price: v.bookingPrice || 0,
-        deposit: v.deposit || 0,
-        channelPaymentBasis: v.channelPaymentBasis,
-        commissionCustomAmount: v.commissionCustomAmount,
-        bookingChannel: v.bookingChannel,
-        paymentChannel: v.paymentChannel,
-      },
+      commissionInputFromRecord(v),
       collected,
       bookingChannels,
       paymentChannels,

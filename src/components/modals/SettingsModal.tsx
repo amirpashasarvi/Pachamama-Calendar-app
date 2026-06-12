@@ -39,6 +39,7 @@ interface SettingsModalProps {
 }
 
 const COLORS = APP_COLOR_PALETTE;
+const DEFAULT_CONFIG_FORM = { name: '', color: COLORS[0], commission: '' as number | '' };
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const userDocIdFromEmail = (email: string) => normalizeEmail(email);
 
@@ -91,9 +92,11 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
   // Generic state for Types/Channels editing
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', color: '#36454F', commission: '' as number | '' });
+  const [formData, setFormData] = useState(DEFAULT_CONFIG_FORM);
   const [isAdding, setIsAdding] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // User Management state
   const [userFormData, setUserFormData] = useState({ email: '', name: '', role: 'staff' as UserRole });
@@ -110,25 +113,54 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
     return unsub;
   }, [view]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setView('menu');
+      resetForms();
+    }
+  }, [isOpen]);
+
   const resetForms = () => {
     setEditingId(null);
-    setFormData({ name: '', color: '#36454F', commission: '' });
+    setFormData(DEFAULT_CONFIG_FORM);
     setIsAdding(false);
     setUserFormData({ email: '', name: '', role: 'staff' });
     setEditingUserId(null);
     setConfirmDeleteId(null);
+    setSaveError(null);
+    setIsSaving(false);
+  };
+
+  const navigateToView = (nextView: SettingsView) => {
+    resetForms();
+    setView(nextView);
+  };
+
+  const startAddConfigOption = () => {
+    setEditingId(null);
+    setConfirmDeleteId(null);
+    setSaveError(null);
+    setFormData(DEFAULT_CONFIG_FORM);
+    setIsAdding(true);
   };
 
   const handleBack = () => {
-    setView('menu');
-    resetForms();
+    navigateToView('menu');
   };
 
   const handleSaveOption = async (collectionName: string) => {
-    if (!formData.name) return;
+    const name = formData.name.trim();
+    if (!name) {
+      setSaveError('Name is required.');
+      return;
+    }
+
+    setSaveError(null);
+    setIsSaving(true);
+
     const data: any = { 
-      name: formData.name, 
-      color: formData.color 
+      name, 
+      color: formData.color || COLORS[0]
     };
     
     if (collectionName === 'bookingChannels' || collectionName === 'paymentChannels') {
@@ -169,7 +201,18 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       }
       resetForms();
     } catch (err) {
-      handleFirestoreError(err, editingId ? OperationType.UPDATE : OperationType.CREATE, `${collectionName}/${editingId || ''}`);
+      console.error('Settings save failed:', err);
+      const code = (err as { code?: string })?.code;
+      if (code === 'permission-denied') {
+        setSaveError('Permission denied. Deploy firestore.rules to your Firebase database (ai-studio-6e88db3f-bd4b-4318-840c-9af7e0054958) — the paymentChannels rules are not live yet.');
+      } else if (code === 'not-found' && editingId) {
+        setSaveError('This item no longer exists. Cancel and add it again.');
+        setEditingId(null);
+      } else {
+        setSaveError('Could not save. Please try again.');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -744,7 +787,8 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
         {!isAdding && !editingId && (
           <button
-            onClick={() => setIsAdding(true)}
+            type="button"
+            onClick={startAddConfigOption}
             className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
           >
             <Plus size={14} /> Add New Option
@@ -796,16 +840,26 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                 ))}
               </div>
             </div>
+            {saveError && (
+              <div className="flex items-center gap-2 text-rose-600 bg-rose-50 p-2 rounded-lg">
+                <AlertCircle size={14} />
+                <span className="text-[10px] font-bold">{saveError}</span>
+              </div>
+            )}
             <div className="flex gap-2">
               <button
+                type="button"
+                disabled={isSaving}
                 onClick={() => handleSaveOption(collectionName)}
-                className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
+                className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save size={14} /> Save Option
+                <Save size={14} /> {isSaving ? 'Saving…' : 'Save Option'}
               </button>
               <button
+                type="button"
+                disabled={isSaving}
                 onClick={resetForms}
-                className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50"
+                className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -861,21 +915,24 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                   ) : (
                     <>
                       <button
+                        type="button"
                         onClick={() => {
                           setEditingId(option.id);
                           setFormData({ 
                             name: option.name, 
-                            color: option.color,
+                            color: option.color || COLORS[0],
                             commission: option.commission ?? 0
                           });
                           setIsAdding(false);
                           setConfirmDeleteId(null);
+                          setSaveError(null);
                         }}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => setConfirmDeleteId(option.id)}
                         className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
                       >
@@ -1186,7 +1243,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             {/* Property */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-2 pb-1">Property</p>
             <button
-              onClick={() => setView('rooms')}
+              onClick={() => navigateToView('rooms')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1197,7 +1254,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             </button>
 
             <button
-              onClick={() => setView('retreats')}
+              onClick={() => navigateToView('retreats')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1210,7 +1267,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             {/* Booking Config */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Booking Config</p>
             <button
-              onClick={() => setView('types')}
+              onClick={() => navigateToView('types')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1221,7 +1278,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             </button>
 
             <button
-              onClick={() => setView('channels')}
+              onClick={() => navigateToView('channels')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1232,7 +1289,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             </button>
 
             <button
-              onClick={() => setView('paymentChannels')}
+              onClick={() => navigateToView('paymentChannels')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1245,7 +1302,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             {/* Team & People */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Team & People</p>
             <button
-              onClick={() => setView('roster')}
+              onClick={() => navigateToView('roster')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1256,7 +1313,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             </button>
 
             <button
-              onClick={() => setView('users')}
+              onClick={() => navigateToView('users')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1269,7 +1326,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             {/* Interface */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Interface</p>
             <button
-              onClick={() => setView('display')}
+              onClick={() => navigateToView('display')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1282,7 +1339,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             {/* Admin */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Admin</p>
             <button
-              onClick={() => setView('activity')}
+              onClick={() => navigateToView('activity')}
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
@@ -1306,7 +1363,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         {view === 'activity' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-200">
             <div className="flex items-center gap-3 mb-4">
-              <button onClick={() => setView('menu')} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
                 <ChevronLeft size={18} className="text-gray-500" />
               </button>
               <div className="flex items-center gap-2">

@@ -94,7 +94,14 @@ export function commissionForReporting(
     }
     if (collected <= 0) return { booking: 0, payment: 0, total: 0 };
     return calcTotalCommission(
-      { ...input, price: collected, channelPaymentBasis: 'bookingPrice' },
+      {
+        ...input,
+        price: collected,
+        deposit: 0,
+        extras: [],
+        bookingChannelBasis: 'bookingPrice',
+        paymentChannelBasis: 'bookingPrice',
+      },
       bookingChannels,
       paymentChannels
     );

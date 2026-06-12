@@ -36,7 +36,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className={`fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-2xl bg-white sm:rounded-2xl shadow-2xl ${contentZ} overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[90vh]`}
+            className={`fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:max-w-2xl bg-white sm:rounded-2xl shadow-2xl ${contentZ} overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[90vh] pt-safe pb-safe px-safe sm:pt-0 sm:pb-0 sm:px-0`}
           >
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b">

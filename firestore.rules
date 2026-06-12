@@ -64,6 +64,8 @@ service cloud.firestore {
           && data.type is string && data.type.size() <= 50
           && (!('bookingChannel' in data) || (data.bookingChannel is string && data.bookingChannel.size() <= 100))
           && (!('channelPaymentBasis' in data) || (data.channelPaymentBasis in ['bookingPrice', 'deposit', 'custom']))
+          && (!('bookingChannelBasis' in data) || (data.bookingChannelBasis in ['bookingPrice', 'deposit', 'custom']))
+          && (!('paymentChannelBasis' in data) || (data.paymentChannelBasis in ['bookingPrice', 'remaining', 'custom']))
           && (!('adults' in data) || data.adults is number)
           && (!('kids' in data) || data.kids is number)
           && (!('price' in data) || data.price is number)

@@ -1,18 +1,76 @@
 import { ConfigOption } from '@/types';
 
+export type BookingChannelBasis = 'bookingPrice' | 'deposit' | 'custom';
+export type PaymentChannelBasis = 'bookingPrice' | 'remaining' | 'custom';
+
 export interface CommissionInput {
   price: number;
   deposit: number;
-  channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
+  extras?: { amount: number }[];
+  bookingChannelBasis?: BookingChannelBasis;
+  bookingChannelCustomAmount?: number;
+  paymentChannelBasis?: PaymentChannelBasis;
+  paymentChannelCustomAmount?: number;
+  /** @deprecated — migrated to bookingChannelBasis / paymentChannelBasis */
+  channelPaymentBasis?: BookingChannelBasis;
+  /** @deprecated */
   commissionCustomAmount?: number;
   bookingChannel: string;
   paymentChannel?: string;
 }
 
-export function getCommissionBase(input: CommissionInput): number {
-  if (input.channelPaymentBasis === 'custom') return input.commissionCustomAmount ?? 0;
-  if (input.channelPaymentBasis === 'bookingPrice') return input.price;
-  return input.deposit;
+export function bookingTotal(input: Pick<CommissionInput, 'price' | 'extras'>): number {
+  const extrasTotal = (input.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
+  return (input.price || 0) + extrasTotal;
+}
+
+export function migrateCommissionFields(record: {
+  channelPaymentBasis?: BookingChannelBasis;
+  commissionCustomAmount?: number;
+  bookingChannelBasis?: BookingChannelBasis;
+  bookingChannelCustomAmount?: number;
+  paymentChannelBasis?: PaymentChannelBasis;
+  paymentChannelCustomAmount?: number;
+}) {
+  const legacyBasis = record.channelPaymentBasis ?? 'bookingPrice';
+  const legacyCustom = record.commissionCustomAmount ?? 0;
+
+  return {
+    bookingChannelBasis: record.bookingChannelBasis ?? legacyBasis,
+    bookingChannelCustomAmount: record.bookingChannelCustomAmount ?? legacyCustom,
+    paymentChannelBasis: record.paymentChannelBasis ?? (
+      legacyBasis === 'deposit' ? 'remaining' as const
+        : legacyBasis === 'custom' ? 'custom' as const
+          : 'bookingPrice' as const
+    ),
+    paymentChannelCustomAmount: record.paymentChannelCustomAmount ?? legacyCustom,
+  };
+}
+
+export function resolveBookingChannelBasis(input: CommissionInput): BookingChannelBasis {
+  return input.bookingChannelBasis ?? input.channelPaymentBasis ?? 'bookingPrice';
+}
+
+export function resolvePaymentChannelBasis(input: CommissionInput): PaymentChannelBasis {
+  if (input.paymentChannelBasis) return input.paymentChannelBasis;
+  const legacy = input.channelPaymentBasis;
+  if (legacy === 'deposit') return 'remaining';
+  if (legacy === 'custom') return 'custom';
+  return 'bookingPrice';
+}
+
+export function getBookingChannelBase(input: CommissionInput): number {
+  const basis = resolveBookingChannelBasis(input);
+  if (basis === 'custom') return input.bookingChannelCustomAmount ?? input.commissionCustomAmount ?? 0;
+  if (basis === 'bookingPrice') return bookingTotal(input);
+  return input.deposit || 0;
+}
+
+export function getPaymentChannelBase(input: CommissionInput): number {
+  const basis = resolvePaymentChannelBasis(input);
+  if (basis === 'custom') return input.paymentChannelCustomAmount ?? input.commissionCustomAmount ?? 0;
+  if (basis === 'bookingPrice') return bookingTotal(input);
+  return Math.max(0, bookingTotal(input) - (input.deposit || 0));
 }
 
 export function channelCommissionAmount(
@@ -30,9 +88,51 @@ export function calcTotalCommission(
   input: CommissionInput,
   bookingChannels: ConfigOption[],
   paymentChannels: ConfigOption[]
-): { base: number; booking: number; payment: number; total: number } {
-  const base = getCommissionBase(input);
-  const booking = channelCommissionAmount(base, input.bookingChannel, bookingChannels);
-  const payment = channelCommissionAmount(base, input.paymentChannel || '', paymentChannels);
-  return { base, booking, payment, total: booking + payment };
+): { bookingBase: number; paymentBase: number; booking: number; payment: number; total: number } {
+  const bookingBase = getBookingChannelBase(input);
+  const paymentBase = getPaymentChannelBase(input);
+  const booking = channelCommissionAmount(bookingBase, input.bookingChannel, bookingChannels);
+  const payment = channelCommissionAmount(paymentBase, input.paymentChannel || '', paymentChannels);
+  return { bookingBase, paymentBase, booking, payment, total: booking + payment };
+}
+
+export function commissionInputFromRecord(record: {
+  price?: number;
+  bookingPrice?: number;
+  deposit?: number;
+  extras?: { amount: number }[];
+  bookingChannel: string;
+  paymentChannel?: string;
+  channelPaymentBasis?: BookingChannelBasis;
+  commissionCustomAmount?: number;
+  bookingChannelBasis?: BookingChannelBasis;
+  bookingChannelCustomAmount?: number;
+  paymentChannelBasis?: PaymentChannelBasis;
+  paymentChannelCustomAmount?: number;
+}): CommissionInput {
+  return {
+    price: record.price ?? record.bookingPrice ?? 0,
+    deposit: record.deposit || 0,
+    extras: record.extras,
+    bookingChannel: record.bookingChannel,
+    paymentChannel: record.paymentChannel,
+    ...migrateCommissionFields(record),
+  };
+}
+
+export function bookingBasisLabel(basis: BookingChannelBasis | string | undefined): string {
+  if (basis === 'deposit') return 'Deposit';
+  if (basis === 'custom') return 'Custom';
+  return 'Full Booking';
+}
+
+export function paymentBasisLabel(basis: PaymentChannelBasis | string | undefined): string {
+  if (basis === 'remaining') return 'Remaining';
+  if (basis === 'custom') return 'Custom';
+  return 'Full Booking';
+}
+
+/** @deprecated use getBookingChannelBase / getPaymentChannelBase */
+export function getCommissionBase(input: CommissionInput): number {
+  return getBookingChannelBase(input);
 }

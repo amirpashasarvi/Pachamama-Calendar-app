@@ -62,7 +62,13 @@ export interface Booking {
   deposit: number;
   paidLater1: number;
   paidLater2: number;
-  channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
+  bookingChannelBasis?: 'bookingPrice' | 'deposit' | 'custom';
+  bookingChannelCustomAmount?: number;
+  paymentChannelBasis?: 'bookingPrice' | 'remaining' | 'custom';
+  paymentChannelCustomAmount?: number;
+  /** @deprecated — use bookingChannelBasis / paymentChannelBasis */
+  channelPaymentBasis?: 'bookingPrice' | 'deposit' | 'custom';
+  /** @deprecated */
   commissionCustomAmount?: number;
   status: BookingStatus;
   lifecycleStatus?: LifecycleStatus;
@@ -135,7 +141,13 @@ export interface VenueHire {
   paidLater2: number;
   bookingChannel: string;
   paymentChannel?: string;
-  channelPaymentBasis: 'bookingPrice' | 'deposit' | 'custom';
+  bookingChannelBasis?: 'bookingPrice' | 'deposit' | 'custom';
+  bookingChannelCustomAmount?: number;
+  paymentChannelBasis?: 'bookingPrice' | 'remaining' | 'custom';
+  paymentChannelCustomAmount?: number;
+  /** @deprecated */
+  channelPaymentBasis?: 'bookingPrice' | 'deposit' | 'custom';
+  /** @deprecated */
   commissionCustomAmount?: number;
   lifecycleStatus?: LifecycleStatus;
   cancelledAt?: string;

@@ -15,8 +15,8 @@ export default function AuthContainer({ children }: { children: React.ReactNode 
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-[#f5f5f5]">
-        <div className="p-8 bg-white rounded-2xl shadow-xl w-full max-w-md text-center">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#f5f5f5] px-safe py-safe">
+        <div className="p-8 bg-white rounded-2xl shadow-xl w-full max-w-md text-center mx-4">
           <h1 className="text-2xl sm:text-3xl font-bold mb-8">Pachamama Booking Management</h1>
           <button
             onClick={login}

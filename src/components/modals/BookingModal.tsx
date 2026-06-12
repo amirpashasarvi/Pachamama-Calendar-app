@@ -5,12 +5,13 @@ import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire }
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
-import { calcTotalCommission } from '@/lib/commission';
+import { migrateCommissionFields } from '@/lib/commission';
+import CommissionFields from '@/components/modals/CommissionFields';
 import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
 import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle';
 import CurrencyInput from '@/components/ui/CurrencyInput';
-import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw } from 'lucide-react';
+import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw, Receipt } from 'lucide-react';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -66,8 +67,10 @@ export default function BookingModal({
     deposit: 0,
     paidLater1: 0,
     paidLater2: 0,
-    channelPaymentBasis: 'bookingPrice' as const,
-    commissionCustomAmount: 0,
+    bookingChannelBasis: 'bookingPrice' as const,
+    bookingChannelCustomAmount: 0,
+    paymentChannelBasis: 'bookingPrice' as const,
+    paymentChannelCustomAmount: 0,
     source: '',
     bookingChannel: '',
     paymentChannel: '',
@@ -97,7 +100,7 @@ export default function BookingModal({
         extras: booking.extras || (booking as any).extraCharges ? [{ label: 'Extras', amount: (booking as any).extraCharges }] : [],
         paidLater1: booking.paidLater1 ?? (booking as any).paidLater ?? 0,
         paidLater2: booking.paidLater2 ?? 0,
-        channelPaymentBasis: booking.channelPaymentBasis || 'bookingPrice',
+        ...migrateCommissionFields(booking),
         comments: typeof (booking as any).comments === 'string' 
           ? (booking as any).comments 
           : (Array.isArray((booking as any).comments) 
@@ -156,40 +159,6 @@ export default function BookingModal({
 
   const nights = calculateNights(formData.checkIn || '', formData.checkOut || '');
 
-  const selectedBookingChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
-  const selectedPaymentChannel = paymentChannels.find(c => c.name === formData.paymentChannel);
-  const bookingChannelRate = selectedBookingChannel?.commission ?? 0;
-  const paymentChannelRate = selectedPaymentChannel?.commission ?? 0;
-
-  const commissionBase = formData.channelPaymentBasis === 'custom'
-    ? (formData.commissionCustomAmount ?? 0)
-    : formData.channelPaymentBasis === 'bookingPrice'
-      ? (formData.price || 0)
-      : (formData.deposit || 0);
-
-  const liveCommission = useMemo(() => calcTotalCommission(
-    {
-      price: formData.price || 0,
-      deposit: formData.deposit || 0,
-      channelPaymentBasis: formData.channelPaymentBasis || 'bookingPrice',
-      commissionCustomAmount: formData.commissionCustomAmount,
-      bookingChannel: formData.bookingChannel || '',
-      paymentChannel: formData.paymentChannel || '',
-    },
-    bookingChannels,
-    paymentChannels
-  ), [
-    formData.channelPaymentBasis,
-    formData.price,
-    formData.deposit,
-    formData.commissionCustomAmount,
-    formData.bookingChannel,
-    formData.paymentChannel,
-    bookingChannels,
-    paymentChannels,
-  ]);
-
-
   const checkOverlaps = (targetRoomId: string) => {
     if (!targetRoomId || !formData.checkIn || !formData.checkOut) return null;
 
@@ -244,6 +213,16 @@ export default function BookingModal({
       return;
     }
 
+    if (isAdmin && !formData.bookingChannel?.trim()) {
+      setError('Please select a booking channel before saving.');
+      return;
+    }
+
+    if (isAdmin && ((formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) && !formData.paymentChannel?.trim()) {
+      setError('Please select a payment channel when Paid Later amounts are entered.');
+      return;
+    }
+
     // Filter out empty extras
     const filteredExtras = (formData.extras || []).filter(e => e.label || e.amount > 0);
 
@@ -281,9 +260,11 @@ export default function BookingModal({
       return obj;
     };
 
-    const { id, ...dataToSave } = formData;
+    const { id, channelPaymentBasis: _legacyBasis, commissionCustomAmount: _legacyCustom, ...dataToSave } = formData;
     const data = removeUndefinedDeep({
       ...dataToSave,
+      bookingChannelBasis: formData.bookingChannelBasis || 'bookingPrice',
+      paymentChannelBasis: formData.paymentChannelBasis || 'bookingPrice',
       extras: filteredExtras,
       status: calculatedStatus,
       totalGuests: (formData.adults || 0) + (formData.kids || 0),
@@ -784,16 +765,19 @@ export default function BookingModal({
 
         {/* Financial info */}
         {isAdmin && (
-          <section className="space-y-4 pt-5 border-t-2 border-gray-200">
-            <h3 className="text-sm font-black uppercase tracking-widest text-gray-700">Financials</h3>
+          <section className="-mx-6 px-6 py-5 mt-1 space-y-4 bg-[#ACDDDE] border-y border-teal-200/60">
+            <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">
+              <Receipt size={14} className="text-slate-500 shrink-0" />
+              Financials
+            </h3>
 
             {/* Summary card */}
-            <div className="grid grid-cols-3 gap-0 bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden mb-2">
-              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-gray-200">
+            <div className="grid grid-cols-3 gap-0 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-slate-200">
                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total</span>
                 <span className="text-xl font-black text-gray-900">€{total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-gray-200">
+              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-slate-200">
                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Remaining</span>
                 <span className="text-xl font-black text-blue-600">€{remaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
@@ -820,7 +804,7 @@ export default function BookingModal({
                     <CurrencyInput
                       value={formData.price ?? 0}
                       onChange={v => setFormData({ ...formData, price: v })}
-                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                     />
                   </div>
                   {nights > 0 && (formData.price || 0) > 0 && (
@@ -836,7 +820,7 @@ export default function BookingModal({
                     <CurrencyInput
                       value={formData.deposit ?? 0}
                       onChange={v => setFormData({ ...formData, deposit: v })}
-                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                     />
                   </div>
                 </div>
@@ -851,7 +835,7 @@ export default function BookingModal({
                 {(formData.extras || []).map((extra, idx) => (
                   <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                     <input 
-                      className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none bg-gray-50"
+                      className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none bg-white"
                       placeholder="e.g. Airport transfer"
                       value={extra.label || ''}
                       onChange={updateExtra.bind(null, idx, 'label' as any)}
@@ -861,7 +845,7 @@ export default function BookingModal({
                       <CurrencyInput
                         value={extra.amount ?? 0}
                         onChange={v => updateExtra(idx, 'amount' as any, v)}
-                        className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-xs"
+                        className="pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
                       />
                     </div>
                     <button
@@ -908,7 +892,7 @@ export default function BookingModal({
                     <CurrencyInput
                       value={formData.paidLater1 ?? 0}
                       onChange={v => setFormData({ ...formData, paidLater1: v })}
-                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                     />
                   </div>
                 </div>
@@ -919,99 +903,26 @@ export default function BookingModal({
                     <CurrencyInput
                       value={formData.paidLater2 ?? 0}
                       onChange={v => setFormData({ ...formData, paidLater2: v })}
-                      className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Channel & Commission */}
-              <div className="space-y-2 pt-2 border-t border-gray-100">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400">Channel &amp; Commission</h4>
-
-                {/* Row 1: Booking + Payment channel dropdowns */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
-                    value={formData.bookingChannel || ''}
-                    onChange={e => setFormData({ ...formData, bookingChannel: e.target.value })}
-                    aria-label="Booking channel"
-                  >
-                    <option value="">Direct</option>
-                    {bookingChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                  </select>
-
-                  <select
-                    className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
-                    value={formData.paymentChannel || ''}
-                    onChange={e => setFormData({ ...formData, paymentChannel: e.target.value })}
-                    aria-label="Payment channel"
-                  >
-                    <option value="">Direct</option>
-                    {paymentChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                  </select>
-                </div>
-
-                {/* Row 2: basis pills | custom amount input */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex gap-1 p-0.5 bg-gray-100 rounded-xl shrink-0">
-                    {([
-                      { value: 'bookingPrice', label: 'Full Booking' },
-                      { value: 'deposit',      label: 'Deposit' },
-                      { value: 'custom',       label: 'Custom' },
-                    ] as const).map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, channelPaymentBasis: opt.value })}
-                        className={cn(
-                          'py-1 px-2.5 rounded-lg text-xs font-bold transition-all',
-                          formData.channelPaymentBasis === opt.value
-                            ? 'bg-white text-gray-800 shadow-sm'
-                            : 'text-gray-400 hover:text-gray-600'
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Base amount — always visible; editable only for Custom */}
-                  {formData.channelPaymentBasis === 'custom' ? (
-                    <div className="relative shrink-0 w-28">
-                      <span className="absolute left-2.5 top-[9px] text-xs text-gray-400">€</span>
-                      <CurrencyInput
-                        value={formData.commissionCustomAmount ?? 0}
-                        onChange={v => setFormData({ ...formData, commissionCustomAmount: v })}
-                        className="pl-6 pr-2 py-2 border border-gray-200 rounded-xl text-sm"
-                      />
-                    </div>
-                  ) : (
-                    <div className="shrink-0 w-28 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-sm text-gray-400 text-right select-none">
-                      €{commissionBase.toFixed(2)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Row 3: Commission breakdown */}
-                <div className="space-y-0.5 text-xs text-gray-400 font-mono">
-                  <p>
-                    Booking channel {bookingChannelRate}% of base
-                    <span className="mx-1.5 text-gray-200">·</span>
-                    €{liveCommission.booking.toFixed(2)}
-                  </p>
-                  <p>
-                    Payment channel {paymentChannelRate}% of base
-                    <span className="mx-1.5 text-gray-200">·</span>
-                    €{liveCommission.payment.toFixed(2)}
-                  </p>
-                  <p className="font-bold text-gray-500">
-                    Total commission
-                    <span className="mx-1.5 text-gray-200">·</span>
-                    €{liveCommission.total.toFixed(2)}
-                  </p>
-                </div>
-              </div>
+              <CommissionFields
+                price={formData.price || 0}
+                deposit={formData.deposit || 0}
+                extras={formData.extras}
+                bookingChannel={formData.bookingChannel || ''}
+                paymentChannel={formData.paymentChannel || ''}
+                bookingChannelBasis={formData.bookingChannelBasis || 'bookingPrice'}
+                bookingChannelCustomAmount={formData.bookingChannelCustomAmount}
+                paymentChannelBasis={formData.paymentChannelBasis || 'bookingPrice'}
+                paymentChannelCustomAmount={formData.paymentChannelCustomAmount}
+                bookingChannels={bookingChannels}
+                paymentChannels={paymentChannels}
+                onChange={patch => setFormData(prev => ({ ...prev, ...patch }))}
+              />
 
             </div>
           </section>

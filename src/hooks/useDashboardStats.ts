@@ -14,6 +14,7 @@ import {
   commissionForReporting,
   getCollectedAmount,
 } from '@/lib/bookingLifecycle';
+import { commissionInputFromRecord } from '@/lib/commission';
 
 export type { PeriodRange };
 
@@ -107,25 +108,11 @@ function vhFinancials(vh: VenueHire) {
 }
 
 function commissionInputFromBooking(b: Booking) {
-  return {
-    price: b.price || 0,
-    deposit: b.deposit || 0,
-    channelPaymentBasis: b.channelPaymentBasis,
-    commissionCustomAmount: b.commissionCustomAmount,
-    bookingChannel: b.bookingChannel,
-    paymentChannel: b.paymentChannel,
-  };
+  return commissionInputFromRecord(b);
 }
 
 function commissionInputFromVenueHire(vh: VenueHire) {
-  return {
-    price: vh.bookingPrice || 0,
-    deposit: vh.deposit || 0,
-    channelPaymentBasis: vh.channelPaymentBasis,
-    commissionCustomAmount: vh.commissionCustomAmount,
-    bookingChannel: vh.bookingChannel,
-    paymentChannel: vh.paymentChannel,
-  };
+  return commissionInputFromRecord(vh);
 }
 
 export function useDashboardStats(

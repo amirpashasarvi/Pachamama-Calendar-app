@@ -5,12 +5,13 @@ import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
 import { db } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn, findPeriodOverlapError } from '@/lib/utils';
-import { calcTotalCommission } from '@/lib/commission';
+import { migrateCommissionFields } from '@/lib/commission';
+import CommissionFields from '@/components/modals/CommissionFields';
 import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
 import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle';
 import CurrencyInput from '@/components/ui/CurrencyInput';
-import { AlertTriangle, Trash2, Save, Plus, X, Ban, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Trash2, Save, Plus, X, Ban, RotateCcw, Receipt } from 'lucide-react';
 import { useBooking } from '@/hooks/useBooking';
 
 interface VenueHireModalProps {
@@ -52,8 +53,10 @@ export default function VenueHireModal({
     paidLater2: 0,
     bookingChannel: '',
     paymentChannel: '',
-    channelPaymentBasis: 'bookingPrice',
-    commissionCustomAmount: 0,
+    bookingChannelBasis: 'bookingPrice',
+    bookingChannelCustomAmount: 0,
+    paymentChannelBasis: 'bookingPrice',
+    paymentChannelCustomAmount: 0,
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export default function VenueHireModal({
         ...venueHire,
         roomNotes: venueHire.roomNotes || {},
         extras: venueHire.extras || [],
-        commissionCustomAmount: venueHire.commissionCustomAmount ?? 0,
+        ...migrateCommissionFields(venueHire),
       });
     } else if (isOpen) {
       setFormData({
@@ -89,10 +92,12 @@ export default function VenueHireModal({
         extras: [],
         paidLater1: 0,
         paidLater2: 0,
-        bookingChannel: '',
+        bookingChannel: bookingChannels[0]?.name || '',
         paymentChannel: '',
-        channelPaymentBasis: 'bookingPrice',
-        commissionCustomAmount: 0,
+        bookingChannelBasis: 'bookingPrice',
+        bookingChannelCustomAmount: 0,
+        paymentChannelBasis: 'bookingPrice',
+        paymentChannelCustomAmount: 0,
       });
     }
     setError(null);
@@ -127,39 +132,6 @@ export default function VenueHireModal({
   if (remaining <= 0 && total > 0) calculatedStatus = 'Paid';
   else if ((formData.deposit || 0) > 0 || (formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) calculatedStatus = 'Partial';
 
-  const selectedBookingChannel = bookingChannels.find(c => c.name === formData.bookingChannel);
-  const selectedPaymentChannel = paymentChannels.find(c => c.name === formData.paymentChannel);
-  const bookingChannelRate = selectedBookingChannel?.commission ?? 0;
-  const paymentChannelRate = selectedPaymentChannel?.commission ?? 0;
-
-  const commissionBase = formData.channelPaymentBasis === 'custom'
-    ? (formData.commissionCustomAmount ?? 0)
-    : formData.channelPaymentBasis === 'bookingPrice'
-      ? (formData.bookingPrice || 0)
-      : (formData.deposit || 0);
-
-  const liveCommission = useMemo(() => calcTotalCommission(
-    {
-      price: formData.bookingPrice || 0,
-      deposit: formData.deposit || 0,
-      channelPaymentBasis: formData.channelPaymentBasis || 'bookingPrice',
-      commissionCustomAmount: formData.commissionCustomAmount,
-      bookingChannel: formData.bookingChannel || '',
-      paymentChannel: formData.paymentChannel || '',
-    },
-    bookingChannels,
-    paymentChannels
-  ), [
-    formData.channelPaymentBasis,
-    formData.bookingPrice,
-    formData.deposit,
-    formData.commissionCustomAmount,
-    formData.bookingChannel,
-    formData.paymentChannel,
-    bookingChannels,
-    paymentChannels,
-  ]);
-
   const overlapWarning = useMemo(() => {
     if (!formData.startDate || !formData.endDate) return null;
     return findPeriodOverlapError(formData.startDate, formData.endDate, {
@@ -178,6 +150,16 @@ export default function VenueHireModal({
       return;
     }
 
+    if (!formData.bookingChannel?.trim()) {
+      setError('Please select a booking channel before saving.');
+      return;
+    }
+
+    if (((formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) && !formData.paymentChannel?.trim()) {
+      setError('Please select a payment channel when Paid Later amounts are entered.');
+      return;
+    }
+
     const removeUndefinedDeep = (obj: unknown): unknown => {
       if (Array.isArray(obj)) return obj.map(removeUndefinedDeep);
       if (obj !== null && typeof obj === 'object') {
@@ -190,9 +172,11 @@ export default function VenueHireModal({
       return obj;
     };
 
-    const { id, ...dataToSave } = formData;
+    const { id, channelPaymentBasis: _legacyBasis, commissionCustomAmount: _legacyCustom, ...dataToSave } = formData;
     const data = removeUndefinedDeep({
       ...dataToSave,
+      bookingChannelBasis: formData.bookingChannelBasis || 'bookingPrice',
+      paymentChannelBasis: formData.paymentChannelBasis || 'bookingPrice',
       updatedAt: new Date().toISOString(),
     }) as Record<string, unknown>;
 
@@ -430,28 +414,32 @@ export default function VenueHireModal({
         </section>
 
         {/* Financial info */}
-        <section className="space-y-4 pt-4 border-t border-gray-100">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Financials</h3>
+        <section className="-mx-6 px-6 py-5 mt-1 space-y-4 bg-[#ACDDDE] border-y border-teal-200/60">
+          <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">
+            <Receipt size={14} className="text-slate-500 shrink-0" />
+            Financials
+          </h3>
 
-          {/* Summary at top */}
-          <div className="pb-4 border-b flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</span>
-              <span className="text-2xl font-black text-black">€{total.toFixed(2)}</span>
+          {/* Summary card */}
+          <div className="grid grid-cols-3 gap-0 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-slate-200">
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total</span>
+              <span className="text-xl font-black text-gray-900">€{total.toFixed(2)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-gray-400 uppercase">Remaining</span>
-                <span className="text-lg font-bold text-blue-600">€{remaining.toFixed(2)}</span>
-              </div>
-              <div className={cn(
-                "px-4 py-1.5 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
+            <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-slate-200">
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Remaining</span>
+              <span className="text-xl font-black text-blue-600">€{remaining.toFixed(2)}</span>
+            </div>
+            <div className="flex flex-col items-center justify-center py-4 px-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Status</span>
+              <span className={cn(
+                "px-3 py-1 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
                 calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
                 calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
                 'bg-rose-100 text-rose-700'
               )}>
                 {calculatedStatus}
-              </div>
+              </span>
             </div>
           </div>
 
@@ -465,7 +453,7 @@ export default function VenueHireModal({
                   <CurrencyInput
                     value={formData.bookingPrice ?? 0}
                     onChange={v => setFormData({ ...formData, bookingPrice: v })}
-                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                    className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                   />
                 </div>
                 {days > 0 && (formData.bookingPrice || 0) > 0 && (
@@ -481,7 +469,7 @@ export default function VenueHireModal({
                   <CurrencyInput
                     value={formData.deposit ?? 0}
                     onChange={v => setFormData({ ...formData, deposit: v })}
-                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                    className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                   />
                 </div>
               </div>
@@ -493,7 +481,7 @@ export default function VenueHireModal({
               {(formData.extras || []).map((extra, idx) => (
                 <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                   <input
-                    className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none bg-gray-50"
+                    className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none bg-white"
                     placeholder="e.g. Sound system"
                     value={extra.label || ''}
                     onChange={e => updateExtra(idx, 'label', e.target.value)}
@@ -503,7 +491,7 @@ export default function VenueHireModal({
                     <CurrencyInput
                       value={extra.amount ?? 0}
                       onChange={v => updateExtra(idx, 'amount', v)}
-                      className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-xs"
+                      className="pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
                     />
                   </div>
                   <button type="button" onClick={() => removeExtra(idx)} className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0">
@@ -541,7 +529,7 @@ export default function VenueHireModal({
                   <CurrencyInput
                     value={formData.paidLater1 ?? 0}
                     onChange={v => setFormData({ ...formData, paidLater1: v })}
-                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                    className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                   />
                 </div>
               </div>
@@ -552,94 +540,26 @@ export default function VenueHireModal({
                   <CurrencyInput
                     value={formData.paidLater2 ?? 0}
                     onChange={v => setFormData({ ...formData, paidLater2: v })}
-                    className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl"
+                    className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Channel & Commission */}
-            <div className="space-y-2 pt-2 border-t border-gray-100">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400">Channel &amp; Commission</h4>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
-                  value={formData.bookingChannel || ''}
-                  onChange={e => setFormData({ ...formData, bookingChannel: e.target.value })}
-                  aria-label="Booking channel"
-                >
-                  <option value="">Direct</option>
-                  {bookingChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                </select>
-
-                <select
-                  className="w-40 shrink-0 px-3 py-2 border border-gray-200 rounded-xl outline-none bg-gray-50 text-sm"
-                  value={formData.paymentChannel || ''}
-                  onChange={e => setFormData({ ...formData, paymentChannel: e.target.value })}
-                  aria-label="Payment channel"
-                >
-                  <option value="">Direct</option>
-                  {paymentChannels.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                </select>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex gap-1 p-0.5 bg-gray-100 rounded-xl shrink-0">
-                  {([
-                    { value: 'bookingPrice', label: 'Full Booking' },
-                    { value: 'deposit',      label: 'Deposit' },
-                    { value: 'custom',       label: 'Custom' },
-                  ] as const).map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, channelPaymentBasis: opt.value })}
-                      className={cn(
-                        'py-1 px-2.5 rounded-lg text-xs font-bold transition-all',
-                        formData.channelPaymentBasis === opt.value
-                          ? 'bg-white text-gray-800 shadow-sm'
-                          : 'text-gray-400 hover:text-gray-600'
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-
-                {formData.channelPaymentBasis === 'custom' ? (
-                  <div className="relative shrink-0 w-28">
-                    <span className="absolute left-2.5 top-[9px] text-xs text-gray-400">€</span>
-                    <CurrencyInput
-                      value={formData.commissionCustomAmount ?? 0}
-                      onChange={v => setFormData({ ...formData, commissionCustomAmount: v })}
-                      className="pl-6 pr-2 py-2 border border-gray-200 rounded-xl text-sm"
-                      placeholder="0.00"
-                    />
-                  </div>
-                ) : (
-                  <div className="shrink-0 w-28 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-mono text-sm text-gray-400 text-right select-none">
-                    €{commissionBase.toFixed(2)}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-0.5 text-xs text-gray-400 font-mono">
-                <p>
-                  Booking channel {bookingChannelRate}% of base
-                  <span className="mx-1.5 text-gray-200">·</span>
-                  €{liveCommission.booking.toFixed(2)}
-                </p>
-                <p>
-                  Payment channel {paymentChannelRate}% of base
-                  <span className="mx-1.5 text-gray-200">·</span>
-                  €{liveCommission.payment.toFixed(2)}
-                </p>
-                <p className="font-bold text-gray-500">
-                  Total commission
-                  <span className="mx-1.5 text-gray-200">·</span>
-                  €{liveCommission.total.toFixed(2)}
-                </p>
-              </div>
-            </div>
+            <CommissionFields
+              price={formData.bookingPrice || 0}
+              deposit={formData.deposit || 0}
+              extras={formData.extras}
+              bookingChannel={formData.bookingChannel || ''}
+              paymentChannel={formData.paymentChannel || ''}
+              bookingChannelBasis={formData.bookingChannelBasis || 'bookingPrice'}
+              bookingChannelCustomAmount={formData.bookingChannelCustomAmount}
+              paymentChannelBasis={formData.paymentChannelBasis || 'bookingPrice'}
+              paymentChannelCustomAmount={formData.paymentChannelCustomAmount}
+              bookingChannels={bookingChannels}
+              paymentChannels={paymentChannels}
+              onChange={patch => setFormData(prev => ({ ...prev, ...patch }))}
+            />
           </div>
         </section>
 
