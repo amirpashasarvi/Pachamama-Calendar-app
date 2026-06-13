@@ -51,8 +51,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState(() => monthRange(now.getFullYear(), now.getMonth()));
 
-  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
-  const [showCancelled, setShowCancelled] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid' | 'cancelled'>('all');
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [editingVenueHire, setEditingVenueHire] = useState<VenueHire | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -145,16 +144,12 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
       const cancelled = isCancelledLifecycle(b);
 
-      if (period === 'All') {
-        if (cancelled) return showCancelled;
-        return true;
-      }
-
       if (cancelled) {
-        if (!showCancelled) return false;
+        if (period === 'All') return true;
         return checkInInPeriod(b.checkIn, start, end);
       }
 
+      if (period === 'All') return true;
       return stayOverlapsPeriod(b.checkIn, b.checkOut, start, end);
     });
 
@@ -170,7 +165,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
     });
 
     return { startDate: start, endDate: end, filteredItems: sorted };
-  }, [period, roomFilter, sortBy, dateRange, combinedItems, showCancelled, selectedYear, selectedMonth]);
+  }, [period, roomFilter, sortBy, dateRange, combinedItems, selectedYear, selectedMonth]);
 
   const periodRange = useMemo(
     () => ({ start: startDate, end: endDate }),
@@ -187,7 +182,10 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
     if (statusFilter !== 'all') {
       result = result.filter(b => {
-        if (isCancelledLifecycle(b)) return false;
+        const cancelled = isCancelledLifecycle(b);
+        if (statusFilter === 'cancelled') return cancelled;
+
+        if (cancelled) return false;
         const total = b.financials.price + (b.financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
         const paid = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
         const remaining = total - paid;
@@ -374,23 +372,6 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                   ))}
                 </select>
               </div>
-
-              <div className="flex flex-col gap-2 shrink-0">
-                <span className="text-xs font-bold text-gray-400">Cancelled</span>
-                <button
-                  type="button"
-                  onClick={() => setShowCancelled(v => !v)}
-                  className={cn(
-                    FILTER_CTRL,
-                    'inline-flex items-center transition-colors whitespace-nowrap',
-                    showCancelled
-                      ? 'bg-slate-800 text-white border-slate-800'
-                      : 'text-gray-500 hover:text-gray-900 hover:border-gray-300'
-                  )}
-                >
-                  {showCancelled ? 'Showing cancelled' : 'Show cancelled'}
-                </button>
-              </div>
             </div>
 
             {/* Bookings Table */}
@@ -418,9 +399,10 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       className="px-3 py-1.5 bg-gray-50 border rounded-xl text-[11px] font-bold outline-none cursor-pointer hover:bg-gray-100 transition-colors"
                     >
                       <option value="all">All</option>
-                      <option value="unpaid">Unpaid</option>
-                      <option value="partial">Partial</option>
                       <option value="paid">Paid</option>
+                      <option value="partial">Partial</option>
+                      <option value="unpaid">Unpaid</option>
+                      <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
@@ -493,39 +475,39 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                         : rooms.find(r => r.id === b.roomId)?.name || 'Unknown';
 
                       return (
-                        <tr key={b.id} className={cn('group hover:bg-gray-50/80 transition-colors', cancelled && 'opacity-75')}>
+                        <tr key={b.id} className={cn('group hover:bg-gray-50/80 transition-colors', cancelled && 'bg-rose-50/40')}>
                           <td className="px-6 py-4">
-                            <div className="text-sm font-bold text-gray-900">{b.guestName}</div>
+                            <div className={cn('text-sm font-bold', cancelled ? 'text-rose-700' : 'text-gray-900')}>{b.guestName}</div>
                             {!b.isVenueHire && b.type && (
-                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{b.type}</span>
+                              <span className={cn('text-[9px] font-black uppercase tracking-wider', cancelled ? 'text-rose-500' : 'text-gray-400')}>{b.type}</span>
                             )}
                           </td>
                           <td className="px-6 py-4">
-                            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">{roomName}</span>
+                            <span className={cn('text-xs font-bold whitespace-nowrap', cancelled ? 'text-rose-600' : 'text-gray-500')}>{roomName}</span>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[10px] font-black text-gray-900">{format(parseISO(b.checkIn), 'dd MMM')}</span>
-                              <span className="text-[9px] font-bold text-gray-400">to</span>
-                              <span className="text-[10px] font-black text-gray-900">{format(parseISO(b.checkOut), 'dd MMM')}</span>
+                              <span className={cn('text-[10px] font-black', cancelled ? 'text-rose-700' : 'text-gray-900')}>{format(parseISO(b.checkIn), 'dd MMM')}</span>
+                              <span className={cn('text-[9px] font-bold', cancelled ? 'text-rose-400' : 'text-gray-400')}>to</span>
+                              <span className={cn('text-[10px] font-black', cancelled ? 'text-rose-700' : 'text-gray-900')}>{format(parseISO(b.checkOut), 'dd MMM')}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <span className="text-xs font-black">€{amounts.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className={cn('text-xs font-black', cancelled ? 'text-rose-700' : '')}>€{amounts.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <span className="text-xs font-bold text-gray-600">€{paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className={cn('text-xs font-bold', cancelled ? 'text-rose-600' : 'text-gray-600')}>€{paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </td>
                           <td className="px-6 py-4 text-right">
                             {remaining > 0 ? (
                               <span className="text-xs font-black text-amber-600">€{remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             ) : (
-                              <span className="text-xs font-bold text-green-600">—</span>
+                              <span className={cn('text-xs font-bold', cancelled ? 'text-rose-400' : 'text-green-600')}>—</span>
                             )}
                           </td>
                           <td className="px-6 py-4 text-center">
                             {cancelled ? (
-                              <span className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-[10px] font-black uppercase">Cancelled</span>
+                              <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md text-[10px] font-black uppercase">Cancelled</span>
                             ) : remaining === 0 && fullTotal > 0 ? (
                               <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-[10px] font-black uppercase">Paid</span>
                             ) : paid > 0 ? (

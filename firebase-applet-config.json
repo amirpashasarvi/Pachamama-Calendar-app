@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0730371199",
-  "appId": "1:938425440596:web:6db6f985ebc44d830110c1",
-  "apiKey": "AIzaSyCZ_3IdrOmcCR_OeOvjEzJx2xky7U9L5Bk",
-  "authDomain": "gen-lang-client-0730371199.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-6e88db3f-bd4b-4318-840c-9af7e0054958",
-  "storageBucket": "gen-lang-client-0730371199.firebasestorage.app",
-  "messagingSenderId": "938425440596",
+  "projectId": "pachamama-calendar",
+  "appId": "1:1032225619368:web:85e1793d26c1e23a66b19d",
+  "apiKey": "AIzaSyDWSsA4fKtMvIvIiXPRnIUCsRCks0OF0j0",
+  "authDomain": "pachamama-calendar.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "pachamama-calendar.firebasestorage.app",
+  "messagingSenderId": "1032225619368",
   "measurementId": ""
 }

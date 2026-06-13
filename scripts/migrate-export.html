@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Firestore Export — OLD project</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; }
+    button { padding: 12px 20px; font-size: 16px; cursor: pointer; margin: 8px 8px 8px 0; }
+    #log { background: #f4f4f5; padding: 16px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; margin-top: 16px; max-height: 400px; overflow-y: auto; }
+    .primary { background: #111; color: #fff; border: none; border-radius: 8px; }
+    .secondary { background: #fff; border: 1px solid #ccc; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Export Firestore (old project)</h1>
+  <p>Sign in with <strong>pasha@storywiseapp.com</strong> (or any admin on the old project), then export.</p>
+  <button class="secondary" id="signin">Sign in with Google</button>
+  <button class="primary" id="export" disabled>Export all data</button>
+  <div id="log">Waiting…</div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+    import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: 'AIzaSyCZ_3IdrOmcCR_OeOvjEzJx2xky7U9L5Bk',
+      authDomain: 'gen-lang-client-0730371199.firebaseapp.com',
+      projectId: 'gen-lang-client-0730371199',
+      storageBucket: 'gen-lang-client-0730371199.firebasestorage.app',
+      messagingSenderId: '938425440596',
+      appId: '1:938425440596:web:6db6f985ebc44d830110c1',
+    };
+
+    const COLLECTIONS = [
+      'rooms', 'bookingTypes', 'bookingChannels', 'paymentChannels', 'bookingWebsites',
+      'settings', 'teamPositions', 'retreatTypes', 'retreats', 'bookings', 'venueHires',
+      'teamAssignments', 'housekeeping', 'users', 'activityLog', 'profiles',
+    ];
+
+    const logEl = document.getElementById('log');
+    const exportBtn = document.getElementById('export');
+    const log = (msg) => { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app, 'ai-studio-6e88db3f-bd4b-4318-840c-9af7e0054958');
+
+    document.getElementById('signin').onclick = async () => {
+      try {
+        await signInWithPopup(auth, new GoogleAuthProvider());
+        log('Signed in as ' + auth.currentUser.email);
+        exportBtn.disabled = false;
+      } catch (e) {
+        log('Sign-in failed: ' + e.message);
+      }
+    };
+
+    exportBtn.onclick = async () => {
+      exportBtn.disabled = true;
+      logEl.textContent = '';
+      const payload = { exportedAt: new Date().toISOString(), collections: {} };
+      let total = 0;
+
+      for (const name of COLLECTIONS) {
+        try {
+          const snap = await getDocs(collection(db, name));
+          payload.collections[name] = snap.docs.map(d => ({ id: d.id, data: d.data() }));
+          log(`${name}: ${snap.size} documents`);
+          total += snap.size;
+        } catch (e) {
+          log(`${name}: ERROR — ${e.message}`);
+          payload.collections[name] = [];
+        }
+      }
+
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `firestore-export-${Date.now()}.json`;
+      a.click();
+      log(`\nDone. ${total} documents downloaded.`);
+      exportBtn.disabled = false;
+    };
+  </script>
+</body>
+</html>

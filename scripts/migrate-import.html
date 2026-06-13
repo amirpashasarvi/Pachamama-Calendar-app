@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Firestore Import — NEW project</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; }
+    button { padding: 12px 20px; font-size: 16px; cursor: pointer; margin: 8px 8px 8px 0; }
+    #log { background: #f4f4f5; padding: 16px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; margin-top: 16px; max-height: 400px; overflow-y: auto; }
+    .primary { background: #111; color: #fff; border: none; border-radius: 8px; }
+    .secondary { background: #fff; border: 1px solid #ccc; border-radius: 8px; }
+    input[type=file] { margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>Import Firestore (new project)</h1>
+  <p>Sign in with <strong>amirpasha.sarvi@gmail.com</strong>, choose the export file, then import.</p>
+  <button class="secondary" id="signin">Sign in with Google</button>
+  <br />
+  <input type="file" id="file" accept=".json" disabled />
+  <button class="primary" id="import" disabled>Import data</button>
+  <div id="log">Waiting…</div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+    import { getFirestore, doc, getDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: 'AIzaSyDWSsA4fKtMvIvIiXPRnIUCsRCks0OF0j0',
+      authDomain: 'pachamama-calendar.firebaseapp.com',
+      projectId: 'pachamama-calendar',
+      storageBucket: 'pachamama-calendar.firebasestorage.app',
+      messagingSenderId: '1032225619368',
+      appId: '1:1032225619368:web:85e1793d26c1e23a66b19d',
+    };
+
+    const BATCH_SIZE = 400;
+    const SKIP_EXISTING = new Set(['users']);
+
+    const logEl = document.getElementById('log');
+    const fileInput = document.getElementById('file');
+    const importBtn = document.getElementById('import');
+    let exportData = null;
+
+    const log = (msg) => { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    document.getElementById('signin').onclick = async () => {
+      try {
+        await signInWithPopup(auth, new GoogleAuthProvider());
+        log('Signed in as ' + auth.currentUser.email);
+        fileInput.disabled = false;
+      } catch (e) {
+        log('Sign-in failed: ' + e.message);
+      }
+    };
+
+    fileInput.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      exportData = JSON.parse(await file.text());
+      const total = Object.values(exportData.collections).reduce((s, docs) => s + docs.length, 0);
+      log(`Loaded export file: ${total} documents`);
+      importBtn.disabled = false;
+    };
+
+    importBtn.onclick = async () => {
+      if (!exportData) return;
+      importBtn.disabled = true;
+      logEl.textContent = '';
+      let written = 0;
+      let skipped = 0;
+
+      for (const [name, docs] of Object.entries(exportData.collections)) {
+        if (!docs?.length) { log(`${name}: (empty)`); continue; }
+
+        for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+          const chunk = docs.slice(i, i + BATCH_SIZE);
+          const batch = writeBatch(db);
+          let ops = 0;
+
+          for (const { id, data } of chunk) {
+            if (SKIP_EXISTING.has(name)) {
+              const existing = await getDoc(doc(db, name, id));
+              if (existing.exists()) { skipped++; continue; }
+            }
+            batch.set(doc(db, name, id), data);
+            ops++;
+          }
+
+          if (ops > 0) {
+            await batch.commit();
+            written += ops;
+          }
+        }
+        log(`${name}: ${docs.length} in file`);
+      }
+
+      log(`\nDone. ${written} written, ${skipped} skipped (existing users).`);
+      importBtn.disabled = false;
+    };
+  </script>
+</body>
+</html>

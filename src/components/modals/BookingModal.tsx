@@ -85,6 +85,7 @@ export default function BookingModal({
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmCancel, setShowConfirmCancel] = useState(false);
+  const [showConfirmRestore, setShowConfirmRestore] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [isReactivating, setIsReactivating] = useState(false);
@@ -121,6 +122,7 @@ export default function BookingModal({
     setShowConfirmDelete(false);
     setIsDeleting(false);
     setShowConfirmCancel(false);
+    setShowConfirmRestore(false);
     setIsCancelling(false);
     setCancelReason('');
     setIsReactivating(false);
@@ -128,16 +130,17 @@ export default function BookingModal({
   }, [booking?.id, initialData, isOpen]);
 
   useEffect(() => {
-    if (!showConfirmDelete && !showConfirmCancel) return;
+    if (!showConfirmDelete && !showConfirmCancel && !showConfirmRestore) return;
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setShowConfirmDelete(false);
         setShowConfirmCancel(false);
+        setShowConfirmRestore(false);
       }
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [showConfirmDelete, showConfirmCancel]);
+  }, [showConfirmDelete, showConfirmCancel, showConfirmRestore]);
 
   // Set default booking channel for new bookings
   useEffect(() => {
@@ -358,12 +361,13 @@ export default function BookingModal({
     }
   };
 
-  const handleReactivateBooking = async () => {
+  const handleRestoreBooking = async () => {
     if (!booking?.id || isReactivating) return;
 
     const overlapMessage = checkOverlaps(booking.roomId);
     if (overlapMessage) {
-      setError(`Cannot reactivate: ${overlapMessage}`);
+      setError(`Cannot restore booking: ${overlapMessage}`);
+      setShowConfirmRestore(false);
       return;
     }
 
@@ -377,17 +381,18 @@ export default function BookingModal({
         updatedAt: now,
       });
       logActivity({
-        action: 'reactivated',
+        action: 'restored',
         entityType: 'booking',
         entityId: booking.id,
-        summary: `Booking reactivated for ${booking.guestName}`,
+        summary: `Booking restored for ${booking.guestName}`,
         userName: currentUserName || currentUserEmail,
         userEmail: currentUserEmail,
       });
+      setShowConfirmRestore(false);
       onClose();
     } catch (err) {
       setIsReactivating(false);
-      const msg = err instanceof Error ? err.message : 'Failed to reactivate booking.';
+      const msg = err instanceof Error ? err.message : 'Failed to restore booking.';
       setError(msg);
     }
   };
@@ -427,7 +432,7 @@ export default function BookingModal({
           {isCancelled ? (
             <button
               type="button"
-              onClick={handleReactivateBooking}
+              onClick={() => setShowConfirmRestore(true)}
               disabled={isReactivating}
               className="flex items-center gap-2 px-4 py-3 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
             >
@@ -436,7 +441,7 @@ export default function BookingModal({
               ) : (
                 <RotateCcw size={16} />
               )}
-              Reactivate
+              Restore Booking
             </button>
           ) : (
             <button
@@ -940,6 +945,49 @@ export default function BookingModal({
         )}
 
       </form>
+
+      {/* Restore confirmation overlay */}
+      {showConfirmRestore && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          onMouseDown={() => !isReactivating && setShowConfirmRestore(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm animate-in fade-in zoom-in-95 duration-150"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1 mb-5">
+              <h3 className="text-base font-bold text-gray-900">Restore this booking?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                The booking will return to the calendar as active. Make sure the room is still available for these dates.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmRestore(false)}
+                disabled={isReactivating}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Keep Cancelled
+              </button>
+              <button
+                type="button"
+                onClick={handleRestoreBooking}
+                disabled={isReactivating}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isReactivating ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <RotateCcw size={14} />
+                )}
+                {isReactivating ? 'Restoring…' : 'Restore Booking'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cancel confirmation overlay */}
       {showConfirmCancel && (

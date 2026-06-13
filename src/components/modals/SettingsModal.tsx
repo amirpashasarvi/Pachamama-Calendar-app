@@ -888,9 +888,9 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: option.color }} />
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-gray-700">{option.name}</span>
-                    {isChannel && option.commission !== undefined && option.commission > 0 && (
+                    {isChannel && (
                       <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                        {option.commission}%
+                        {option.commission ?? 0}%
                       </span>
                     )}
                   </div>

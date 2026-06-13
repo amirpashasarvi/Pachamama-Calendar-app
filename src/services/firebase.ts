@@ -1,11 +1,21 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfigFile from '../../firebase-applet-config.json';
+
+const firebaseConfig = {
+  apiKey: firebaseConfigFile.apiKey,
+  authDomain: firebaseConfigFile.authDomain,
+  projectId: firebaseConfigFile.projectId,
+  storageBucket: firebaseConfigFile.storageBucket,
+  messagingSenderId: firebaseConfigFile.messagingSenderId,
+  appId: firebaseConfigFile.appId,
+  ...(firebaseConfigFile.measurementId ? { measurementId: firebaseConfigFile.measurementId } : {}),
+};
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfigFile.firestoreDatabaseId);
 
 export enum OperationType {
   CREATE = 'create',
