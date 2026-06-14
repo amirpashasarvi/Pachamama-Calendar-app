@@ -226,3 +226,34 @@ export interface TeamAssignment {
   /** @deprecated legacy field — read-only fallback */
   roomNotes?: string;
 }
+
+/** Monthly expense totals keyed by expense category id (Settings → Expense Categories). */
+export interface MonthlyExpense {
+  id: string; // YYYY-MM
+  month: string; // YYYY-MM
+  /** Manual totals for this month (e.g. from Spendee). */
+  amounts: Record<string, number>;
+  /** Amounts allocated from annual/multi-month spreads. */
+  spreadAmounts?: Record<string, number>;
+  /** categoryId → expenseSpreads doc id */
+  spreadIds?: Record<string, string>;
+  /** Snapshot of category names at save time — used when a category is later removed. */
+  categoryLabels?: Record<string, string>;
+  note?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** Even split of one payment across multiple months (e.g. annual tax). */
+export interface ExpenseSpread {
+  id: string;
+  year: number;
+  categoryId: string;
+  categoryLabel: string;
+  totalAmount: number;
+  months: string[];
+  perMonth: Record<string, number>;
+  note?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}

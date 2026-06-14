@@ -17,6 +17,11 @@ export function useAuth() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       unsubscribeUserDoc?.();
       unsubscribeUserDoc = undefined;
+
+      if (u) {
+        setLoading(true);
+        setProfile(null);
+      }
       setUser(u);
       if (u) {
         const email = normalizeEmail(u.email || '');

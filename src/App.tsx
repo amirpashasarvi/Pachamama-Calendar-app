@@ -1,7 +1,7 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, List, BrushCleaning, Bell, BarChart3, Trash2, MessageSquare, Eye, MoreHorizontal } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import SettingsModal from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
@@ -21,7 +21,7 @@ import {
 
 function AppContent() {
   const { profile, logout, isAdmin } = useAuth();
-  const { bookingTypes, bookingChannels, paymentChannels, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
+  const { bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
   const { housekeeping, updateStatus, checkAutoDirty } = useHousekeeping(rooms, bookings, profile?.name || profile?.email);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -32,7 +32,6 @@ function AppContent() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isViewOpen, setIsViewOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showTeamRoster, setShowTeamRoster] = useState(false);
@@ -47,15 +46,11 @@ function AppContent() {
 
   // Close menus on click outside
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
-      }
-      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
-        setIsViewOpen(false);
       }
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
         setIsMoreMenuOpen(false);
@@ -74,8 +69,6 @@ function AppContent() {
     layout.appIconBtn,
     extra,
   );
-
-  const trashCount = deletedBookings.length + deletedVenueHires.length;
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden print:h-auto print:overflow-visible">
@@ -101,56 +94,6 @@ function AppContent() {
             >
               <BrushCleaning size={layout.appIconSize} />
             </button>
-
-            {/* View — visible to all staff */}
-            <div className="relative border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2" ref={viewMenuRef}>
-              <button
-                type="button"
-                onClick={() => setIsViewOpen(!isViewOpen)}
-                className={iconBtn()}
-                title="Calendar display"
-                aria-label="Calendar display"
-              >
-                <Eye size={layout.appIconSize} />
-              </button>
-
-              {isViewOpen && (
-                <div className="absolute right-0 mt-2 w-52 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-3 py-2 border-b border-gray-50">
-                    <span className="text-xs font-bold text-gray-500">Calendar View</span>
-                  </div>
-                  <div className="py-1 space-y-0.5">
-                    <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={compactCalendar}
-                        onChange={(e) => handleCompactCalendarChange(e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                      />
-                      <span className="text-xs font-medium text-gray-700">Compact calendar</span>
-                    </label>
-                    <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showSummary}
-                        onChange={(e) => setShowSummary(e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                      />
-                      <span className="text-xs font-medium text-gray-700">Summary</span>
-                    </label>
-                    <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showTeamRoster}
-                        onChange={(e) => setShowTeamRoster(e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                      />
-                      <span className="text-xs font-medium text-gray-700">Staff & Volunteers</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Admin-only controls */}
             {isAdmin && (
@@ -267,37 +210,25 @@ function AppContent() {
                   )}
                 </div>
 
-                {/* Desktop: Reports, List, Trash, Settings */}
+                {/* Desktop: Trash, Finances, Settings */}
                 <div className="hidden sm:flex items-center gap-1 border-l border-gray-100 ml-1 pl-2">
                   <button
                     type="button"
-                    onClick={() => setIsDashboardOpen(true)}
-                    className={iconBtn()}
-                    title="Reports"
-                    aria-label="Reports"
-                  >
-                    <BarChart3 size={layout.appIconSize} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsStatsOpen(true)}
-                    className={iconBtn()}
-                    title="Booking List"
-                    aria-label="Booking List"
-                  >
-                    <List size={layout.appIconSize} />
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setIsTrashOpen(true)}
-                    className={cn(iconBtn('hover:text-rose-500'), 'relative')}
+                    className={cn(iconBtn('hover:text-rose-500'))}
                     title="Recently Deleted"
                     aria-label="Recently Deleted"
                   >
                     <Trash2 size={layout.appIconSize} />
-                    {trashCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
-                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDashboardOpen(true)}
+                    className={iconBtn()}
+                    title="Finances"
+                    aria-label="Finances"
+                  >
+                    <DollarSign size={layout.appIconSize} />
                   </button>
                   <button
                     type="button"
@@ -315,14 +246,11 @@ function AppContent() {
                   <button
                     type="button"
                     onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                    className={cn(iconBtn(), 'relative')}
+                    className={iconBtn()}
                     title="More"
                     aria-label="More"
                   >
                     <MoreHorizontal size={layout.appIconSize} />
-                    {trashCount > 0 && (
-                      <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full" />
-                    )}
                   </button>
 
                   {isMoreMenuOpen && (
@@ -333,28 +261,18 @@ function AppContent() {
                       <div className="py-1 space-y-0.5">
                         <button
                           type="button"
-                          onClick={() => { setIsMoreMenuOpen(false); setIsStatsOpen(true); }}
+                          onClick={() => { setIsMoreMenuOpen(false); setIsTrashOpen(true); }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
                         >
-                          <List size={16} className="text-gray-400" /> Booking List
+                          <Trash2 size={16} className="text-gray-400" />
+                          Recently Deleted
                         </button>
                         <button
                           type="button"
                           onClick={() => { setIsMoreMenuOpen(false); setIsDashboardOpen(true); }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
                         >
-                          <BarChart3 size={16} className="text-gray-400" /> Reports
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setIsMoreMenuOpen(false); setIsTrashOpen(true); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
-                        >
-                          <Trash2 size={16} className="text-gray-400" />
-                          Recently Deleted
-                          {trashCount > 0 && (
-                            <span className="ml-auto px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded text-[10px] font-black">{trashCount}</span>
-                          )}
+                          <DollarSign size={16} className="text-gray-400" /> Finances
                         </button>
                         <button
                           type="button"
@@ -424,6 +342,10 @@ function AppContent() {
           showSummary={showSummary}
           showTeamRoster={showTeamRoster}
           compact={compactCalendar}
+          onCompactCalendarChange={handleCompactCalendarChange}
+          onShowSummaryChange={setShowSummary}
+          onShowTeamRosterChange={setShowTeamRoster}
+          onOpenBookingList={() => setIsStatsOpen(true)}
         />
       </main>
 
@@ -452,6 +374,7 @@ function AppContent() {
             bookingTypes={bookingTypes}
             bookingChannels={bookingChannels}
             paymentChannels={paymentChannels}
+            expenseCategories={expenseCategories}
             users={users}
             rooms={rooms}
             retreatTypes={retreatTypes}

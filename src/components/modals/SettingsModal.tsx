@@ -7,6 +7,7 @@ import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, Gr
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { APP_COLOR_PALETTE } from '@/lib/colorPalette';
+import firebaseConfig from '../../../firebase-applet-config.json';
 import {
   DndContext,
   closestCenter,
@@ -31,6 +32,7 @@ interface SettingsModalProps {
   bookingTypes: ConfigOption[];
   bookingChannels: ConfigOption[];
   paymentChannels: ConfigOption[];
+  expenseCategories: ConfigOption[];
   users: UserRecord[];
   rooms: Room[];
   retreatTypes: RetreatType[];
@@ -43,7 +45,7 @@ const DEFAULT_CONFIG_FORM = { name: '', color: COLORS[0], commission: '' as numb
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const userDocIdFromEmail = (email: string) => normalizeEmail(email);
 
-type SettingsView = 'menu' | 'types' | 'channels' | 'paymentChannels' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
+type SettingsView = 'menu' | 'types' | 'channels' | 'paymentChannels' | 'expenseCategories' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
 
 function SortableItem({ id, children, disabled }: { id: string, children: React.ReactNode, key?: string, disabled?: boolean }) {
   const {
@@ -72,7 +74,7 @@ function SortableItem({ id, children, disabled }: { id: string, children: React.
   );
 }
 
-export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, users, rooms, retreatTypes, teamPositions, displaySettings }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, rooms, retreatTypes, teamPositions, displaySettings }: SettingsModalProps) {
   const [view, setView] = useState<SettingsView>('menu');
   const [limitWarning, setLimitWarning] = useState<boolean>(false);
 
@@ -184,12 +186,14 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       data.order = teamPositions.length;
     }
 
-    if ((collectionName === 'bookingTypes' || collectionName === 'bookingChannels' || collectionName === 'paymentChannels') && !editingId) {
+    if ((collectionName === 'bookingTypes' || collectionName === 'bookingChannels' || collectionName === 'paymentChannels' || collectionName === 'expenseCategories') && !editingId) {
       const currentOptions = collectionName === 'bookingTypes'
         ? bookingTypes
         : collectionName === 'bookingChannels'
           ? bookingChannels
-          : paymentChannels;
+          : collectionName === 'paymentChannels'
+            ? paymentChannels
+            : expenseCategories;
       data.sortOrder = currentOptions.length;
     }
 
@@ -201,10 +205,14 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
       }
       resetForms();
     } catch (err) {
-      console.error('Settings save failed:', err);
+      console.error('Settings save failed:', { collectionName, projectId: firebaseConfig.projectId, err });
       const code = (err as { code?: string })?.code;
       if (code === 'permission-denied') {
-        setSaveError('Permission denied. Deploy firestore.rules to your Firebase database (ai-studio-6e88db3f-bd4b-4318-840c-9af7e0054958) — the paymentChannels rules are not live yet.');
+        setSaveError(
+          collectionName === 'expenseCategories' || collectionName === 'monthlyExpenses'
+            ? 'Permission denied saving finances data. In Firebase Console, open project pachamama-calendar → Firestore → Rules, and confirm the expenseCategories and monthlyExpenses rules are published.'
+            : 'Permission denied. Confirm you are signed in as an admin and that Firestore rules are published for project pachamama-calendar.'
+        );
       } else if (code === 'not-found' && editingId) {
         setSaveError('This item no longer exists. Cancel and add it again.');
         setEditingId(null);
@@ -1299,6 +1307,19 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
 
+            {/* Finances */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Finances</p>
+            <button
+              onClick={() => navigateToView('expenseCategories')}
+              className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
+            >
+              <div className="text-left">
+                <h4 className="font-bold text-gray-900">Expense Categories</h4>
+                <p className="text-xs text-gray-500">Monthly expense groups — e.g. living, operating, tax</p>
+              </div>
+              <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+            </button>
+
             {/* Team & People */}
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1 pt-4 pb-1">Team & People</p>
             <button
@@ -1354,6 +1375,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         {view === 'types' && renderConfigList(bookingTypes, 'bookingTypes', 'Booking Types')}
         {view === 'channels' && renderConfigList(bookingChannels, 'bookingChannels', 'Booking Channels')}
         {view === 'paymentChannels' && renderConfigList(paymentChannels, 'paymentChannels', 'Payment Channels')}
+        {view === 'expenseCategories' && renderConfigList(expenseCategories, 'expenseCategories', 'Expense Categories')}
         {view === 'users' && renderUserManagement()}
         {view === 'rooms' && renderRoomsManagement()}
         {view === 'retreats' && renderRetreatsManagement()}

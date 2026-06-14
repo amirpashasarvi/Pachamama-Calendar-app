@@ -29,6 +29,15 @@ export interface UpcomingItem {
   remaining: number;
 }
 
+export interface OutstandingItem {
+  id: string;
+  name: string;
+  isVenueHire: boolean;
+  remaining: number;
+  checkIn: string;
+  checkOut: string;
+}
+
 export interface GlobalStats {
   totalRevenue: number;
   totalCollected: number;
@@ -43,6 +52,7 @@ export interface GlobalStats {
   futureOutstanding: number;
   revenueByType: { type: string; revenue: number; count: number }[];
   topChannels: { name: string; revenue: number; count: number }[];
+  outstandingItems: OutstandingItem[];
 }
 
 export interface RetreatStats {
@@ -193,10 +203,14 @@ export function useDashboardStats(
     let bookingCommissions = 0, paymentCommissions = 0;
     let overdueOutstanding = 0, expectedOutstanding = 0;
     let unpaidCount = 0;
+    const outstandingItems: OutstandingItem[] = [];
     const byType: Record<string, { revenue: number; count: number }> = {};
     const byChannel: Record<string, { revenue: number; count: number }> = {};
 
     const accumulate = (
+      id: string,
+      name: string,
+      isVenueHire: boolean,
       checkIn: string,
       checkOut: string,
       financials: ReturnType<typeof bookingFinancials>,
@@ -216,6 +230,14 @@ export function useDashboardStats(
       if (amounts.collected === 0 && amounts.revenue > 0) unpaidCount++;
 
       if (!isCancelledLifecycle({ lifecycleStatus }) && amounts.remaining > 0) {
+        outstandingItems.push({
+          id,
+          name,
+          isVenueHire,
+          remaining: amounts.remaining,
+          checkIn,
+          checkOut,
+        });
         if (isBefore(parseISO(checkOut), today)) {
           overdueOutstanding += amounts.remaining;
         } else {
@@ -238,31 +260,37 @@ export function useDashboardStats(
 
     for (const b of filteredBookings) {
       accumulate(
-        b.checkIn, b.checkOut, bookingFinancials(b), b.lifecycleStatus,
+        b.id, b.guestName, false, b.checkIn, b.checkOut,
+        bookingFinancials(b), b.lifecycleStatus,
         commissionInputFromBooking(b), b.type || 'Other', b.bookingChannel || 'Direct'
       );
     }
 
     for (const b of filteredCancelledBookings) {
       accumulate(
-        b.checkIn, b.checkOut, bookingFinancials(b), b.lifecycleStatus,
+        b.id, b.guestName, false, b.checkIn, b.checkOut,
+        bookingFinancials(b), b.lifecycleStatus,
         commissionInputFromBooking(b), 'Cancelled'
       );
     }
 
     for (const vh of filteredVH) {
       accumulate(
-        vh.startDate, vh.endDate, vhFinancials(vh), vh.lifecycleStatus,
+        vh.id, vh.organizer, true, vh.startDate, vh.endDate,
+        vhFinancials(vh), vh.lifecycleStatus,
         commissionInputFromVenueHire(vh), 'Venue Hire'
       );
     }
 
     for (const vh of filteredCancelledVH) {
       accumulate(
-        vh.startDate, vh.endDate, vhFinancials(vh), vh.lifecycleStatus,
+        vh.id, vh.organizer, true, vh.startDate, vh.endDate,
+        vhFinancials(vh), vh.lifecycleStatus,
         commissionInputFromVenueHire(vh), 'Cancelled Venue Hire'
       );
     }
+
+    outstandingItems.sort((a, b) => b.remaining - a.remaining);
 
     let futureOutstanding = 0;
     for (const b of activeBookings) {
@@ -297,6 +325,7 @@ export function useDashboardStats(
         .map(([name, d]) => ({ name, ...d }))
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5),
+      outstandingItems,
     };
   }, [filteredBookings, filteredCancelledBookings, filteredVH, filteredCancelledVH, activeBookings, activeVenueHires, bookingChannels, paymentChannels, periodRange, today]);
 

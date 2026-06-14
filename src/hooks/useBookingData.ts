@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
-import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings } from '@/types';
+import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread } from '@/types';
 
 export function useBookingData() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -14,6 +14,9 @@ export function useBookingData() {
   const [bookingTypes, setBookingTypes] = useState<ConfigOption[]>([]);
   const [bookingChannels, setBookingChannels] = useState<ConfigOption[]>([]);
   const [paymentChannels, setPaymentChannels] = useState<ConfigOption[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<ConfigOption[]>([]);
+  const [monthlyExpenses, setMonthlyExpenses] = useState<MonthlyExpense[]>([]);
+  const [expenseSpreads, setExpenseSpreads] = useState<ExpenseSpread[]>([]);
   const [teamPositions, setTeamPositions] = useState<TeamPosition[]>([]);
   const [teamAssignments, setTeamAssignments] = useState<TeamAssignment[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -33,6 +36,9 @@ export function useBookingData() {
       bookingTypes: false,
       bookingChannels: false,
       paymentChannels: false,
+      expenseCategories: false,
+      monthlyExpenses: false,
+      expenseSpreads: false,
       teamPositions: false,
       teamAssignments: false,
       users: false
@@ -170,6 +176,41 @@ export function useBookingData() {
     }, (error) => {
       checkLoading('paymentChannels');
       handleFirestoreError(error, OperationType.LIST, 'paymentChannels');
+    });
+
+    const unsubExpenseCategories = onSnapshot(collection(db, 'expenseCategories'), (snap) => {
+      const data: ConfigOption[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as ConfigOption));
+      data.sort((a, b) => {
+        const ao = a.sortOrder ?? Infinity;
+        const bo = b.sortOrder ?? Infinity;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name);
+      });
+      setExpenseCategories(data);
+      checkLoading('expenseCategories');
+    }, (error) => {
+      checkLoading('expenseCategories');
+      handleFirestoreError(error, OperationType.LIST, 'expenseCategories');
+    });
+
+    const unsubMonthlyExpenses = onSnapshot(collection(db, 'monthlyExpenses'), (snap) => {
+      const data: MonthlyExpense[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as MonthlyExpense));
+      data.sort((a, b) => b.month.localeCompare(a.month));
+      setMonthlyExpenses(data);
+      checkLoading('monthlyExpenses');
+    }, (error) => {
+      checkLoading('monthlyExpenses');
+      handleFirestoreError(error, OperationType.LIST, 'monthlyExpenses');
+    });
+
+    const unsubExpenseSpreads = onSnapshot(collection(db, 'expenseSpreads'), (snap) => {
+      const data: ExpenseSpread[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as ExpenseSpread));
+      data.sort((a, b) => b.year - a.year || a.categoryLabel.localeCompare(b.categoryLabel));
+      setExpenseSpreads(data);
+      checkLoading('expenseSpreads');
+    }, (error) => {
+      checkLoading('expenseSpreads');
+      handleFirestoreError(error, OperationType.LIST, 'expenseSpreads');
     });
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
@@ -318,6 +359,9 @@ export function useBookingData() {
       unsubTypes();
       unsubChannels();
       unsubPaymentChannels();
+      unsubExpenseCategories();
+      unsubMonthlyExpenses();
+      unsubExpenseSpreads();
       unsubUsers();
       unsubPositions();
       unsubAssignments();
@@ -325,5 +369,5 @@ export function useBookingData() {
     };
   }, []);
 
-  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, users, loading };
+  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, users, loading };
 }

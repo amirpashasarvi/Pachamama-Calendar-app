@@ -52,9 +52,24 @@ interface CalendarProps {
   showSummary?: boolean;
   showTeamRoster?: boolean;
   compact?: boolean;
+  onCompactCalendarChange?: (compact: boolean) => void;
+  onShowSummaryChange?: (show: boolean) => void;
+  onShowTeamRosterChange?: (show: boolean) => void;
+  onOpenBookingList?: () => void;
 }
 
-export default function Calendar({ rooms: propRooms, bookings: propBookings, housekeeping: propHousekeeping, showSummary = false, showTeamRoster = false, compact = true }: CalendarProps) {
+export default function Calendar({
+  rooms: propRooms,
+  bookings: propBookings,
+  housekeeping: propHousekeeping,
+  showSummary = false,
+  showTeamRoster = false,
+  compact = true,
+  onCompactCalendarChange,
+  onShowSummaryChange,
+  onShowTeamRosterChange,
+  onOpenBookingList,
+}: CalendarProps) {
   const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, loading } = useBooking();
   const { isAdmin, profile } = useAuth();
   
@@ -99,18 +114,6 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
     const dayIndex = differenceInDays(date, yearStart);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollLeft = dayIndex * 56;
-    }
-  };
-
-  const handleToday = () => {
-    const today = startOfToday();
-    const currentYear = today.getFullYear();
-    if (viewStartDate.getFullYear() !== currentYear) {
-      setViewStartDate(new Date(currentYear, 0, 1));
-      // Allow React to re-render the new year before scrolling
-      setTimeout(() => scrollToDate(today), 50);
-    } else {
-      scrollToDate(today);
     }
   };
 
@@ -189,7 +192,7 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
     setInitialBookingData({
       roomId: roomId || '',
       checkIn: date ? format(date, 'yyyy-MM-dd') : '',
-      checkOut: date ? format(addDays(date, 7), 'yyyy-MM-dd') : '',
+      checkOut: date ? format(addDays(date, 6), 'yyyy-MM-dd') : '',
     });
     setIsBookingModalOpen(true);
   };
@@ -310,10 +313,15 @@ export default function Calendar({ rooms: propRooms, bookings: propBookings, hou
       <Header
         viewStartDate={viewStartDate}
         setViewStartDate={setViewStartDate}
-        onToday={handleToday}
         onScrollToDate={scrollToDate}
         visibleMonth={visibleMonth}
         compact={compact}
+        showSummary={showSummary}
+        showTeamRoster={showTeamRoster}
+        onCompactCalendarChange={onCompactCalendarChange}
+        onShowSummaryChange={onShowSummaryChange}
+        onShowTeamRosterChange={onShowTeamRosterChange}
+        onOpenBookingList={isAdmin ? onOpenBookingList : undefined}
       />
 
       <div 

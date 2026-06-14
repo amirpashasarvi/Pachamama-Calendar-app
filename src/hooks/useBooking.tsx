@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
 import { useBookingData } from './useBookingData';
-import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings } from '@/types';
+import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread } from '@/types';
 
 interface BookingDataContextType {
   rooms: Room[];
@@ -15,6 +15,9 @@ interface BookingDataContextType {
   bookingTypes: ConfigOption[];
   bookingChannels: ConfigOption[];
   paymentChannels: ConfigOption[];
+  expenseCategories: ConfigOption[];
+  monthlyExpenses: MonthlyExpense[];
+  expenseSpreads: ExpenseSpread[];
   users: UserRecord[];
   settings: GlobalSettings | null;
   calendarDisplaySettings: CalendarDisplaySettings | null;

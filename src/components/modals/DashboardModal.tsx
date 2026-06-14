@@ -1,12 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { X, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, DollarSign, ChevronLeft, ChevronRight, Save, AlertCircle, Plus, Pencil } from 'lucide-react';
 import DatePicker from '@/components/ui/DatePicker';
+import Modal from '@/components/ui/Modal';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
-import { useDashboardStats, UpcomingItem } from '@/hooks/useDashboardStats';
+import { useDashboardStats, UpcomingItem, OutstandingItem } from '@/hooks/useDashboardStats';
+import { useBooking } from '@/hooks/useBooking';
+import { useAuth } from '@/hooks/useAuth';
+import BookingModal from '@/components/modals/BookingModal';
+import VenueHireModal from '@/components/modals/VenueHireModal';
 import { cn, formatCurrency } from '@/lib/utils';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
 import { MONTH_LABELS, FILTER_CTRL, monthRange, isFullMonthRange } from '@/lib/reportPeriod';
+import { monthKeyFromRange, sumMonthlyExpenseTotal, sumExpenseAmounts, splitAmountEvenly, monthsInYear, saveExpenseSpread, findSpreadForCategoryYear, spreadHintForCategory, getCombinedAmounts } from '@/lib/monthlyExpenses';
+import { MonthlyExpense, ExpenseSpread } from '@/types';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 
 interface DashboardModalProps {
   isOpen: boolean;
@@ -18,7 +27,7 @@ interface DashboardModalProps {
   paymentChannels: ConfigOption[];
 }
 
-type Tab = 'overview' | 'retreats' | 'coliving' | 'venue' | 'exchange';
+type Tab = 'overview' | 'expenses' | 'retreats' | 'coliving' | 'venue' | 'exchange';
 type Period = 'All' | 'Month';
 
 // ── Shared UI primitives ──────────────────────────────────────────────────────
@@ -43,11 +52,22 @@ function StatCard({ label, value, sub, tone = 'default' }: {
   );
 }
 
-function MetricRow({ label, value }: { label: string; value: string }) {
+function MetricRow({ label, value, valueTone = 'default' }: {
+  label: string;
+  value: string;
+  valueTone?: 'default' | 'green' | 'amber' | 'rose' | 'blue';
+}) {
+  const valueClass = {
+    default: 'text-gray-900',
+    green: 'text-green-700',
+    amber: 'text-amber-600',
+    rose: 'text-rose-600',
+    blue: 'text-blue-600',
+  }[valueTone];
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-      <span className="text-xs text-gray-500 font-bold">{label}</span>
-      <span className="text-xs font-black text-gray-900">{value}</span>
+      <span className={cn('text-xs font-bold', valueTone === 'rose' ? 'text-rose-600' : 'text-gray-500')}>{label}</span>
+      <span className={cn('text-xs font-black', valueClass)}>{value}</span>
     </div>
   );
 }
@@ -125,63 +145,112 @@ function SectionTitle({ children }: { children: string }) {
 
 // ── Tab sections ──────────────────────────────────────────────────────────────
 
-function OverviewSection({ stats }: { stats: ReturnType<typeof useDashboardStats> }) {
+function OverviewSection({
+  stats,
+  totalExpenses,
+  isMonthView,
+  onOpenOutstanding,
+}: {
+  stats: ReturnType<typeof useDashboardStats>;
+  totalExpenses: number;
+  isMonthView: boolean;
+  onOpenOutstanding: (item: OutstandingItem) => void;
+}) {
   const g = stats.global;
   const maxTypeRevenue = g.revenueByType[0]?.revenue ?? 1;
+  const incomeAfterCommissions = g.totalRevenue - g.totalCommissions;
+  const netIncome = incomeAfterCommissions - totalExpenses;
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Total Revenue" value={formatCurrency(g.totalRevenue)} tone="default" />
-        <StatCard label="Collected" value={formatCurrency(g.totalCollected)} tone="green" />
-        <StatCard label="Overdue (past)" value={formatCurrency(g.overdueOutstanding)} tone="rose" />
-        <StatCard label="Expected (future)" value={formatCurrency(g.expectedOutstanding)} tone="amber" />
-        <StatCard label="Booking Channel Commissions" value={formatCurrency(g.bookingCommissions)} tone="blue" />
-        <StatCard label="Payment Channel Commissions" value={formatCurrency(g.paymentCommissions)} tone="blue" />
-      </div>
+      {isMonthView ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Gross Income" value={formatCurrency(g.totalRevenue)} tone="default" />
+          <StatCard label="Commissions" value={formatCurrency(g.totalCommissions)} tone="blue" />
+          <StatCard label="Expenses" value={formatCurrency(totalExpenses)} tone="amber" />
+          <StatCard label="Net Income" value={formatCurrency(netIncome)} tone={netIncome >= 0 ? 'green' : 'rose'} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 max-w-xl">
+          <StatCard label="Gross Income" value={formatCurrency(g.totalRevenue)} tone="default" />
+          <StatCard label="Commissions" value={formatCurrency(g.totalCommissions)} tone="blue" />
+        </div>
+      )}
 
       <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">
         Based on {g.bookingCount} records · active stays pro-rated · cancelled counted on check-in date
+        {!isMonthView && ' · select a month to see expenses and net income'}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl border p-4 space-y-3">
-          <SectionTitle>Revenue by Booking Type</SectionTitle>
-          {g.revenueByType.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">No data</p>
-          ) : (
-            <div className="space-y-3">
-              {g.revenueByType.map(row => (
-                <React.Fragment key={row.type}>
-                  <BarRow
-                    label={`${row.type} (${row.count})`}
-                    value={row.revenue}
-                    max={maxTypeRevenue}
-                    display={formatCurrency(row.revenue)}
-                  />
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border p-4 space-y-3">
+            <SectionTitle>Revenue by Booking Type</SectionTitle>
+            {g.revenueByType.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No data</p>
+            ) : (
+              <div className="space-y-3">
+                {g.revenueByType.map(row => (
+                  <React.Fragment key={row.type}>
+                    <BarRow
+                      label={`${row.type} (${row.count})`}
+                      value={row.revenue}
+                      max={maxTypeRevenue}
+                      display={formatCurrency(row.revenue)}
+                    />
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl border p-4 space-y-1">
+            <SectionTitle>Top Booking Channels</SectionTitle>
+            {g.topChannels.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No data</p>
+            ) : (
+              g.topChannels.map(ch => (
+                <React.Fragment key={ch.name}>
+                  <MetricRow label={`${ch.name} (${ch.count})`} value={formatCurrency(ch.revenue)} />
                 </React.Fragment>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl border p-4 space-y-1">
-          <SectionTitle>Top Booking Channels</SectionTitle>
-          {g.topChannels.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">No data</p>
-          ) : (
-            g.topChannels.map(ch => (
-              <React.Fragment key={ch.name}>
-                <MetricRow label={`${ch.name} (${ch.count})`} value={formatCurrency(ch.revenue)} />
-              </React.Fragment>
-            ))
-          )}
-          <div className="pt-3 mt-3 border-t border-gray-100">
-            <MetricRow label="Total commissions" value={formatCurrency(g.totalCommissions)} />
-            <MetricRow label="Booking channel commissions" value={formatCurrency(g.bookingCommissions)} />
-            <MetricRow label="Payment channel commissions" value={formatCurrency(g.paymentCommissions)} />
-            <MetricRow label="Outstanding balance" value={formatCurrency(g.totalOutstanding)} />
-            <MetricRow label="Unpaid bookings" value={String(g.unpaidCount)} />
-            <MetricRow label="Total records" value={String(g.bookingCount)} />
+          <SectionTitle>Financial Summary</SectionTitle>
+          <MetricRow label="Booking channel commissions" value={formatCurrency(g.bookingCommissions)} />
+          <MetricRow label="Payment channel commissions" value={formatCurrency(g.paymentCommissions)} />
+          <MetricRow label="After commissions" value={formatCurrency(incomeAfterCommissions)} />
+          <div className="pt-3 mt-1 border-t border-gray-100">
+            <MetricRow label="Collected" value={formatCurrency(g.totalCollected)} />
+            {g.totalOutstanding > 0 && (
+              <>
+                <MetricRow label="Still to collect" value={formatCurrency(g.totalOutstanding)} valueTone="rose" />
+                {g.outstandingItems.length > 0 && (
+                  <div className="pt-3 space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Unpaid</p>
+                    {g.outstandingItems.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onOpenOutstanding(item)}
+                        className="w-full flex items-center justify-between gap-3 py-2 px-2 -mx-2 rounded-lg hover:bg-rose-50 transition-colors text-left group"
+                      >
+                        <span className="text-xs font-bold text-gray-800 truncate group-hover:text-rose-700 underline-offset-2 group-hover:underline">
+                          {item.name}
+                          {item.isVenueHire && (
+                            <span className="ml-1.5 text-[10px] font-black uppercase text-gray-400 no-underline">Venue</span>
+                          )}
+                        </span>
+                        <span className="text-xs font-black text-rose-600 shrink-0">{formatCurrency(item.remaining)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -330,10 +399,575 @@ function HomeExchangeSection({ stats }: { stats: ReturnType<typeof useDashboardS
   );
 }
 
+function ExpensesReportSection({
+  monthKey,
+  expenseCategories,
+  monthlyExpense,
+  expenseSpreads,
+  onAddExpenses,
+}: {
+  monthKey: string | null;
+  expenseCategories: ConfigOption[];
+  monthlyExpense?: MonthlyExpense;
+  expenseSpreads: ExpenseSpread[];
+  onAddExpenses?: () => void;
+}) {
+  if (!monthKey) {
+    return (
+      <div className="bg-white rounded-2xl border p-8 text-center">
+        <p className="text-sm font-bold text-gray-700">Select a month to view expenses</p>
+        <p className="text-xs text-gray-400 mt-2">Use the month picker above.</p>
+      </div>
+    );
+  }
+
+  const monthLabel = format(parseISO(`${monthKey}-01`), 'MMMM yyyy');
+  const combined = getCombinedAmounts(monthlyExpense);
+  const activeCategoryIds = new Set(expenseCategories.map(c => c.id));
+  const archivedEntries = Object.entries(combined)
+    .filter(([id, value]) => !activeCategoryIds.has(id) && (Number(value) || 0) > 0);
+
+  const categoryRows = expenseCategories
+    .map(category => ({
+      id: category.id,
+      name: category.name,
+      amount: Number(combined[category.id]) || 0,
+      hint: spreadHintForCategory(monthlyExpense, category.id, expenseSpreads),
+    }))
+    .filter(row => row.amount > 0);
+
+  const total = sumMonthlyExpenseTotal(monthlyExpense);
+  const savedNote = monthlyExpense?.note;
+  const hasData = total > 0 || !!savedNote?.trim();
+  const updatedAt = monthlyExpense?.updatedAt;
+  const updatedBy = monthlyExpense?.updatedBy;
+
+  let updatedLabel = '';
+  if (updatedAt) {
+    try {
+      updatedLabel = format(parseISO(updatedAt), 'dd MMM yyyy · HH:mm');
+    } catch {
+      updatedLabel = updatedAt;
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border p-4 sm:p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-black text-gray-900">{monthLabel}</h3>
+            <p className="text-xs text-gray-400 mt-1">Monthly expense totals — detail stays in Spendee.</p>
+          </div>
+          {updatedLabel && (
+            <p className="text-[10px] text-gray-400 text-right shrink-0">
+              Updated {updatedLabel}
+              {updatedBy && <span className="block">{updatedBy}</span>}
+            </p>
+          )}
+        </div>
+
+        {!hasData ? (
+          <div className="py-10 text-center">
+            <p className="text-sm font-bold text-gray-600">No expenses recorded for this month</p>
+            <p className="text-xs text-gray-400 mt-1">Use Add expenses to enter totals from Spendee.</p>
+            {onAddExpenses && expenseCategories.length > 0 && (
+              <button
+                type="button"
+                onClick={onAddExpenses}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800"
+              >
+                <Plus size={14} />
+                Add expenses
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1">
+              {categoryRows.length === 0 && archivedEntries.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-2">No category amounts recorded.</p>
+              ) : (
+                categoryRows.map(row => (
+                  <div key={row.id} className="py-1 border-b border-gray-50 last:border-0">
+                    <MetricRow label={row.name} value={formatCurrency(row.amount)} />
+                    {row.hint && (
+                      <p className="text-[10px] text-gray-400 pb-1.5">{row.hint}</p>
+                    )}
+                  </div>
+                ))
+              )}
+              {archivedEntries.map(([id, value]) => (
+                <MetricRow
+                  key={id}
+                  label={monthlyExpense?.categoryLabels?.[id] || 'Removed category'}
+                  value={formatCurrency(Number(value) || 0)}
+                />
+              ))}
+            </div>
+
+            {savedNote?.trim() && (
+              <div className="pt-3 border-t border-gray-100">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Note</p>
+                <p className="text-xs text-gray-700">{savedNote}</p>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-gray-100">
+              <MetricRow label="Total expenses" value={formatCurrency(total)} />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ExpenseEntryTab = 'month' | 'spread';
+
+function ExpensesEntryPanel({
+  monthKey,
+  expenseCategories,
+  monthlyExpense,
+  expenseSpreads,
+  onSaved,
+  onClose,
+}: {
+  monthKey: string;
+  expenseCategories: ConfigOption[];
+  monthlyExpense?: MonthlyExpense;
+  expenseSpreads: ExpenseSpread[];
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<ExpenseEntryTab>('month');
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+        <button
+          type="button"
+          onClick={() => setTab('month')}
+          className={cn(
+            'flex-1 py-2 rounded-lg text-xs font-bold transition-all',
+            tab === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          )}
+        >
+          This month
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('spread')}
+          className={cn(
+            'flex-1 py-2 rounded-lg text-xs font-bold transition-all',
+            tab === 'spread' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          )}
+        >
+          Spread across months
+        </button>
+      </div>
+
+      {tab === 'month' ? (
+        <ExpensesEntryForm
+          monthKey={monthKey}
+          expenseCategories={expenseCategories}
+          monthlyExpense={monthlyExpense}
+          onSaved={onSaved}
+          onClose={onClose}
+        />
+      ) : (
+        <ExpensesSpreadForm
+          monthKey={monthKey}
+          expenseCategories={expenseCategories}
+          expenseSpreads={expenseSpreads}
+          onSaved={onSaved}
+          onClose={onClose}
+        />
+      )}
+    </div>
+  );
+}
+
+function ExpensesEntryForm({
+  monthKey,
+  expenseCategories,
+  monthlyExpense,
+  onSaved,
+  onClose,
+}: {
+  monthKey: string;
+  expenseCategories: ConfigOption[];
+  monthlyExpense?: MonthlyExpense;
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const { profile } = useAuth();
+  const savedAmounts = monthlyExpense?.amounts ?? {};
+  const savedLabels = monthlyExpense?.categoryLabels;
+  const savedNote = monthlyExpense?.note;
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [note, setNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const category of expenseCategories) {
+      const value = savedAmounts[category.id];
+      next[category.id] = value != null && value !== 0 ? String(value) : '';
+    }
+    setAmounts(next);
+    setNote(savedNote || '');
+    setSaveError(null);
+    setSaveSuccess(false);
+  }, [monthKey, expenseCategories, savedAmounts, savedNote]);
+
+  const monthLabel = format(parseISO(`${monthKey}-01`), 'MMMM yyyy');
+  const activeCategoryIds = new Set(expenseCategories.map(c => c.id));
+  const archivedEntries = Object.entries(savedAmounts)
+    .filter(([id, value]) => !activeCategoryIds.has(id) && (Number(value) || 0) > 0);
+
+  const handleSave = async () => {
+    setSaveError(null);
+    setSaveSuccess(false);
+    setIsSaving(true);
+
+    const parsedAmounts: Record<string, number> = {};
+    for (const [id, raw] of Object.entries(amounts)) {
+      const value = raw.trim() === '' ? 0 : Number(raw);
+      if (Number.isNaN(value) || value < 0) {
+        setSaveError('Enter valid amounts (0 or greater).');
+        setIsSaving(false);
+        return;
+      }
+      if (value > 0) parsedAmounts[id] = value;
+    }
+    for (const [id, value] of archivedEntries) {
+      parsedAmounts[id] = Number(value) || 0;
+    }
+
+    const categoryLabels: Record<string, string> = { ...(savedLabels || {}) };
+    for (const category of expenseCategories) {
+      categoryLabels[category.id] = category.name;
+    }
+
+    try {
+      await setDoc(doc(db, 'monthlyExpenses', monthKey), {
+        month: monthKey,
+        amounts: parsedAmounts,
+        spreadAmounts: monthlyExpense?.spreadAmounts || {},
+        spreadIds: monthlyExpense?.spreadIds || {},
+        categoryLabels,
+        note: note.trim(),
+        updatedAt: new Date().toISOString(),
+        updatedBy: profile?.name || profile?.email || '',
+      });
+      setSaveSuccess(true);
+      onSaved();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `monthlyExpenses/${monthKey}`);
+      setSaveError('Could not save expenses. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const total = sumExpenseAmounts(
+    Object.fromEntries(
+      Object.entries(amounts).map(([id, raw]) => [id, raw.trim() === '' ? 0 : Number(raw) || 0])
+    )
+  ) + archivedEntries.reduce((sum, [, value]) => sum + (Number(value) || 0), 0)
+    + sumExpenseAmounts(monthlyExpense?.spreadAmounts);
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-400">Enter this month&apos;s totals from Spendee — spread amounts are added automatically.</p>
+
+      {expenseCategories.length === 0 ? (
+        <div className="py-8 text-center text-gray-400">
+          <p className="text-sm font-bold text-gray-600">No expense categories yet</p>
+          <p className="text-xs mt-1">Add categories in Settings → Expense Categories first.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {expenseCategories.map(category => (
+            <div key={category.id} className="flex items-center gap-3">
+              <label className="flex-1 text-xs font-bold text-gray-700">{category.name}</label>
+              <div className="relative w-36">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">€</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amounts[category.id] ?? ''}
+                  onChange={e => setAmounts(prev => ({ ...prev, [category.id]: e.target.value }))}
+                  className="w-full pl-7 pr-3 py-2 border rounded-lg text-sm font-bold text-right focus:ring-2 focus:ring-black outline-none"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {archivedEntries.length > 0 && (
+        <div className="pt-3 border-t border-gray-100 space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Removed categories (kept for history)</p>
+          {archivedEntries.map(([id, value]) => (
+            <div key={id} className="flex items-center justify-between text-xs">
+              <span className="text-gray-500 font-bold truncate">{savedLabels?.[id] || 'Removed category'}</span>
+              <span className="font-black text-gray-700">{formatCurrency(Number(value) || 0)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Note (optional)</label>
+        <input
+          type="text"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="e.g. Totals from Spendee"
+          className="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-black outline-none"
+        />
+      </div>
+
+      {saveError && (
+        <div className="flex items-center gap-2 text-rose-600 bg-rose-50 p-3 rounded-xl">
+          <AlertCircle size={14} />
+          <span className="text-xs font-bold">{saveError}</span>
+        </div>
+      )}
+      {saveSuccess && (
+        <p className="text-xs font-bold text-green-600">Saved for {monthLabel}.</p>
+      )}
+
+      <div className="pt-2 border-t border-gray-100 space-y-4">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={onClose}
+            className="px-4 py-2.5 bg-white border text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isSaving || expenseCategories.length === 0}
+            onClick={handleSave}
+            className="flex items-center gap-2 px-5 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Save size={14} />
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="flex-1 text-[10px] font-black uppercase tracking-widest text-gray-400">Total expenses</span>
+          <p className="w-36 text-right text-lg font-black text-gray-900">{formatCurrency(total)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExpensesSpreadForm({
+  monthKey,
+  expenseCategories,
+  expenseSpreads,
+  onSaved,
+  onClose,
+}: {
+  monthKey: string;
+  expenseCategories: ConfigOption[];
+  expenseSpreads: ExpenseSpread[];
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const { profile } = useAuth();
+  const defaultYear = parseInt(monthKey.slice(0, 4), 10);
+  const [categoryId, setCategoryId] = useState(expenseCategories[0]?.id || '');
+  const [year, setYear] = useState(defaultYear);
+  const [total, setTotal] = useState('');
+  const [note, setNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const existingSpread = useMemo(
+    () => (categoryId ? findSpreadForCategoryYear(expenseSpreads, year, categoryId) : undefined),
+    [expenseSpreads, year, categoryId],
+  );
+
+  useEffect(() => {
+    if (existingSpread) {
+      setTotal(String(existingSpread.totalAmount));
+      setNote(existingSpread.note || '');
+    } else {
+      setTotal('');
+      setNote('');
+    }
+    setSaveError(null);
+  }, [existingSpread, categoryId, year]);
+
+  const monthCount = monthsInYear(year).length;
+  const parsedTotal = total.trim() === '' ? 0 : Number(total);
+  const shares = parsedTotal > 0 ? splitAmountEvenly(parsedTotal, monthCount) : [];
+  const perMonth = shares[0] ?? 0;
+  const selectedCategory = expenseCategories.find(c => c.id === categoryId);
+
+  const handleSave = async () => {
+    if (!categoryId || !selectedCategory) {
+      setSaveError('Select a category.');
+      return;
+    }
+    if (Number.isNaN(parsedTotal) || parsedTotal <= 0) {
+      setSaveError('Enter a total amount greater than zero.');
+      return;
+    }
+
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await saveExpenseSpread({
+        year,
+        categoryId,
+        categoryLabel: selectedCategory.name,
+        totalAmount: parsedTotal,
+        note: note.trim(),
+        updatedBy: profile?.name || profile?.email || '',
+      });
+      onSaved();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `expenseSpreads/${year}__${categoryId}`);
+      setSaveError('Could not save spread. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (expenseCategories.length === 0) {
+    return (
+      <div className="py-8 text-center text-gray-400">
+        <p className="text-sm font-bold text-gray-600">No expense categories yet</p>
+        <p className="text-xs mt-1">Add categories in Settings → Expense Categories first.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-400">
+        Pay once (e.g. annual tax or notary), split evenly across all 12 months of the year.
+      </p>
+
+      <div>
+        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Category</label>
+        <select
+          value={categoryId}
+          onChange={e => setCategoryId(e.target.value)}
+          className="w-full px-4 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
+        >
+          {expenseCategories.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Total amount</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">€</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={total}
+              onChange={e => setTotal(e.target.value)}
+              className="w-full pl-7 pr-3 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
+              placeholder="0"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Year</label>
+          <input
+            type="number"
+            min="2020"
+            max="2100"
+            value={year}
+            onChange={e => setYear(Number(e.target.value) || defaultYear)}
+            className="w-full px-4 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
+          />
+        </div>
+      </div>
+
+      {parsedTotal > 0 && (
+        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+          <p className="text-xs font-bold text-gray-700">
+            {formatCurrency(perMonth)} per month × {monthCount} months
+          </p>
+          <p className="text-[10px] text-gray-400 mt-1">Jan–Dec {year} · total {formatCurrency(parsedTotal)}</p>
+        </div>
+      )}
+
+      {existingSpread && (
+        <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
+          Updating existing spread for {selectedCategory?.name} in {year}.
+        </p>
+      )}
+
+      <div>
+        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Note (optional)</label>
+        <input
+          type="text"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="e.g. Company tax 2026"
+          className="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-black outline-none"
+        />
+      </div>
+
+      {saveError && (
+        <div className="flex items-center gap-2 text-rose-600 bg-rose-50 p-3 rounded-xl">
+          <AlertCircle size={14} />
+          <span className="text-xs font-bold">{saveError}</span>
+        </div>
+      )}
+
+      <div className="pt-2 border-t border-gray-100 space-y-4">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={onClose}
+            className="px-4 py-2.5 bg-white border text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={handleSave}
+            className="flex items-center gap-2 px-5 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 disabled:opacity-50"
+          >
+            <Save size={14} />
+            {isSaving ? 'Saving…' : existingSpread ? 'Update spread' : 'Save spread'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
+  { id: 'expenses', label: 'Expenses' },
   { id: 'retreats', label: 'Retreats' },
   { id: 'coliving', label: 'Coliving' },
   { id: 'venue', label: 'Venue Hire' },
@@ -343,8 +977,15 @@ const TABS: { id: Tab; label: string }[] = [
 export default function DashboardModal({
   isOpen, onClose, bookings, venueHires, rooms, bookingChannels, paymentChannels,
 }: DashboardModalProps) {
+  const { expenseCategories, monthlyExpenses, expenseSpreads, settings, bookingTypes } = useBooking();
+  const { isAdmin, profile } = useAuth();
   const now = new Date();
   const [tab, setTab] = useState<Tab>('overview');
+  const [isExpenseEntryOpen, setIsExpenseEntryOpen] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [editingVenueHire, setEditingVenueHire] = useState<VenueHire | null>(null);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [isVenueHireModalOpen, setIsVenueHireModalOpen] = useState(false);
   const [period, setPeriod] = useState<Period>('Month');
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
@@ -376,6 +1017,49 @@ export default function DashboardModal({
     bookings, venueHires, rooms, bookingChannels, paymentChannels, periodRange,
   );
 
+  const isMonthView = period !== 'All';
+  const monthKey = useMemo(
+    () => (isMonthView ? monthKeyFromRange(periodRange) : null),
+    [isMonthView, periodRange],
+  );
+
+  const currentMonthlyExpense = useMemo(
+    () => (monthKey ? monthlyExpenses.find(e => e.month === monthKey || e.id === monthKey) : undefined),
+    [monthKey, monthlyExpenses],
+  );
+
+  const totalExpenses = useMemo(
+    () => sumMonthlyExpenseTotal(currentMonthlyExpense),
+    [currentMonthlyExpense],
+  );
+
+  const hasExpenseData = totalExpenses > 0 || !!currentMonthlyExpense?.note?.trim();
+
+  const openExpenseEntry = () => setIsExpenseEntryOpen(true);
+
+  const handleExpenseSaved = () => {
+    setIsExpenseEntryOpen(false);
+    setTab('expenses');
+  };
+
+  const expenseEntryTitle = monthKey
+    ? `${hasExpenseData ? 'Edit' : 'Add'} expenses — ${format(parseISO(`${monthKey}-01`), 'MMMM yyyy')}`
+    : 'Add expenses';
+
+  const handleOpenOutstanding = (item: OutstandingItem) => {
+    if (item.isVenueHire) {
+      const vh = venueHires.find(v => v.id === item.id);
+      if (!vh) return;
+      setEditingVenueHire(vh);
+      setIsVenueHireModalOpen(true);
+      return;
+    }
+    const booking = bookings.find(b => b.id === item.id);
+    if (!booking) return;
+    setEditingBooking(booking);
+    setIsBookingModalOpen(true);
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -389,9 +1073,9 @@ export default function DashboardModal({
           <header className="h-14 bg-white border-b px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10 shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-gray-100 text-gray-600 rounded-lg">
-                <BarChart3 size={16} />
+                <DollarSign size={16} />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Reports</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Finances</h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors">
               <X size={22} />
@@ -492,33 +1176,121 @@ export default function DashboardModal({
           </div>
 
           {/* Tabs */}
-          <div className="bg-white border-b shrink-0 overflow-x-auto">
-            <div className="flex px-4 sm:px-8 min-w-max">
-              {TABS.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={cn(
-                    'px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all',
-                    tab === t.id
-                      ? 'border-black text-black'
-                      : 'border-transparent text-gray-400 hover:text-gray-700'
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+          <div className="bg-white border-b shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-8 gap-3 min-h-[45px]">
+              <div className="flex overflow-x-auto min-w-0">
+                {TABS.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className={cn(
+                      'px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all',
+                      tab === t.id
+                        ? 'border-black text-black'
+                        : 'border-transparent text-gray-400 hover:text-gray-700'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={!monthKey || expenseCategories.length === 0}
+                onClick={openExpenseEntry}
+                title={!monthKey ? 'Select a month first' : undefined}
+                className={cn(
+                  'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
+                  monthKey && expenseCategories.length > 0
+                    ? 'bg-black text-white border-black hover:bg-gray-800'
+                    : 'bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed'
+                )}
+              >
+                {hasExpenseData ? <Pencil size={13} /> : <Plus size={13} />}
+                <span className="hidden sm:inline">{hasExpenseData ? 'Edit expenses' : 'Add expenses'}</span>
+                <span className="sm:hidden">{hasExpenseData ? 'Edit' : 'Add'}</span>
+              </button>
             </div>
           </div>
 
           {/* Content */}
           <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-5xl mx-auto w-full">
-            {tab === 'overview'  && <OverviewSection stats={stats} />}
+            {tab === 'overview'  && (
+              <OverviewSection
+                stats={stats}
+                totalExpenses={totalExpenses}
+                isMonthView={isMonthView}
+                onOpenOutstanding={handleOpenOutstanding}
+              />
+            )}
+            {tab === 'expenses'  && (
+              <ExpensesReportSection
+                monthKey={monthKey}
+                expenseCategories={expenseCategories}
+                monthlyExpense={currentMonthlyExpense}
+                expenseSpreads={expenseSpreads}
+                onAddExpenses={monthKey ? openExpenseEntry : undefined}
+              />
+            )}
             {tab === 'retreats'  && <RetreatsSection stats={stats} />}
             {tab === 'coliving'  && <ColivingSection stats={stats} />}
             {tab === 'venue'     && <VenueHireSection stats={stats} />}
             {tab === 'exchange'  && <HomeExchangeSection stats={stats} />}
           </main>
+
+          {monthKey && (
+            <Modal
+              isOpen={isExpenseEntryOpen}
+              onClose={() => setIsExpenseEntryOpen(false)}
+              title={expenseEntryTitle}
+              elevated
+            >
+              <ExpensesEntryPanel
+                monthKey={monthKey}
+                expenseCategories={expenseCategories}
+                monthlyExpense={currentMonthlyExpense}
+                expenseSpreads={expenseSpreads}
+                onSaved={handleExpenseSaved}
+                onClose={() => setIsExpenseEntryOpen(false)}
+              />
+            </Modal>
+          )}
+
+          <BookingModal
+            isOpen={isBookingModalOpen}
+            onClose={() => {
+              setIsBookingModalOpen(false);
+              setEditingBooking(null);
+            }}
+            booking={editingBooking}
+            rooms={rooms}
+            bookings={bookings}
+            venueHires={venueHires}
+            settings={settings}
+            bookingTypes={bookingTypes}
+            bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
+            isAdmin={isAdmin}
+            currentUserName={profile?.name}
+            currentUserEmail={profile?.email}
+            elevated
+          />
+
+          <VenueHireModal
+            isOpen={isVenueHireModalOpen}
+            onClose={() => {
+              setIsVenueHireModalOpen(false);
+              setEditingVenueHire(null);
+            }}
+            venueHire={editingVenueHire}
+            rooms={rooms}
+            bookingChannels={bookingChannels}
+            paymentChannels={paymentChannels}
+            currentUserName={profile?.name}
+            currentUserEmail={profile?.email}
+            elevated
+          />
         </motion.div>
       )}
     </AnimatePresence>

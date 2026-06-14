@@ -597,7 +597,7 @@ export default function BookingModal({
                   onChange={val => {
                     setFormData(prev => {
                       const prevNights = calculateNights(prev.checkIn || '', prev.checkOut || '');
-                      const n = prevNights > 0 ? prevNights : 7;
+                      const n = prevNights > 0 ? prevNights : 6;
                       return {
                         ...prev,
                         checkIn: val,
