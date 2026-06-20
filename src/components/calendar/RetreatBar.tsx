@@ -1,4 +1,5 @@
-import { isSameDay, isAfter, isBefore, differenceInDays, isWeekend } from 'date-fns';
+import { memo } from 'react';
+import { isAfter, isBefore, differenceInDays, isWeekend } from 'date-fns';
 import { Retreat, VenueHire } from '@/types';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,7 +25,7 @@ function diagonalClip(width: number, slope = 6): string {
   return `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
 }
 
-export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue, compact = true }: RetreatBarProps) {
+function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue, compact = true }: RetreatBarProps) {
   const dayWidth = 56;
   const calendarStart = days[0];
   const calendarEnd = days[days.length - 1];
@@ -116,4 +117,6 @@ export default function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, 
     </div>
   );
 }
+
+export default memo(RetreatBar);
 

@@ -257,3 +257,18 @@ export interface ExpenseSpread {
   updatedAt?: string;
   updatedBy?: string;
 }
+
+/** Fixed monthly charge (e.g. subscriptions) applied in selected calendar months every year. */
+export interface RecurringExpense {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryLabel: string;
+  amountPerMonth: number;
+  active: boolean;
+  /** Calendar month numbers 1–12 when this charge applies (repeats every year). */
+  monthsOfYear: number[];
+  note?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}

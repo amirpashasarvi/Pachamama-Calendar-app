@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { addYears, subYears, addMonths, subMonths, format } from 'date-fns';
+import { addYears, subYears, addMonths, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, Eye, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
@@ -109,8 +109,8 @@ export default function Header({
             >
               <ChevronLeft size={compact ? 12 : 14} />
             </button>
-            <span className={cn('font-bold px-1 min-w-[72px] text-center', compact ? 'text-xs' : 'text-sm')}>
-              {format(visibleDate, 'MMMM')}
+            <span className={cn('font-bold px-1 min-w-[28px] text-center', compact ? 'text-xs' : 'text-sm')}>
+              {months[visibleMonth]}
             </span>
             <button
               type="button"

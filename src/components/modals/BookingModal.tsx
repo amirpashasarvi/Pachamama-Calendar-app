@@ -426,56 +426,77 @@ export default function BookingModal({
           <div className="text-xs font-bold text-rose-800 whitespace-pre-line">{error}</div>
         </div>
       )}
-    <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       {booking && isAdmin && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {isCancelled ? (
             <button
               type="button"
               onClick={() => setShowConfirmRestore(true)}
               disabled={isReactivating}
-              className="flex items-center gap-2 px-4 py-3 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
+              className="flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-3 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-[11px] sm:text-sm font-bold disabled:opacity-50"
             >
               {isReactivating ? (
-                <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-700 rounded-full animate-spin" />
+                <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-emerald-400/40 border-t-emerald-700 rounded-full animate-spin" />
               ) : (
-                <RotateCcw size={16} />
+                <RotateCcw size={14} className="sm:w-4 sm:h-4" />
               )}
-              Restore Booking
+              <span className="sm:hidden">Restore</span>
+              <span className="hidden sm:inline">Restore Booking</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setShowConfirmCancel(true)}
-              className="flex items-center gap-2 px-4 py-3 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors text-sm font-bold"
+              className="flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-3 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors text-[11px] sm:text-sm font-bold"
             >
-              <Ban size={16} /> Cancel Booking
+              <Ban size={14} className="sm:w-4 sm:h-4 shrink-0" />
+              <span className="sm:hidden">Cancel Bkg</span>
+              <span className="hidden sm:inline">Cancel Booking</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => setShowConfirmDelete(true)}
-            className="flex items-center gap-2 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-sm font-bold"
+            className="flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-3 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-[11px] sm:text-sm font-bold"
           >
-            <Trash2 size={16} /> Delete
+            <Trash2 size={14} className="sm:w-4 sm:h-4 shrink-0" /> Delete
           </button>
         </div>
       )}
-      <div className="flex gap-3 ml-auto">
+      <div className="flex gap-1.5 sm:gap-3 ml-auto">
         <>
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
+            className="px-3 py-2 sm:px-6 sm:py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-[11px] sm:text-sm"
           >
             Cancel
           </button>
           <button
             type="submit"
             form="booking-form"
-            className="flex items-center gap-2 px-8 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
+            className="flex items-center gap-1 sm:gap-2 px-3 py-2 sm:px-8 sm:py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-[11px] sm:text-sm"
           >
-            <Save size={16} /> {isAdmin ? (booking ? 'Update Booking' : 'Create Booking') : 'Save Comment'}
+            <Save size={14} className="sm:w-4 sm:h-4 shrink-0" />
+            {isAdmin ? (
+              booking ? (
+                <>
+                  <span className="sm:hidden">Update</span>
+                  <span className="hidden sm:inline">Update Booking</span>
+                </>
+              ) : (
+                <>
+                  <span className="sm:hidden">Create</span>
+                  <span className="hidden sm:inline">Create Booking</span>
+                </>
+              )
+            ) : (
+              <>
+                <span className="sm:hidden">Save</span>
+                <span className="hidden sm:inline">Save Comment</span>
+              </>
+            )}
           </button>
         </>
       </div>
@@ -778,18 +799,18 @@ export default function BookingModal({
 
             {/* Summary card */}
             <div className="grid grid-cols-3 gap-0 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-slate-200">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total</span>
-                <span className="text-xl font-black text-gray-900">€{total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <div className="flex flex-col items-center justify-center py-3 px-1 sm:py-4 sm:px-2 border-r border-slate-200 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-gray-400 mb-0.5 sm:mb-1">Total</span>
+                <span className="text-sm sm:text-xl font-black text-gray-900 tabular-nums leading-tight truncate max-w-full">€{total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex flex-col items-center justify-center py-4 px-2 border-r border-slate-200">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Remaining</span>
-                <span className="text-xl font-black text-blue-600">€{remaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <div className="flex flex-col items-center justify-center py-3 px-1 sm:py-4 sm:px-2 border-r border-slate-200 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-gray-400 mb-0.5 sm:mb-1">Remaining</span>
+                <span className="text-sm sm:text-xl font-black text-blue-600 tabular-nums leading-tight truncate max-w-full">€{remaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex flex-col items-center justify-center py-4 px-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Status</span>
+              <div className="flex flex-col items-center justify-center py-3 px-1 sm:py-4 sm:px-2 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-gray-400 mb-0.5 sm:mb-1">Status</span>
                 <span className={cn(
-                  "px-3 py-1 rounded-full text-xs font-black italic uppercase tracking-tighter shadow-sm",
+                  "px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-black italic uppercase tracking-tighter shadow-sm",
                   calculatedStatus === 'Paid' ? 'bg-green-100 text-green-700' :
                   calculatedStatus === 'Partial' ? 'bg-amber-100 text-amber-700' :
                   'bg-rose-100 text-rose-700'
@@ -843,7 +864,7 @@ export default function BookingModal({
                       className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none bg-white"
                       placeholder="e.g. Airport transfer"
                       value={extra.label || ''}
-                      onChange={updateExtra.bind(null, idx, 'label' as any)}
+                      onChange={e => updateExtra(idx, 'label', e.target.value)}
                     />
                     <div className="relative w-32 font-mono text-sm">
                       <span className="absolute left-3 top-2 text-gray-400 text-xs">€</span>

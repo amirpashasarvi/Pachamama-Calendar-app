@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
-import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread } from '@/types';
+import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread, RecurringExpense } from '@/types';
 
 export function useBookingData() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -17,6 +17,7 @@ export function useBookingData() {
   const [expenseCategories, setExpenseCategories] = useState<ConfigOption[]>([]);
   const [monthlyExpenses, setMonthlyExpenses] = useState<MonthlyExpense[]>([]);
   const [expenseSpreads, setExpenseSpreads] = useState<ExpenseSpread[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [teamPositions, setTeamPositions] = useState<TeamPosition[]>([]);
   const [teamAssignments, setTeamAssignments] = useState<TeamAssignment[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -39,6 +40,7 @@ export function useBookingData() {
       expenseCategories: false,
       monthlyExpenses: false,
       expenseSpreads: false,
+      recurringExpenses: false,
       teamPositions: false,
       teamAssignments: false,
       users: false
@@ -213,6 +215,16 @@ export function useBookingData() {
       handleFirestoreError(error, OperationType.LIST, 'expenseSpreads');
     });
 
+    const unsubRecurringExpenses = onSnapshot(collection(db, 'recurringExpenses'), (snap) => {
+      const data: RecurringExpense[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as RecurringExpense));
+      data.sort((a, b) => a.name.localeCompare(b.name));
+      setRecurringExpenses(data);
+      checkLoading('recurringExpenses');
+    }, (error) => {
+      checkLoading('recurringExpenses');
+      handleFirestoreError(error, OperationType.LIST, 'recurringExpenses');
+    });
+
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
       const byEmail = new Map<string, UserRecord>();
       snap.docs.forEach(d => {
@@ -362,6 +374,7 @@ export function useBookingData() {
       unsubExpenseCategories();
       unsubMonthlyExpenses();
       unsubExpenseSpreads();
+      unsubRecurringExpenses();
       unsubUsers();
       unsubPositions();
       unsubAssignments();
@@ -369,5 +382,5 @@ export function useBookingData() {
     };
   }, []);
 
-  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, users, loading };
+  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, recurringExpenses, users, loading };
 }

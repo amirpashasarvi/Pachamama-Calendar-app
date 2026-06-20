@@ -26,7 +26,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={dismissible ? onClose : undefined}
-            className={`fixed inset-0 bg-black/40 backdrop-blur-[2px] ${backdropZ} hidden sm:block`}
+            className={`fixed inset-0 bg-black/40 ${backdropZ} hidden sm:block`}
           />
 
           {/* Content

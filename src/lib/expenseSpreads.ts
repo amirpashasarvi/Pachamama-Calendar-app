@@ -23,21 +23,28 @@ export function splitAmountEvenly(total: number, count: number): number[] {
   });
 }
 
-export function getCombinedAmounts(expense?: MonthlyExpense | null): Record<string, number> {
-  if (!expense) return {};
-  const manual = expense.amounts || {};
-  const spread = expense.spreadAmounts || {};
-  const ids = new Set([...Object.keys(manual), ...Object.keys(spread)]);
+export function getCombinedAmounts(
+  expense?: MonthlyExpense | null,
+  recurringByCategory?: Record<string, number>,
+): Record<string, number> {
+  if (!expense && !recurringByCategory) return {};
+  const manual = expense?.amounts || {};
+  const spread = expense?.spreadAmounts || {};
+  const recurring = recurringByCategory || {};
+  const ids = new Set([...Object.keys(manual), ...Object.keys(spread), ...Object.keys(recurring)]);
   const out: Record<string, number> = {};
   for (const id of ids) {
-    const total = (Number(manual[id]) || 0) + (Number(spread[id]) || 0);
+    const total = (Number(manual[id]) || 0) + (Number(spread[id]) || 0) + (Number(recurring[id]) || 0);
     if (total > 0) out[id] = total;
   }
   return out;
 }
 
-export function sumCombinedExpenseAmounts(expense?: MonthlyExpense | null): number {
-  return Object.values(getCombinedAmounts(expense)).reduce((s, v) => s + v, 0);
+export function sumCombinedExpenseAmounts(
+  expense?: MonthlyExpense | null,
+  recurringByCategory?: Record<string, number>,
+): number {
+  return Object.values(getCombinedAmounts(expense, recurringByCategory)).reduce((s, v) => s + v, 0);
 }
 
 function stripSpreadFromMonth(
@@ -51,16 +58,41 @@ function stripSpreadFromMonth(
   return { spreadAmounts, spreadIds };
 }
 
+export function formatSpreadMonthLabel(monthKeys: string[]): string {
+  if (monthKeys.length === 0) return '';
+  const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const sorted = [...monthKeys].sort();
+  const indices = sorted.map(k => parseInt(k.slice(5, 7), 10) - 1);
+  const year = sorted[0]?.slice(0, 4) || '';
+  if (indices.length === 12) return `Jan–Dec ${year}`;
+  if (indices.length === 1) return `${MONTH_SHORT[indices[0]]} ${year}`;
+  let consecutive = true;
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] !== indices[i - 1] + 1) {
+      consecutive = false;
+      break;
+    }
+  }
+  if (consecutive) {
+    return `${MONTH_SHORT[indices[0]]}–${MONTH_SHORT[indices[indices.length - 1]]} ${year}`;
+  }
+  return `${indices.map(i => MONTH_SHORT[i]).join(', ')} ${year}`;
+}
+
 export async function saveExpenseSpread(params: {
   year: number;
   categoryId: string;
   categoryLabel: string;
   totalAmount: number;
+  months?: string[];
   note?: string;
   updatedBy: string;
 }): Promise<string> {
   const { year, categoryId, categoryLabel, totalAmount, note, updatedBy } = params;
-  const months = monthsInYear(year);
+  const months = (params.months?.length ? [...params.months] : monthsInYear(year)).sort();
+  if (months.length === 0) {
+    throw new Error('At least one month must be selected.');
+  }
   const shares = splitAmountEvenly(totalAmount, months.length);
   const spreadId = spreadDocId(year, categoryId);
   const now = new Date().toISOString();

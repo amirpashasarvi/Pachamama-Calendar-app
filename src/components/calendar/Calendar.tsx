@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, memo, startTransition, type RefObject, type MutableRefObject } from 'react';
 import { 
   addDays, 
   differenceInDays,
@@ -18,7 +18,7 @@ import RetreatModal from '@/components/modals/RetreatModal';
 import VenueHireModal from '@/components/modals/VenueHireModal';
 import TeamAssignmentModal from '@/components/modals/TeamAssignmentModal';
 import TeamRosterSection from './TeamRosterSection';
-import { Room, Booking, Retreat, HousekeepingRecord, VenueHire, TeamPosition, TeamAssignment } from '@/types';
+import { Room, Booking, Retreat, HousekeepingRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, ConfigOption } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,209 @@ import { doc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { isActiveLifecycle } from '@/lib/bookingLifecycle';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
+import { buildBookingsByRoom, buildOccupiedDatesByRoom, EMPTY_OCCUPIED_DATES } from '@/lib/calendarOccupancy';
+
+const EMPTY_ROOM_BOOKINGS: Booking[] = [];
+
+type RoomMaps = {
+  bookingsByRoom: Map<string, Booking[]>;
+  occupiedDatesByRoom: Map<string, Set<string>>;
+};
+
+const EMPTY_ROOM_MAPS: RoomMaps = {
+  bookingsByRoom: new Map(),
+  occupiedDatesByRoom: new Map(),
+};
+
+function buildRoomMaps(
+  activeBookings: Booking[],
+  cacheRef: MutableRefObject<RoomMaps>,
+): RoomMaps {
+  const prev = cacheRef.current;
+  const bookingsByRoom = buildBookingsByRoom(activeBookings, prev.bookingsByRoom);
+  const occupiedDatesByRoom = buildOccupiedDatesByRoom(
+    bookingsByRoom,
+    prev.occupiedDatesByRoom,
+    prev.bookingsByRoom,
+  );
+  const next = { bookingsByRoom, occupiedDatesByRoom };
+  cacheRef.current = next;
+  return next;
+}
+
+interface CalendarGridProps {
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
+  layout: ReturnType<typeof calendarLayoutClasses>;
+  days: Date[];
+  rooms: Room[];
+  bookingsByRoom: Map<string, Booking[]>;
+  occupiedDatesByRoom: Map<string, Set<string>>;
+  housekeepingByRoom: Map<string, HousekeepingRecord['status']>;
+  bookingTypes: ConfigOption[];
+  calendarDisplaySettings: CalendarDisplaySettings | null;
+  activeBookings: Booking[];
+  activeVenueHires: VenueHire[];
+  retreats: Retreat[];
+  venueHireTintDates: Set<string>;
+  venueHireBoundaryDates: { start: Set<string>; end: Set<string> };
+  retreatTintDates: Set<string>;
+  retreatBoundaryDates: { start: Set<string>; end: Set<string> };
+  teamPositions: TeamPosition[];
+  teamAssignments: TeamAssignment[];
+  sensors: ReturnType<typeof useSensors>;
+  isAdmin: boolean;
+  compact: boolean;
+  showSummary: boolean;
+  showTeamRoster: boolean;
+  onAddBooking: (roomId?: string, date?: Date) => void;
+  onEditRoom: (room: Room) => void;
+  onEditBooking: (booking: Booking) => void;
+  onDragEnd: (event: DragEndEvent) => void;
+  onAddRetreat: () => void;
+  onEditRetreat: (retreat: Retreat) => void;
+  onAddVenueHire: () => void;
+  onEditVenueHire: (venueHire: VenueHire) => void;
+  onAddTeamAssignment: (positionId: string, date: Date) => void;
+  onEditTeamAssignment: (assignment: TeamAssignment) => void;
+}
+
+const CalendarGrid = memo(function CalendarGrid({
+  scrollContainerRef,
+  layout,
+  days,
+  rooms,
+  bookingsByRoom,
+  occupiedDatesByRoom,
+  housekeepingByRoom,
+  bookingTypes,
+  calendarDisplaySettings,
+  activeBookings,
+  activeVenueHires,
+  retreats,
+  venueHireTintDates,
+  venueHireBoundaryDates,
+  retreatTintDates,
+  retreatBoundaryDates,
+  teamPositions,
+  teamAssignments,
+  sensors,
+  isAdmin,
+  compact,
+  showSummary,
+  showTeamRoster,
+  onAddBooking,
+  onEditRoom,
+  onEditBooking,
+  onDragEnd,
+  onAddRetreat,
+  onEditRetreat,
+  onAddVenueHire,
+  onEditVenueHire,
+  onAddTeamAssignment,
+  onEditTeamAssignment,
+}: CalendarGridProps) {
+  return (
+    <div
+      ref={(el) => { scrollContainerRef.current = el; }}
+      className="flex-1 overflow-auto border-t border-gray-200 scrollbar-thin scrollbar-thumb-gray-200 print:overflow-visible print:h-auto print:flex-none"
+    >
+      <div className="inline-block min-w-full">
+        <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-200 shadow-sm">
+          <div className={cn('sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]', layout.roomLabelCol, layout.roomLabelPad)}>
+            {isAdmin ? (
+              <button
+                onClick={() => onAddBooking()}
+                className={cn('flex items-center justify-center gap-1 w-full bg-black text-white hover:bg-gray-800 transition-colors', layout.addBookingBtn)}
+              >
+                <Plus size={compact ? 10 : 12} /> Add Booking
+              </button>
+            ) : (
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
+            )}
+          </div>
+          {days.map((day, idx) => (
+            <div
+              key={`header-${day.toISOString()}-${idx}`}
+              className={cn(
+                'w-14 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono',
+                layout.dateHeaderRow,
+                layout.dateHeaderWeekday,
+                isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'
+              )}
+            >
+              <span className="uppercase font-bold tracking-tighter opacity-60">{format(day, 'EEE')}</span>
+              <span className={cn('font-bold text-gray-800', layout.dateHeaderDayNum)}>{format(day, 'd')}</span>
+            </div>
+          ))}
+        </div>
+
+        <RetreatBar
+          days={days}
+          retreats={retreats}
+          venueHires={activeVenueHires}
+          onAdd={onAddRetreat}
+          onEdit={onEditRetreat}
+          onAddVenue={onAddVenueHire}
+          onEditVenue={onEditVenueHire}
+          compact={compact}
+        />
+
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <div className="flex flex-col">
+            {rooms.length === 0 ? (
+              <div className="p-20 text-center flex flex-col items-center gap-4">
+                <div className="p-4 bg-gray-50 rounded-full text-gray-400">
+                  <Plus size={32} />
+                </div>
+                <p className="text-gray-400 font-medium italic">Your property is empty. Add a room to get started.</p>
+              </div>
+            ) : (
+              <SortableContext items={rooms.map(r => r.id)} strategy={verticalListSortingStrategy}>
+                {rooms.map(room => (
+                  <RoomRow
+                    key={`room-${room.id}`}
+                    room={room}
+                    days={days}
+                    bookings={bookingsByRoom.get(room.id) ?? EMPTY_ROOM_BOOKINGS}
+                    occupiedDates={occupiedDatesByRoom.get(room.id) ?? EMPTY_OCCUPIED_DATES}
+                    bookingTypes={bookingTypes}
+                    calendarDisplaySettings={calendarDisplaySettings}
+                    housekeepingStatus={housekeepingByRoom.get(room.id)}
+                    onEditRoom={onEditRoom}
+                    onEditBooking={onEditBooking}
+                    onAddBooking={onAddBooking}
+                    venueHireTintDates={venueHireTintDates}
+                    venueHireBoundaryDates={venueHireBoundaryDates}
+                    retreatTintDates={retreatTintDates}
+                    retreatBoundaryDates={retreatBoundaryDates}
+                    isAdmin={isAdmin}
+                    compact={compact}
+                  />
+                ))}
+              </SortableContext>
+            )}
+          </div>
+        </DndContext>
+
+        {showSummary && (
+          <SummaryRow days={days} bookings={activeBookings} rooms={rooms} compact={compact} />
+        )}
+
+        {showTeamRoster && (
+          <TeamRosterSection
+            days={days}
+            positions={teamPositions}
+            assignments={teamAssignments}
+            onAddAssignment={onAddTeamAssignment}
+            onEditAssignment={onEditTeamAssignment}
+            isAdmin={isAdmin}
+            compact={compact}
+          />
+        )}
+      </div>
+    </div>
+  );
+});
 
 interface CalendarProps {
   rooms?: Room[];
@@ -70,7 +273,7 @@ export default function Calendar({
   onShowTeamRosterChange,
   onOpenBookingList,
 }: CalendarProps) {
-  const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, loading } = useBooking();
+  const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, calendarDisplaySettings, loading } = useBooking();
   const { isAdmin, profile } = useAuth();
   
   const rooms = propRooms || localRooms;
@@ -79,7 +282,19 @@ export default function Calendar({
 
   const activeBookings = useMemo(() => bookings.filter(isActiveLifecycle), [bookings]);
   const activeVenueHires = useMemo(() => venueHires.filter(isActiveLifecycle), [venueHires]);
-  const layout = calendarLayoutClasses(compact);
+  const roomMapsCacheRef = useRef<RoomMaps>(EMPTY_ROOM_MAPS);
+  const { bookingsByRoom, occupiedDatesByRoom } = useMemo(
+    () => buildRoomMaps(activeBookings, roomMapsCacheRef),
+    [activeBookings],
+  );
+  const housekeepingByRoom = useMemo(() => {
+    const map = new Map<string, HousekeepingRecord['status']>();
+    for (const record of housekeeping) {
+      map.set(record.roomId, record.status);
+    }
+    return map;
+  }, [housekeeping]);
+  const layout = useMemo(() => calendarLayoutClasses(compact), [compact]);
   
   // Modal states
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -171,68 +386,67 @@ export default function Calendar({
     });
   }, [viewStartDate]);
 
-  const handleAddRoom = () => {
-    setSelectedRoom(null);
-    setIsRoomModalOpen(true);
-  };
-
-  const handleEditRoom = (room: Room) => {
+  const handleEditRoom = useCallback((room: Room) => {
     setSelectedRoom(room);
     setIsRoomModalOpen(true);
-  };
+  }, []);
 
-  const handleEditBooking = (booking: Booking) => {
+  const handleEditBooking = useCallback((booking: Booking) => {
     setSelectedBooking(booking);
     setInitialBookingData({});
-    setIsBookingModalOpen(true);
-  };
+    startTransition(() => setIsBookingModalOpen(true));
+  }, []);
 
-  const handleAddBooking = (roomId?: string, date?: Date) => {
+  const handleAddBooking = useCallback((roomId?: string, date?: Date) => {
     setSelectedBooking(null);
     setInitialBookingData({
       roomId: roomId || '',
       checkIn: date ? format(date, 'yyyy-MM-dd') : '',
       checkOut: date ? format(addDays(date, 6), 'yyyy-MM-dd') : '',
     });
-    setIsBookingModalOpen(true);
-  };
+    startTransition(() => setIsBookingModalOpen(true));
+  }, []);
 
-  const handleAddRetreat = () => {
+  const handleCloseBookingModal = useCallback(() => {
+    setIsBookingModalOpen(false);
+  }, []);
+
+  const handleAddRetreat = useCallback(() => {
     setSelectedRetreat(null);
     setIsRetreatModalOpen(true);
-  };
+  }, []);
 
-  const handleEditRetreat = (retreat: Retreat) => {
+  const handleEditRetreat = useCallback((retreat: Retreat) => {
     setSelectedRetreat(retreat);
     setIsRetreatModalOpen(true);
-  };
+  }, []);
 
-  const handleAddVenueHire = () => {
+  const handleAddVenueHire = useCallback(() => {
     setSelectedVenueHire(null);
     setIsVenueHireModalOpen(true);
-  };
+  }, []);
 
-  const handleEditVenueHire = (venueHire: VenueHire) => {
+  const handleEditVenueHire = useCallback((venueHire: VenueHire) => {
     setSelectedVenueHire(venueHire);
     setIsVenueHireModalOpen(true);
-  };
+  }, []);
 
-  const handleAddTeamAssignment = (positionId: string, date: Date) => {
+  const handleAddTeamAssignment = useCallback((positionId: string, date: Date) => {
     setSelectedTeamAssignment(null);
     setInitialTeamAssignmentData({
       positionId,
       startDate: format(date, 'yyyy-MM-dd'),
-      endDate: format(addDays(date, 7), 'yyyy-MM-dd')
+      endDate: format(addDays(date, 7), 'yyyy-MM-dd'),
     });
     setIsTeamAssignmentModalOpen(true);
-  };
+  }, []);
 
-  const handleEditTeamAssignment = (assignment: TeamAssignment) => {
+  const handleEditTeamAssignment = useCallback((assignment: TeamAssignment) => {
     setSelectedTeamAssignment(assignment);
     setIsTeamAssignmentModalOpen(true);
-  };
+  }, []);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     
     if (over && active.id !== over.id) {
@@ -256,7 +470,12 @@ export default function Calendar({
         }
       }
     }
-  };
+  }, [rooms]);
+
+  const handleAddRoom = useCallback(() => {
+    setSelectedRoom(null);
+    setIsRoomModalOpen(true);
+  }, []);
 
   const venueHireTintDates = useMemo(() => {
     const dates = new Set<string>();
@@ -266,7 +485,7 @@ export default function Calendar({
       const interval = eachDayOfInterval({ start, end });
       interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
     });
-    return Array.from(dates);
+    return dates;
   }, [activeVenueHires]);
 
   const venueHireBoundaryDates = useMemo(() => {
@@ -276,7 +495,7 @@ export default function Calendar({
       start.add(format(parseISO(vh.startDate), 'yyyy-MM-dd'));
       end.add(format(parseISO(vh.endDate), 'yyyy-MM-dd'));
     });
-    return { start: Array.from(start), end: Array.from(end) };
+    return { start, end };
   }, [activeVenueHires]);
 
   const retreatTintDates = useMemo(() => {
@@ -287,7 +506,7 @@ export default function Calendar({
       const interval = eachDayOfInterval({ start, end });
       interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
     });
-    return Array.from(dates);
+    return dates;
   }, [retreats]);
 
   const retreatBoundaryDates = useMemo(() => {
@@ -297,7 +516,7 @@ export default function Calendar({
       start.add(format(parseISO(r.startDate), 'yyyy-MM-dd'));
       end.add(format(parseISO(r.endDate), 'yyyy-MM-dd'));
     });
-    return { start: Array.from(start), end: Array.from(end) };
+    return { start, end };
   }, [retreats]);
 
   if (loading) {
@@ -324,134 +543,60 @@ export default function Calendar({
         onOpenBookingList={isAdmin ? onOpenBookingList : undefined}
       />
 
-      <div 
-        ref={(el) => { scrollContainerRef.current = el; }}
-        className="flex-1 overflow-auto border-t border-gray-200 scrollbar-thin scrollbar-thumb-gray-200 print:overflow-visible print:h-auto print:flex-none"
-      >
-        <div className="inline-block min-w-full">
-          
-          {/* Header Row (Dates) */}
-          <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-200 shadow-sm">
-            <div className={cn('sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]', layout.roomLabelCol, layout.roomLabelPad)}>
-              {isAdmin ? (
-                <button
-                  onClick={() => handleAddBooking()}
-                  className={cn('flex items-center justify-center gap-1 w-full bg-black text-white hover:bg-gray-800 transition-colors', layout.addBookingBtn)}
-                >
-                  <Plus size={compact ? 10 : 12} /> Add Booking
-                </button>
-              ) : (
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
-              )}
-            </div>
-            {days.map((day, idx) => (
-              <div 
-                key={`header-${day.toISOString()}-${idx}`} 
-                className={cn(
-                  'w-14 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono',
-                  layout.dateHeaderRow,
-                  layout.dateHeaderWeekday,
-                  isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'
-                )}
-              >
-                <span className="uppercase font-bold tracking-tighter opacity-60">{format(day, 'EEE')}</span>
-                <span className={cn('font-bold text-gray-800', layout.dateHeaderDayNum)}>{format(day, 'd')}</span>
-              </div>
-            ))}
-          </div>
-
-          <RetreatBar 
-            days={days} 
-            retreats={retreats} 
-            venueHires={activeVenueHires}
-            onAdd={handleAddRetreat} 
-            onEdit={handleEditRetreat} 
-            onAddVenue={handleAddVenueHire}
-            onEditVenue={handleEditVenueHire}
-            compact={compact}
-          />
-          
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <div className="flex flex-col">
-              {rooms.length === 0 ? (
-                <div className="p-20 text-center flex flex-col items-center gap-4">
-                  <div className="p-4 bg-gray-50 rounded-full text-gray-400">
-                    <Plus size={32} />
-                  </div>
-                  <p className="text-gray-400 font-medium italic">Your property is empty. Add a room to get started.</p>
-                </div>
-              ) : (
-                <SortableContext 
-                  items={rooms.map(r => r.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {rooms.map(room => (
-                    <RoomRow 
-                      key={`room-${room.id}`} 
-                      room={room} 
-                      days={days} 
-                      bookings={activeBookings.filter(b => b.roomId === room.id)}
-                      housekeepingStatus={housekeeping.find(h => h.roomId === room.id)?.status}
-                      onEditRoom={() => handleEditRoom(room)}
-                      onEditBooking={handleEditBooking}
-                      onAddBooking={(date) => handleAddBooking(room.id, date)}
-                      venueHireTintDates={venueHireTintDates}
-                      venueHireBoundaryDates={venueHireBoundaryDates}
-                      retreatTintDates={retreatTintDates}
-                      retreatBoundaryDates={retreatBoundaryDates}
-                      isAdmin={isAdmin}
-                      compact={compact}
-                    />
-                  ))}
-                </SortableContext>
-              )}
-            </div>
-          </DndContext>
-
-          {showSummary && (
-            <SummaryRow 
-              days={days} 
-              bookings={activeBookings} 
-              rooms={rooms}
-              compact={compact}
-            />
-          )}
-
-          {showTeamRoster && (
-            <TeamRosterSection 
-              days={days}
-              positions={teamPositions}
-              assignments={teamAssignments}
-              onAddAssignment={handleAddTeamAssignment}
-              onEditAssignment={handleEditTeamAssignment}
-              isAdmin={isAdmin}
-              compact={compact}
-            />
-          )}
-
-        </div>
-      </div>
-
-      <BookingModal 
-        isOpen={isBookingModalOpen}
-        onClose={() => setIsBookingModalOpen(false)}
-        booking={selectedBooking}
-        initialData={initialBookingData}
+      <CalendarGrid
+        scrollContainerRef={scrollContainerRef}
+        layout={layout}
+        days={days}
         rooms={rooms}
-        bookings={bookings}
-        venueHires={venueHires}
-        settings={settings}
+        bookingsByRoom={bookingsByRoom}
+        occupiedDatesByRoom={occupiedDatesByRoom}
+        housekeepingByRoom={housekeepingByRoom}
         bookingTypes={bookingTypes}
-        bookingChannels={bookingChannels}
-        paymentChannels={paymentChannels}
+        calendarDisplaySettings={calendarDisplaySettings}
+        activeBookings={activeBookings}
+        activeVenueHires={activeVenueHires}
+        retreats={retreats}
+        venueHireTintDates={venueHireTintDates}
+        venueHireBoundaryDates={venueHireBoundaryDates}
+        retreatTintDates={retreatTintDates}
+        retreatBoundaryDates={retreatBoundaryDates}
+        teamPositions={teamPositions}
+        teamAssignments={teamAssignments}
+        sensors={sensors}
         isAdmin={isAdmin}
-        currentUserName={profile?.name}
-        currentUserEmail={profile?.email}
+        compact={compact}
+        showSummary={showSummary}
+        showTeamRoster={showTeamRoster}
+        onAddBooking={handleAddBooking}
+        onEditRoom={handleEditRoom}
+        onEditBooking={handleEditBooking}
+        onDragEnd={handleDragEnd}
+        onAddRetreat={handleAddRetreat}
+        onEditRetreat={handleEditRetreat}
+        onAddVenueHire={handleAddVenueHire}
+        onEditVenueHire={handleEditVenueHire}
+        onAddTeamAssignment={handleAddTeamAssignment}
+        onEditTeamAssignment={handleEditTeamAssignment}
       />
+
+      {isBookingModalOpen && (
+        <BookingModal
+          isOpen
+          onClose={handleCloseBookingModal}
+          booking={selectedBooking}
+          initialData={initialBookingData}
+          rooms={rooms}
+          bookings={bookings}
+          venueHires={venueHires}
+          settings={settings}
+          bookingTypes={bookingTypes}
+          bookingChannels={bookingChannels}
+          paymentChannels={paymentChannels}
+          isAdmin={isAdmin}
+          currentUserName={profile?.name}
+          currentUserEmail={profile?.email}
+        />
+      )}
 
       <RoomModal 
         isOpen={isRoomModalOpen}

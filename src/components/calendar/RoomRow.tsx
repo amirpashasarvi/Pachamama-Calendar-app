@@ -1,6 +1,6 @@
-import React from 'react';
-import { isWeekend, format, parseISO } from 'date-fns';
-import { Room, Booking } from '@/types';
+import React, { memo } from 'react';
+import { isWeekend, format } from 'date-fns';
+import { Room, Booking, CalendarDisplaySettings, ConfigOption } from '@/types';
 import BookingBar from './BookingBar';
 import { Plus, GripVertical } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
@@ -8,28 +8,38 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { calendarLayoutClasses, housekeepingStatusLabel } from '@/lib/calendarLayout';
 
-interface BoundaryDates { start: string[]; end: string[]; }
+interface BoundaryDates { start: Set<string>; end: Set<string>; }
 
 interface RoomRowProps {
-  key?: React.Key;
   room: Room;
   days: Date[];
   bookings: Booking[];
+  occupiedDates: Set<string>;
+  bookingTypes: ConfigOption[];
+  calendarDisplaySettings: CalendarDisplaySettings | null;
   housekeepingStatus?: 'clean' | 'dirty' | 'inspected' | 'cleaned';
-  onEditRoom: () => void;
+  onEditRoom: (room: Room) => void;
   onEditBooking: (booking: Booking) => void;
-  onAddBooking: (date: Date) => void;
-  venueHireTintDates?: string[];
+  onAddBooking: (roomId: string, date: Date) => void;
+  venueHireTintDates?: Set<string>;
   venueHireBoundaryDates?: BoundaryDates;
-  retreatTintDates?: string[];
+  retreatTintDates?: Set<string>;
   retreatBoundaryDates?: BoundaryDates;
   isAdmin?: boolean;
   compact?: boolean;
 }
 
-const EMPTY_BOUNDARY: BoundaryDates = { start: [], end: [] };
+const EMPTY_START = new Set<string>();
+const EMPTY_END = new Set<string>();
+const EMPTY_BOUNDARY: BoundaryDates = { start: EMPTY_START, end: EMPTY_END };
 
-export default function RoomRow({ room, days, bookings, housekeepingStatus, onEditRoom, onEditBooking, onAddBooking, venueHireTintDates = [], venueHireBoundaryDates = EMPTY_BOUNDARY, retreatTintDates = [], retreatBoundaryDates = EMPTY_BOUNDARY, isAdmin = false, compact = true }: RoomRowProps) {
+function RoomRow({
+  room, days, bookings, occupiedDates, bookingTypes, calendarDisplaySettings,
+  housekeepingStatus, onEditRoom, onEditBooking, onAddBooking,
+  venueHireTintDates = EMPTY_START, venueHireBoundaryDates = EMPTY_BOUNDARY,
+  retreatTintDates = EMPTY_START, retreatBoundaryDates = EMPTY_BOUNDARY,
+  isAdmin = false, compact = true,
+}: RoomRowProps) {
   const {
     attributes,
     listeners,
@@ -62,7 +72,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
           layout.roomLabelPad,
           isAdmin ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'
         )}
-        onClick={isAdmin ? onEditRoom : undefined}
+        onClick={isAdmin ? () => onEditRoom(room) : undefined}
       >
         {/* Thicker Color Strip Drag Handle */}
         <div 
@@ -122,15 +132,15 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
       <div className="flex-1 relative flex">
         {days.map((day, idx) => {
           const dateStr = format(day, 'yyyy-MM-dd');
-          const isVenueHireDay = venueHireTintDates.includes(dateStr);
-          const isRetreatDay = retreatTintDates.includes(dateStr);
+          const isVenueHireDay = venueHireTintDates.has(dateStr);
+          const isRetreatDay = retreatTintDates.has(dateStr);
           const weekend = isWeekend(day);
 
           // Boundary diagonal: start = tint on right half, end = tint on left half
-          const isVHStart = venueHireBoundaryDates.start.includes(dateStr);
-          const isVHEnd   = venueHireBoundaryDates.end.includes(dateStr);
-          const isRStart  = retreatBoundaryDates.start.includes(dateStr);
-          const isREnd    = retreatBoundaryDates.end.includes(dateStr);
+          const isVHStart = venueHireBoundaryDates.start.has(dateStr);
+          const isVHEnd   = venueHireBoundaryDates.end.has(dateStr);
+          const isRStart  = retreatBoundaryDates.start.has(dateStr);
+          const isREnd    = retreatBoundaryDates.end.has(dateStr);
           const isBoundary = isVHStart || isVHEnd || isRStart || isREnd;
 
           // clip-path for right-half tint (start day) and left-half tint (end day)
@@ -150,11 +160,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
           const vhColor  = weekend ? 'rgba(251,146,60,0.80)' : 'rgba(254,215,170,0.75)';
           const retColor = weekend ? 'rgba(147,197,253,0.80)' : 'rgba(219,234,254,0.75)';
 
-          const isOccupied = bookings.some(booking => {
-            const checkIn = format(parseISO(booking.checkIn), 'yyyy-MM-dd');
-            const checkOut = format(parseISO(booking.checkOut), 'yyyy-MM-dd');
-            return dateStr >= checkIn && dateStr < checkOut;
-          });
+          const isOccupied = occupiedDates.has(dateStr);
           
           return (
             <div 
@@ -165,7 +171,7 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
                 isAdmin && !isOccupied ? "cursor-crosshair hover:bg-blue-50/30 active:bg-blue-50" : "",
                 isOccupied ? 'cursor-default pointer-events-none' : ''
               )}
-              onClick={() => isAdmin && !isOccupied && onAddBooking(day)}
+              onClick={() => isAdmin && !isOccupied && onAddBooking(room.id, day)}
             >
               {/* Diagonal overlay for period start/end days */}
               {isVHStart && <div className="absolute inset-0 pointer-events-none" style={{ background: vhColor, clipPath: startClip }} />}
@@ -185,7 +191,9 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
               booking={booking} 
               days={days} 
               roomColor={String(room.color)}
-              onEdit={() => onEditBooking(booking)}
+              bookingTypes={bookingTypes}
+              calendarDisplaySettings={calendarDisplaySettings}
+              onEditBooking={onEditBooking}
               compact={compact}
             />
           ))}
@@ -194,3 +202,5 @@ export default function RoomRow({ room, days, bookings, housekeepingStatus, onEd
     </div>
   );
 }
+
+export default memo(RoomRow);

@@ -1,23 +1,23 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { differenceInDays, isAfter, isBefore, parseISO, startOfDay } from 'date-fns';
-import { Booking, ConfigOption } from '@/types';
+import { Booking, CalendarDisplaySettings, ConfigOption } from '@/types';
 import { cn } from '@/lib/utils';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
-import { motion } from 'motion/react';
 import { Pin } from 'lucide-react';
-import { useBooking } from '@/hooks/useBooking';
 
 interface BookingBarProps {
-  key?: React.Key;
   booking: Booking;
   days: Date[];
   roomColor: string;
-  onEdit: () => void;
+  bookingTypes: ConfigOption[];
+  calendarDisplaySettings: CalendarDisplaySettings | null;
+  onEditBooking: (booking: Booking) => void;
   compact?: boolean;
 }
 
-export default function BookingBar({ booking, days, roomColor, onEdit, compact = true }: BookingBarProps) {
-  const { bookingTypes, calendarDisplaySettings } = useBooking();
+function BookingBar({
+  booking, days, bookingTypes, calendarDisplaySettings, onEditBooking, compact = true,
+}: BookingBarProps) {
   const layout = calendarLayoutClasses(compact);
   const dayWidth = 56;
   const halfDay = dayWidth / 2;
@@ -136,21 +136,19 @@ export default function BookingBar({ booking, days, roomColor, onEdit, compact =
   const polygonPath = `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scaleY: 0.8 }}
-      animate={{ opacity: 1, scaleY: 1 }}
+    <div
       className={cn(
         'absolute z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden',
         layout.bookingBar,
       )}
       style={{
-        left: `${left - 1}px`, // Slight bleed to cover border
-        width: `${totalWidth + 2}px`, // Slight bleed to cover border
+        left: `${left - 1}px`,
+        width: `${totalWidth + 2}px`,
         clipPath: polygonPath,
       }}
       onClick={(e) => {
         e.stopPropagation();
-        onEdit();
+        onEditBooking(booking);
       }}
     >
       {/* 1. Base white layer to mask grid lines */}
@@ -180,6 +178,8 @@ export default function BookingBar({ booking, days, roomColor, onEdit, compact =
       
       {/* Thick status line at bottom */}
       <div className={cn('absolute bottom-0 left-0 right-0 z-20', layout.bookingBarStatusLine, statusLineColor)} />
-    </motion.div>
+    </div>
   );
 }
+
+export default memo(BookingBar);
