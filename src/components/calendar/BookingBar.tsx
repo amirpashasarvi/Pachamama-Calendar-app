@@ -16,7 +16,7 @@ interface BookingBarProps {
 }
 
 function BookingBar({
-  booking, days, bookingTypes, calendarDisplaySettings, onEditBooking, compact = true,
+  booking, days, bookingTypes, calendarDisplaySettings, onEditBooking, compact = false,
 }: BookingBarProps) {
   const layout = calendarLayoutClasses(compact);
   const dayWidth = 56;
@@ -161,7 +161,7 @@ function BookingBar({
       />
 
       {/* 3. Content layer */}
-      <div className={cn('relative z-10 flex flex-col items-center justify-center h-full w-full px-10 text-black font-bold leading-none', layout.bookingBarText, compact ? 'pb-0.5' : 'pb-1')}>
+      <div className={cn('relative z-10 flex flex-col items-center justify-center h-full w-full px-10 text-black font-bold leading-none', layout.bookingBarText, layout.bookingBarContentPad)}>
         <div className="truncate w-full text-center flex items-center justify-center gap-0.5 whitespace-nowrap overflow-hidden italic">
           {joinedContent}
         </div>

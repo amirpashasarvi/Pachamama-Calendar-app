@@ -38,7 +38,7 @@ function RoomRow({
   housekeepingStatus, onEditRoom, onEditBooking, onAddBooking,
   venueHireTintDates = EMPTY_START, venueHireBoundaryDates = EMPTY_BOUNDARY,
   retreatTintDates = EMPTY_START, retreatBoundaryDates = EMPTY_BOUNDARY,
-  isAdmin = false, compact = true,
+  isAdmin = false, compact = false,
 }: RoomRowProps) {
   const {
     attributes,
@@ -86,45 +86,18 @@ function RoomRow({
           <GripVertical size={12} className="text-white opacity-0 group-hover/handle:opacity-100 transition-opacity" />
         </div>
 
-        <div className={cn('flex flex-1 min-w-0', compact ? cn('items-center gap-1.5', layout.roomNameMl) : cn('flex-col', layout.roomNameMl))}>
-          {compact ? (
-            <>
-              {housekeepingStatus && (
-                <div
-                  className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
-                    housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
-                    (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
-                    'bg-green-500 shadow-green-200'
-                  }`}
-                  title={housekeepingStatusLabel(housekeepingStatus)}
-                />
-              )}
-              <span className={cn('font-bold truncate tracking-tight leading-tight', layout.roomName)}>{String(room.name)}</span>
-            </>
-          ) : (
-            <>
-              <span className={cn('font-bold truncate tracking-tight leading-tight', layout.roomName)}>{String(room.name)}</span>
-              {housekeepingStatus && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <div
-                    className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
-                      housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
-                      (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
-                      'bg-green-500 shadow-green-200'
-                    }`}
-                    title={housekeepingStatusLabel(housekeepingStatus)}
-                  />
-                  <span className={`text-[9px] font-bold uppercase tracking-tight leading-none ${
-                    housekeepingStatus === 'dirty' ? 'text-rose-500' :
-                    (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'text-amber-500' :
-                    'text-green-500'
-                  }`}>
-                    {housekeepingStatusLabel(housekeepingStatus)}
-                  </span>
-                </div>
-              )}
-            </>
+        <div className={cn('flex flex-1 min-w-0 items-center gap-1.5', layout.roomNameMl)}>
+          {housekeepingStatus && (
+            <div
+              className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
+                housekeepingStatus === 'dirty' ? 'bg-rose-500 shadow-rose-200' :
+                (housekeepingStatus === 'inspected' || housekeepingStatus === 'cleaned') ? 'bg-amber-500 shadow-amber-200' :
+                'bg-green-500 shadow-green-200'
+              }`}
+              title={housekeepingStatusLabel(housekeepingStatus)}
+            />
           )}
+          <span className={cn('font-bold truncate tracking-tight leading-tight', layout.roomName)}>{String(room.name)}</span>
         </div>
       </div>
 

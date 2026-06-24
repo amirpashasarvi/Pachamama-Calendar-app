@@ -23,7 +23,7 @@ export default function Header({
   setViewStartDate,
   onScrollToDate,
   visibleMonth,
-  compact = true,
+  compact = false,
   showSummary = false,
   showTeamRoster = false,
   onCompactCalendarChange,
@@ -76,15 +76,15 @@ export default function Header({
               className={navBtnClass}
               aria-label="Previous year"
             >
-              <ChevronLeft size={compact ? 12 : 14} />
+              <ChevronLeft size={layout.navChevronSize} />
             </button>
-            <span className={cn('font-bold px-2 min-w-[44px] text-center', compact ? 'text-xs' : 'text-sm')}>{viewYear}</span>
+            <span className={cn('font-bold px-2 min-w-[44px] text-center', layout.navYearText)}>{viewYear}</span>
             <button
               onClick={() => setViewStartDate(addYears(viewStartDate, 1))}
               className={navBtnClass}
               aria-label="Next year"
             >
-              <ChevronRight size={compact ? 12 : 14} />
+              <ChevronRight size={layout.navChevronSize} />
             </button>
           </div>
 
@@ -107,9 +107,9 @@ export default function Header({
               className={navBtnClass}
               aria-label="Previous month"
             >
-              <ChevronLeft size={compact ? 12 : 14} />
+              <ChevronLeft size={layout.navChevronSize} />
             </button>
-            <span className={cn('font-bold px-1 min-w-[28px] text-center', compact ? 'text-xs' : 'text-sm')}>
+            <span className={cn('font-bold px-1 min-w-[28px] text-center', layout.navYearText)}>
               {months[visibleMonth]}
             </span>
             <button
@@ -118,7 +118,7 @@ export default function Header({
               className={navBtnClass}
               aria-label="Next month"
             >
-              <ChevronRight size={compact ? 12 : 14} />
+              <ChevronRight size={layout.navChevronSize} />
             </button>
           </div>
         </div>
@@ -136,7 +136,7 @@ export default function Header({
                 title="Calendar display"
                 aria-label="Calendar display"
               >
-                <Eye size={compact ? 14 : 16} />
+                <Eye size={layout.navIconSize} />
               </button>
 
               {isViewOpen && (
@@ -193,7 +193,7 @@ export default function Header({
               title="Booking List"
               aria-label="Booking List"
             >
-              <List size={compact ? 14 : 16} />
+              <List size={layout.navIconSize} />
               <span className="hidden sm:inline uppercase">List</span>
             </button>
           )}

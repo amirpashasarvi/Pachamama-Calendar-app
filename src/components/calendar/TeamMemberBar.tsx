@@ -16,7 +16,7 @@ interface TeamMemberBarProps {
   compact?: boolean;
 }
 
-export default function TeamMemberBar({ assignment, days, color, isOverlapping, onEdit, compact = true }: TeamMemberBarProps) {
+export default function TeamMemberBar({ assignment, days, color, isOverlapping, onEdit, compact = false }: TeamMemberBarProps) {
   const { calendarDisplaySettings } = useBooking();
   const layout = calendarLayoutClasses(compact);
   const dayWidth = 56;

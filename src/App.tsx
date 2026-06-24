@@ -47,6 +47,7 @@ function AppContent() {
   // Close menus on click outside
   const userMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -54,6 +55,9 @@ function AppContent() {
       }
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
         setIsMoreMenuOpen(false);
+      }
+      if (notificationsMenuRef.current && !notificationsMenuRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -73,9 +77,9 @@ function AppContent() {
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden print:h-auto print:overflow-visible">
       {/* Header bar */}
-      <header className={cn('border-b flex items-center justify-between bg-white relative z-[150] print:hidden pt-safe px-safe', compactCalendar ? 'min-h-11' : 'min-h-14', layout.appHeaderPx)}>
+      <header className={cn('border-b flex items-center justify-between bg-white relative z-[150] print:hidden pt-safe px-safe', layout.appHeaderMinH, layout.appHeaderPx)}>
         <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
-          <h1 className={cn('font-bold tracking-tight leading-tight truncate', compactCalendar ? 'text-sm sm:text-base' : 'text-base sm:text-lg')}>
+          <h1 className={cn('font-bold tracking-tight leading-tight truncate', layout.appTitleClass)}>
             <span className="sm:hidden">Pachamama</span>
             <span className="hidden sm:inline">Pachamama Booking Management</span>
           </h1>
@@ -99,7 +103,7 @@ function AppContent() {
             {isAdmin && (
               <>
                 {/* Alerts — always visible */}
-                <div className="relative border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2">
+                <div className="relative border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2" ref={notificationsMenuRef}>
                   <button
                     type="button"
                     onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
@@ -116,12 +120,24 @@ function AppContent() {
                   </button>
 
                   {isNotificationsOpen && (
-                    <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[60] animate-in fade-in zoom-in-95 duration-100">
-                      <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between">
-                        <span className="text-xs font-bold text-gray-500">Today's Alerts</span>
-                        {totalCount > 0 && <span className="text-xs text-gray-400">{totalCount} items</span>}
-                      </div>
-                      <div className="max-h-[70vh] overflow-y-auto">
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Close alerts"
+                        className="fixed inset-0 z-[205] bg-black/30 sm:hidden"
+                        onClick={() => setIsNotificationsOpen(false)}
+                      />
+                      <div className={cn(
+                        'bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[210]',
+                        'animate-in fade-in zoom-in-95 duration-100',
+                        'fixed left-3 right-3 top-[calc(env(safe-area-inset-top)+3.25rem)] max-h-[min(70vh,calc(100dvh-5rem))] flex flex-col',
+                        'sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-w-[90vw] sm:max-h-none sm:flex-none',
+                      )}>
+                        <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between shrink-0">
+                          <span className="text-xs font-bold text-gray-500">Today's Alerts</span>
+                          {totalCount > 0 && <span className="text-xs text-gray-400">{totalCount} items</span>}
+                        </div>
+                        <div className="overflow-y-auto flex-1 min-h-0 sm:max-h-[70vh]">
                         {totalCount === 0 ? (
                           <div className="p-6 text-center text-xs text-gray-400 font-bold italic">All clear — no alerts today</div>
                         ) : (
@@ -205,8 +221,9 @@ function AppContent() {
                             )}
                           </>
                         )}
+                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
 

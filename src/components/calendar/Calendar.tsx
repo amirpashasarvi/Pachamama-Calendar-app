@@ -158,7 +158,7 @@ const CalendarGrid = memo(function CalendarGrid({
                 onClick={() => onAddBooking()}
                 className={cn('flex items-center justify-center gap-1 w-full bg-black text-white hover:bg-gray-800 transition-colors', layout.addBookingBtn)}
               >
-                <Plus size={compact ? 10 : 12} /> Add Booking
+                <Plus size={layout.addBookingPlusSize} /> Add Booking
               </button>
             ) : (
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
@@ -267,7 +267,7 @@ export default function Calendar({
   housekeeping: propHousekeeping,
   showSummary = false,
   showTeamRoster = false,
-  compact = true,
+  compact = false,
   onCompactCalendarChange,
   onShowSummaryChange,
   onShowTeamRosterChange,

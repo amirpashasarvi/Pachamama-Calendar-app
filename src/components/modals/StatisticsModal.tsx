@@ -267,8 +267,111 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
           </header>
 
           <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-8">
-            {/* Filters */}
-            <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pb-2">
+            {/* Filters — mobile stacked layout */}
+            <div className="flex flex-col gap-3 pb-2 sm:hidden">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-bold text-gray-400">Period</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPeriod('All')}
+                    className={cn(
+                      FILTER_CTRL,
+                      'transition-all shrink-0 inline-flex items-center',
+                      period === 'All'
+                        ? 'bg-black text-white border-black'
+                        : 'text-gray-500 hover:text-gray-900'
+                    )}
+                  >
+                    All
+                  </button>
+                  <div className="flex items-center h-7 gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const y = selectedYear - 1;
+                        setSelectedYear(y);
+                        if (period === 'Month') selectMonth(y, selectedMonth);
+                      }}
+                      className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="text-xs font-bold px-1 min-w-[36px] text-center leading-none">{selectedYear}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const y = selectedYear + 1;
+                        setSelectedYear(y);
+                        if (period === 'Month') selectMonth(y, selectedMonth);
+                      }}
+                      className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-6 gap-0.5">
+                  {MONTH_LABELS.map((m, i) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => selectMonth(selectedYear, i)}
+                      className={cn(
+                        'h-7 px-1 inline-flex items-center justify-center rounded-lg text-[10px] font-bold transition-all',
+                        period === 'Month' && isFullMonthRange(dateRange.from, dateRange.to, selectedYear, i)
+                          ? 'bg-green-600 text-white shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center h-7 gap-1 bg-white border border-gray-200 px-1.5 rounded-lg shadow-sm w-full">
+                  <DatePicker
+                    compact
+                    value={dateRange.from}
+                    onChange={val => {
+                      setPeriod('Month');
+                      setDateRange(prev => ({
+                        ...prev,
+                        from: val,
+                        to: (prev.to && val >= prev.to) ? '' : prev.to,
+                      }));
+                    }}
+                    className="flex-1 min-w-0 [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none [&>div]:focus-within:ring-0"
+                  />
+                  <span className="text-gray-300 text-[10px] shrink-0">→</span>
+                  <DatePicker
+                    compact
+                    value={dateRange.to}
+                    min={dateRange.from ? new Date(new Date(dateRange.from).getTime() + 86400000).toISOString().split('T')[0] : ''}
+                    onChange={val => {
+                      setPeriod('Month');
+                      setDateRange(prev => ({ ...prev, to: val }));
+                    }}
+                    className="flex-1 min-w-0 [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none [&>div]:focus-within:ring-0"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-bold text-gray-400">Room Filter</span>
+                <select
+                  value={roomFilter}
+                  onChange={e => setRoomFilter(e.target.value)}
+                  className={cn(FILTER_CTRL, 'outline-none cursor-pointer hover:border-gray-300 transition-colors w-full')}
+                >
+                  <option value="all">All Rooms</option>
+                  {rooms.map(room => (
+                    <option key={room.id} value={room.id}>{room.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Filters — desktop layout (unchanged) */}
+            <div className="hidden sm:flex flex-wrap items-end gap-x-6 gap-y-3 pb-2">
               <div className="flex flex-col gap-2 flex-1 min-w-0">
                 <span className="text-xs font-bold text-gray-400">Period</span>
                 <div className="flex flex-wrap items-center gap-2 min-h-7">

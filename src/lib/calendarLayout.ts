@@ -1,12 +1,18 @@
 export const COMPACT_CALENDAR_STORAGE_KEY = 'pachamama-calendar-compact';
 
+/** false = default density; true = extra-compact (checkbox on) */
 export function loadCompactCalendarPreference(): boolean {
   try {
     const stored = localStorage.getItem(COMPACT_CALENDAR_STORAGE_KEY);
-    if (stored === null) return true;
+    if (stored === null) return false;
+    // Legacy: "true" was the former compact tier, which is now the default (false).
+    if (stored === 'true') {
+      localStorage.setItem(COMPACT_CALENDAR_STORAGE_KEY, 'false');
+      return false;
+    }
     return stored === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -25,39 +31,50 @@ export function housekeepingStatusLabel(status: string): string {
   return 'Clean';
 }
 
+/** compact=true → extra-compact tier; compact=false → default (former compact sizing) */
 export function calendarLayoutClasses(compact: boolean) {
   return {
-    appHeader: compact ? 'h-11' : 'h-14',
-    appHeaderPx: compact ? 'px-4' : 'px-6',
-    appTitle: compact ? 'text-lg' : 'text-xl',
-    appIconBtn: compact ? 'p-1.5' : 'p-2',
-    appIconSize: compact ? 16 : 18,
-    calHeaderRow: compact ? 'h-10' : 'h-14',
+    appHeader: compact ? 'h-10' : 'h-11',
+    appHeaderMinH: compact ? 'min-h-10' : 'min-h-11',
+    appHeaderPx: compact ? 'px-3' : 'px-4',
+    appTitle: compact ? 'text-base' : 'text-lg',
+    appTitleClass: compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-base',
+    appIconBtn: compact ? 'p-1' : 'p-1.5',
+    appIconSize: compact ? 14 : 16,
+    calHeaderRow: compact ? 'h-8' : 'h-10',
     monthBtn: compact
-      ? 'px-2 py-0.5 rounded text-xs font-bold transition-all'
-      : 'px-3 py-1.5 rounded-md text-sm font-bold transition-all',
-    todayBtn: compact ? 'text-[10px] px-2 py-1' : 'text-xs px-3 py-2 sm:py-1',
-    dateHeaderRow: compact ? 'h-9' : 'h-12',
-    dateHeaderWeekday: compact ? 'text-[8px]' : 'text-[10px]',
-    dateHeaderDayNum: compact ? 'text-xs' : 'text-sm',
-    roomLabelCol: compact ? 'w-24 sm:w-36' : 'w-28 sm:w-48',
-    roomRow: compact ? 'h-10' : 'h-14',
-    roomName: compact ? 'text-[11px]' : 'text-xs',
-    roomLabelPad: compact ? 'p-1' : 'p-2',
-    roomNameMl: compact ? 'ml-3' : 'ml-4',
-    bookingBar: compact ? 'h-8 top-1' : 'h-11 top-1.5',
-    bookingBarText: compact ? 'text-[9px]' : 'text-[10px]',
-    bookingBarPinSize: compact ? 10 : 12,
-    bookingBarStatusLine: compact ? 'h-0.5' : 'h-1',
-    retreatStickyTop: compact ? 'top-9' : 'top-12',
-    summaryCell: compact ? 'h-12' : 'h-20',
-    summaryText: compact ? 'text-[9px]' : 'text-[10px]',
-    teamRow: compact ? 'h-10' : 'h-14',
-    teamLabelRow: compact ? 'h-6' : 'h-8',
-    teamMemberBar: compact ? 'h-7 top-1.5' : 'h-9 top-2.5',
+      ? 'px-1.5 py-0.5 rounded text-[10px] font-bold transition-all'
+      : 'px-2 py-0.5 rounded text-xs font-bold transition-all',
+    todayBtn: compact ? 'text-[9px] px-1.5 py-0.5' : 'text-[10px] px-2 py-1',
+    navChevronSize: compact ? 10 : 12,
+    navYearText: compact ? 'text-[10px]' : 'text-xs',
+    navIconSize: compact ? 12 : 14,
+    dateHeaderRow: compact ? 'h-7' : 'h-9',
+    dateHeaderWeekday: compact ? 'text-[7px]' : 'text-[8px]',
+    dateHeaderDayNum: compact ? 'text-[10px]' : 'text-xs',
+    roomLabelCol: compact ? 'w-20 sm:w-28' : 'w-24 sm:w-36',
+    roomRow: compact ? 'h-8' : 'h-10',
+    roomName: compact ? 'text-[10px]' : 'text-[11px]',
+    roomLabelPad: compact ? 'p-0.5' : 'p-1',
+    roomNameMl: compact ? 'ml-2.5' : 'ml-3',
+    bookingBar: compact ? 'h-6 top-0.5' : 'h-8 top-1',
+    bookingBarText: compact ? 'text-[8px]' : 'text-[9px]',
+    bookingBarContentPad: compact ? 'pb-0' : 'pb-0.5',
+    bookingBarPinSize: compact ? 8 : 10,
+    bookingBarStatusLine: 'h-1',
+    retreatStickyTop: compact ? 'top-7' : 'top-9',
+    summaryCell: compact ? 'h-10' : 'h-12',
+    summaryText: compact ? 'text-[8px]' : 'text-[9px]',
+    summaryLabelText: compact ? 'text-[9px]' : 'text-[10px]',
+    summaryIconSize: compact ? 7 : 8,
+    teamRow: compact ? 'h-8' : 'h-10',
+    teamLabelRow: compact ? 'h-5' : 'h-6',
+    teamLabelPad: compact ? 'px-1.5' : 'px-2',
+    teamMemberBar: compact ? 'h-5 top-1' : 'h-7 top-1.5',
     addBookingBtn: compact
-      ? 'px-1.5 py-1 rounded-lg text-[9px] font-bold'
-      : 'px-2 py-2 rounded-xl text-[10px] sm:text-xs font-bold',
-    cellPlusSize: compact ? 12 : 14,
+      ? 'px-1 py-0.5 rounded-md text-[8px] font-bold'
+      : 'px-1.5 py-1 rounded-lg text-[9px] font-bold',
+    addBookingPlusSize: compact ? 8 : 10,
+    cellPlusSize: compact ? 10 : 12,
   };
 }

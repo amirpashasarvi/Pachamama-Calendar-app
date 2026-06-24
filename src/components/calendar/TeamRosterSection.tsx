@@ -23,7 +23,7 @@ export default function TeamRosterSection({
   onAddAssignment, 
   onEditAssignment,
   isAdmin,
-  compact = true,
+  compact = false,
 }: TeamRosterSectionProps) {
   const layout = calendarLayoutClasses(compact);
   const getDayCoverage = (assignment: TeamAssignment, day: Date) => {
@@ -79,7 +79,7 @@ export default function TeamRosterSection({
     <div className="flex flex-col">
       {/* Label Row */}
       <div className={cn('flex bg-gray-50 border-b border-gray-400 items-center', layout.teamLabelRow)}>
-        <div className={cn('sticky left-0 z-[85] bg-gray-100 border-r border-gray-400 h-full flex items-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]', layout.roomLabelCol, compact ? 'px-2' : 'px-4')}>
+        <div className={cn('sticky left-0 z-[85] bg-gray-100 border-r border-gray-400 h-full flex items-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]', layout.roomLabelCol, layout.teamLabelPad)}>
           <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Staff & Volunteers</span>
         </div>
         <div className="flex-1 h-full bg-gray-50/50" />

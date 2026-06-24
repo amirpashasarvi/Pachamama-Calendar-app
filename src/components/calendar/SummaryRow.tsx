@@ -12,7 +12,7 @@ interface SummaryRowProps {
   compact?: boolean;
 }
 
-export default function SummaryRow({ days, bookings, rooms, compact = true }: SummaryRowProps) {
+export default function SummaryRow({ days, bookings, rooms, compact = false }: SummaryRowProps) {
   const layout = calendarLayoutClasses(compact);
 
   const stats = useMemo(() => {
@@ -42,7 +42,7 @@ export default function SummaryRow({ days, bookings, rooms, compact = true }: Su
 
   return (
     <div className="flex bg-gray-100 border-t border-gray-400 sticky bottom-0 z-[90] border-l border-gray-400">
-      <div className={cn('sticky left-0 z-[100] bg-gray-100 border-r border-gray-400 flex flex-col justify-center font-bold text-gray-500 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] flex-shrink-0', layout.roomLabelCol, layout.roomLabelPad, compact ? 'text-[10px]' : 'text-[11px]')}>
+      <div className={cn('sticky left-0 z-[100] bg-gray-100 border-r border-gray-400 flex flex-col justify-center font-bold text-gray-500 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] flex-shrink-0', layout.roomLabelCol, layout.roomLabelPad, layout.summaryLabelText)}>
         Summary
       </div>
 
@@ -58,18 +58,18 @@ export default function SummaryRow({ days, bookings, rooms, compact = true }: Su
         >
           <div className="flex items-center justify-center gap-1.5 w-full">
             <div className="flex items-center gap-0.5 text-blue-700 font-bold" title="Adults">
-              <User size={compact ? 8 : 10} /> {stat.adults}
+              <User size={layout.summaryIconSize} /> {stat.adults}
             </div>
             <div className="flex items-center gap-0.5 text-purple-600 font-bold" title="Kids">
-              <Baby size={compact ? 8 : 10} /> {stat.kids}
+              <Baby size={layout.summaryIconSize} /> {stat.kids}
             </div>
           </div>
           <div className="flex items-center justify-center gap-1.5 w-full">
             <div className="flex items-center gap-0.5 text-green-600 font-bold" title="Check-ins">
-              <LogIn size={compact ? 8 : 10} /> {stat.checkIns}
+              <LogIn size={layout.summaryIconSize} /> {stat.checkIns}
             </div>
             <div className="flex items-center gap-0.5 text-orange-600 font-bold" title="Check-outs">
-              <LogOut size={compact ? 8 : 10} /> {stat.checkOuts}
+              <LogOut size={layout.summaryIconSize} /> {stat.checkOuts}
             </div>
           </div>
         </div>
