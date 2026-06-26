@@ -545,7 +545,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             setIsAdding(true);
             setFormData({ name: '', color: '#36454F', commission: '' });
           }}
-          className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
+          className="w-full py-2.5 flex items-center justify-center gap-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
         >
           <Plus size={14} /> Add New Room
         </button>
@@ -557,7 +557,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Room Name</label>
             <input
               autoFocus
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
               value={formData.name}
               onChange={e => setFormData({ ...formData, name: e.target.value })}
               placeholder="Room name..."
@@ -581,13 +581,13 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           <div className="flex gap-2">
             <button
               onClick={() => handleSaveOption('rooms')}
-              className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
+              className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
             >
               <Save size={14} /> {editingId ? 'Update Room' : 'Create Room'}
             </button>
             <button
               onClick={resetForms}
-              className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50"
+              className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
@@ -685,7 +685,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             setIsAdding(true);
             setFormData({ name: '', color: '', commission: '' });
           }}
-          className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
+          className="w-full py-2.5 flex items-center justify-center gap-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
         >
           <Plus size={14} /> Add New Retreat
         </button>
@@ -697,7 +697,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Retreat Name</label>
             <input
               autoFocus
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
               value={formData.name}
               onChange={e => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g. Yoga & Surf, Sound Healing..."
@@ -707,13 +707,13 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           <div className="flex gap-2">
             <button
               onClick={() => handleSaveOption('retreatTypes')}
-              className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
+              className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
             >
               <Save size={14} /> {editingId ? 'Update Retreat' : 'Create Retreat'}
             </button>
             <button
               onClick={resetForms}
-              className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50"
+              className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
@@ -797,7 +797,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           <button
             type="button"
             onClick={startAddConfigOption}
-            className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
+            className="w-full py-2.5 flex items-center justify-center gap-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
           >
             <Plus size={14} /> Add New Option
           </button>
@@ -809,7 +809,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Name</label>
               <input
                 autoFocus
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Option name..."
@@ -824,7 +824,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                     type="number"
                     min="0"
                     max="100"
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none pr-10"
                     value={formData.commission}
                     onChange={e => setFormData({ ...formData, commission: e.target.value === '' ? '' : Number(e.target.value) })}
                     placeholder="0"
@@ -859,7 +859,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                 type="button"
                 disabled={isSaving}
                 onClick={() => handleSaveOption(collectionName)}
-                className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save size={14} /> {isSaving ? 'Saving…' : 'Save Option'}
               </button>
@@ -867,7 +867,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
                 type="button"
                 disabled={isSaving}
                 onClick={resetForms}
-                className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -976,7 +976,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             setUserFormData({ email: '', name: '', role: 'staff' });
             setConfirmDeleteId(null);
           }}
-          className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
+          className="w-full py-2.5 flex items-center justify-center gap-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
         >
           <Plus size={14} /> Add User
         </button>
@@ -989,7 +989,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Full Name</label>
               <input
                 autoFocus
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
                 value={userFormData.name}
                 onChange={e => setUserFormData({ ...userFormData, name: e.target.value })}
                 placeholder="John Doe"
@@ -998,7 +998,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             <div className="col-span-2">
               <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Email Address</label>
               <input
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
                 value={userFormData.email}
                 onChange={e => setUserFormData({ ...userFormData, email: e.target.value })}
                 placeholder="john@example.com"
@@ -1008,7 +1008,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             <div className="col-span-2">
               <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Role</label>
               <select
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none bg-white"
                 value={userFormData.role}
                 onChange={e => setUserFormData({ ...userFormData, role: e.target.value as UserRole })}
               >
@@ -1020,13 +1020,13 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           <div className="flex gap-2">
             <button
               onClick={editingUserId ? handleSaveUser : handleCreateUser}
-              className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
+              className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
             >
               <Save size={14} /> {editingUserId ? 'Update User' : 'Create User'}
             </button>
             <button
               onClick={resetForms}
-              className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50"
+              className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
@@ -1115,7 +1115,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             setIsAdding(true);
             setFormData({ name: '', color: '#36454F', commission: 0 });
           }}
-          className="w-full py-2.5 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
+          className="w-full py-2.5 flex items-center justify-center gap-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
         >
           <Plus size={14} /> Add New Position
         </button>
@@ -1127,7 +1127,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Position Name</label>
             <input
               autoFocus
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
               value={formData.name}
               onChange={e => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g. Host, Yoga Teacher, Kitchen..."
@@ -1153,13 +1153,13 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               onClick={() => {
                 handleSaveOption('teamPositions');
               }}
-              className="flex-1 py-2 bg-black text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800"
+              className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
             >
               <Save size={14} /> {editingId ? 'Update Position' : 'Create Position'}
             </button>
             <button
               onClick={resetForms}
-              className="px-4 py-2 bg-white border text-gray-500 rounded-lg text-xs font-bold hover:bg-gray-50"
+              className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
@@ -1385,8 +1385,8 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         {view === 'activity' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-200">
             <div className="flex items-center gap-3 mb-4">
-              <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-                <ChevronLeft size={18} className="text-gray-500" />
+              <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <ChevronLeft size={20} className="text-gray-500" />
               </button>
               <div className="flex items-center gap-2">
                 <ClipboardList size={16} className="text-gray-400" />

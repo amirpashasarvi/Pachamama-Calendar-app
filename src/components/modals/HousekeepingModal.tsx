@@ -152,7 +152,7 @@ export default function HousekeepingModal({
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors"
             >
-              <X size={22} />
+              <X size={20} />
             </button>
           </header>
 
@@ -311,7 +311,7 @@ export default function HousekeepingModal({
                               if (val !== (record.notes || '')) handleNotesSave(room.id, val);
                               closeNote(room.id);
                             }}
-                            className="w-full text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-300 resize-none placeholder:text-gray-300"
+                            className="w-full text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-black outline-none resize-none placeholder:text-gray-300"
                           />
                           {savingNotes[room.id] && (
                             <p className="text-xs text-blue-400 mt-1">saving…</p>

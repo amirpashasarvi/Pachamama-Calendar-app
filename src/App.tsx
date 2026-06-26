@@ -16,6 +16,10 @@ import { cn } from './lib/utils';
 import {
   loadCompactCalendarPreference,
   saveCompactCalendarPreference,
+  loadShowSummaryPreference,
+  saveShowSummaryPreference,
+  loadShowTeamRosterPreference,
+  saveShowTeamRosterPreference,
   calendarLayoutClasses,
 } from './lib/calendarLayout';
 
@@ -33,8 +37,8 @@ function AppContent() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
-  const [showTeamRoster, setShowTeamRoster] = useState(false);
+  const [showSummary, setShowSummary] = useState(loadShowSummaryPreference);
+  const [showTeamRoster, setShowTeamRoster] = useState(loadShowTeamRosterPreference);
   const [compactCalendar, setCompactCalendar] = useState(loadCompactCalendarPreference);
 
   const layout = calendarLayoutClasses(compactCalendar);
@@ -42,6 +46,16 @@ function AppContent() {
   const handleCompactCalendarChange = (compact: boolean) => {
     setCompactCalendar(compact);
     saveCompactCalendarPreference(compact);
+  };
+
+  const handleShowSummaryChange = (show: boolean) => {
+    setShowSummary(show);
+    saveShowSummaryPreference(show);
+  };
+
+  const handleShowTeamRosterChange = (show: boolean) => {
+    setShowTeamRoster(show);
+    saveShowTeamRosterPreference(show);
   };
 
   // Close menus on click outside
@@ -360,8 +374,8 @@ function AppContent() {
           showTeamRoster={showTeamRoster}
           compact={compactCalendar}
           onCompactCalendarChange={handleCompactCalendarChange}
-          onShowSummaryChange={setShowSummary}
-          onShowTeamRosterChange={setShowTeamRoster}
+          onShowSummaryChange={handleShowSummaryChange}
+          onShowTeamRosterChange={handleShowTeamRosterChange}
           onOpenBookingList={() => setIsStatsOpen(true)}
         />
       </main>

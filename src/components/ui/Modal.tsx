@@ -45,7 +45,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
                 onClick={onClose}
                 className="p-2.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 

@@ -262,7 +262,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors"
             >
-              <X size={24} />
+              <X size={20} />
             </button>
           </header>
 
@@ -478,7 +478,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
             </div>
 
             {/* Bookings Table */}
-            <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
               <div className="p-6 border-b flex flex-wrap items-center justify-between gap-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Bookings Detail</h3>
                 <div className="flex flex-wrap items-center gap-3">
@@ -491,7 +491,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                       placeholder="Search guest name..."
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
-                      className="pl-9 pr-4 py-1.5 bg-gray-50 border rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all w-48"
+                      className="pl-9 pr-4 py-1.5 bg-gray-50 border rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-black transition-all w-48"
                     />
                   </div>
                   <div className="flex items-center gap-2">

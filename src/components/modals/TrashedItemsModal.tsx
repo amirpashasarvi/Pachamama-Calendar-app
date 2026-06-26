@@ -105,7 +105,7 @@ export default function TrashedItemsModal({
             <button
               type="button"
               onClick={() => handleRestore(item.collectionName, item.id, item.name)}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors shrink-0"
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shrink-0"
             >
               <RotateCcw size={12} /> Restore
             </button>
@@ -132,7 +132,7 @@ export default function TrashedItemsModal({
               className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors shrink-0"
               aria-label="Close"
             >
-              <X size={24} />
+              <X size={20} />
             </button>
           </header>
           <main className="flex-1 overflow-y-auto p-4">

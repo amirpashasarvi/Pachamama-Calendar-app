@@ -56,12 +56,12 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     <Modal isOpen={isOpen} onClose={onClose} title="Profile Settings">
       <form onSubmit={handleSave} className="space-y-6">
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Display Name</label>
+          <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Display Name</label>
           <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input
               required
-              className="w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-gray-900 border-gray-200 transition-all"
+              className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black outline-none font-medium text-gray-900 transition-colors"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Your name..."
@@ -70,7 +70,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         </div>
 
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Email Address</label>
+          <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Email Address</label>
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
             <input
@@ -82,7 +82,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         </div>
 
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Account Role</label>
+          <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Account Role</label>
           <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl">
             <Shield size={18} className="text-blue-500" />
             <span className="text-sm font-bold text-blue-700 uppercase tracking-tight">{profile?.role}</span>
@@ -90,11 +90,11 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         </div>
 
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Password</label>
+          <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Password</label>
           <button
             type="button"
             onClick={handlePasswordReset}
-            className="w-full py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-95"
+            className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Change Password
           </button>
@@ -105,18 +105,18 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
           )}
         </div>
 
-        <div className="pt-6 border-t flex gap-3">
+        <div className="pt-4 border-t border-gray-100 flex gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 transition-all"
+            className="flex-1 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            className="flex-1 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 flex items-center justify-center gap-2 text-xs disabled:opacity-50"
+            className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={14} /> {isSaving ? 'Saving...' : 'Save Changes'}
           </button>

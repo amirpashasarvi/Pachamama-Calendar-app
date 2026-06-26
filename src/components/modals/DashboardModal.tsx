@@ -1608,7 +1608,7 @@ function DashboardModalContent({
               <h2 className="text-lg font-semibold text-gray-900">Finances</h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors">
-              <X size={22} />
+              <X size={20} />
             </button>
           </header>
 

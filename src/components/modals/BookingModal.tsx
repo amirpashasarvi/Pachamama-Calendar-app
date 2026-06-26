@@ -98,7 +98,11 @@ export default function BookingModal({
       // Map old fields if they exist for backward compatibility
       const mappedBooking = {
         ...booking,
-        extras: booking.extras || (booking as any).extraCharges ? [{ label: 'Extras', amount: (booking as any).extraCharges }] : [],
+        extras: Array.isArray(booking.extras) && booking.extras.length > 0
+          ? booking.extras
+          : (booking as any).extraCharges
+            ? [{ label: 'Extras', amount: (booking as any).extraCharges }]
+            : [],
         paidLater1: booking.paidLater1 ?? (booking as any).paidLater ?? 0,
         paidLater2: booking.paidLater2 ?? 0,
         ...migrateCommissionFields(booking),

@@ -1,4 +1,24 @@
 export const COMPACT_CALENDAR_STORAGE_KEY = 'pachamama-calendar-compact';
+export const SHOW_SUMMARY_STORAGE_KEY = 'pachamama-calendar-show-summary';
+export const SHOW_TEAM_ROSTER_STORAGE_KEY = 'pachamama-calendar-show-team-roster';
+
+function loadBooleanPreference(key: string, defaultValue = false): boolean {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored === null) return defaultValue;
+    return stored === 'true';
+  } catch {
+    return defaultValue;
+  }
+}
+
+function saveBooleanPreference(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 /** false = default density; true = extra-compact (checkbox on) */
 export function loadCompactCalendarPreference(): boolean {
@@ -17,11 +37,23 @@ export function loadCompactCalendarPreference(): boolean {
 }
 
 export function saveCompactCalendarPreference(compact: boolean): void {
-  try {
-    localStorage.setItem(COMPACT_CALENDAR_STORAGE_KEY, String(compact));
-  } catch {
-    // ignore storage errors
-  }
+  saveBooleanPreference(COMPACT_CALENDAR_STORAGE_KEY, compact);
+}
+
+export function loadShowSummaryPreference(): boolean {
+  return loadBooleanPreference(SHOW_SUMMARY_STORAGE_KEY);
+}
+
+export function saveShowSummaryPreference(show: boolean): void {
+  saveBooleanPreference(SHOW_SUMMARY_STORAGE_KEY, show);
+}
+
+export function loadShowTeamRosterPreference(): boolean {
+  return loadBooleanPreference(SHOW_TEAM_ROSTER_STORAGE_KEY);
+}
+
+export function saveShowTeamRosterPreference(show: boolean): void {
+  saveBooleanPreference(SHOW_TEAM_ROSTER_STORAGE_KEY, show);
 }
 
 export function housekeepingStatusLabel(status: string): string {

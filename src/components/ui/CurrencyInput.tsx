@@ -49,6 +49,7 @@ export default function CurrencyInput({ value, onChange, className, placeholder,
     // Allow digits, one dot, and commas (commas stripped on parse)
     if (/^[0-9,]*\.?[0-9]*$/.test(v) || v === '') {
       setRaw(v);
+      onChange(parseRaw(v));
     }
   };
 
