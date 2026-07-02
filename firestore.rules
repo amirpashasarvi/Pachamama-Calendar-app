@@ -270,7 +270,7 @@ service cloud.firestore {
                       && authEmail() != null
                       && id == authEmail()
                       && existing().email == authEmail()
-                      && existing().uid == ''
+                      && (!('uid' in existing()) || existing().uid == '' || existing().uid == null)
                       && incoming().uid == request.auth.uid
                       && incoming().email == existing().email
                       && incoming().role == existing().role

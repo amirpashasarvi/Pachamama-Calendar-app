@@ -15,7 +15,7 @@ import SummaryRow from './SummaryRow';
 import BookingModal from '@/components/modals/BookingModal';
 import BlockRoomModal from '@/components/modals/BlockRoomModal';
 import RoomModal from '@/components/modals/RoomModal';
-import RetreatModal from '@/components/modals/RetreatModal';
+import type { SettingsOpenOptions } from '@/components/modals/SettingsModal';
 import VenueHireModal from '@/components/modals/VenueHireModal';
 import TeamAssignmentModal from '@/components/modals/TeamAssignmentModal';
 import TeamRosterSection from './TeamRosterSection';
@@ -23,7 +23,7 @@ import { Room, Booking, Retreat, HousekeepingRecord, VenueHire, TeamPosition, Te
 import { useAuth } from '@/hooks/useAuth';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isWithinInterval, parseISO } from 'date-fns';
+import { isWithinInterval, parseISO, isValid } from 'date-fns';
 
 // Sorting imports
 import {
@@ -264,6 +264,7 @@ interface CalendarProps {
   onShowSummaryChange?: (show: boolean) => void;
   onShowTeamRosterChange?: (show: boolean) => void;
   onOpenBookingList?: () => void;
+  onOpenRetreatSettings?: (options: SettingsOpenOptions) => void;
 }
 
 export default function Calendar({
@@ -277,6 +278,7 @@ export default function Calendar({
   onShowSummaryChange,
   onShowTeamRosterChange,
   onOpenBookingList,
+  onOpenRetreatSettings,
 }: CalendarProps) {
   const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, calendarDisplaySettings, loading } = useBooking();
   const { isAdmin, profile } = useAuth();
@@ -308,9 +310,6 @@ export default function Calendar({
 
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
-
-  const [isRetreatModalOpen, setIsRetreatModalOpen] = useState(false);
-  const [selectedRetreat, setSelectedRetreat] = useState<Retreat | null>(null);
 
   const [isVenueHireModalOpen, setIsVenueHireModalOpen] = useState(false);
   const [selectedVenueHire, setSelectedVenueHire] = useState<VenueHire | null>(null);
@@ -440,14 +439,12 @@ export default function Calendar({
   }, []);
 
   const handleAddRetreat = useCallback(() => {
-    setSelectedRetreat(null);
-    setIsRetreatModalOpen(true);
-  }, []);
+    onOpenRetreatSettings?.({ view: 'retreats', addRetreatRun: true });
+  }, [onOpenRetreatSettings]);
 
   const handleEditRetreat = useCallback((retreat: Retreat) => {
-    setSelectedRetreat(retreat);
-    setIsRetreatModalOpen(true);
-  }, []);
+    onOpenRetreatSettings?.({ view: 'retreats', retreatRunId: retreat.id });
+  }, [onOpenRetreatSettings]);
 
   const handleAddVenueHire = useCallback(() => {
     setSelectedVenueHire(null);
@@ -510,6 +507,7 @@ export default function Calendar({
     activeVenueHires.forEach(vh => {
       const start = parseISO(vh.startDate);
       const end = parseISO(vh.endDate);
+      if (!isValid(start) || !isValid(end) || end < start) return;
       const interval = eachDayOfInterval({ start, end });
       interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
     });
@@ -520,8 +518,11 @@ export default function Calendar({
     const start = new Set<string>();
     const end = new Set<string>();
     activeVenueHires.forEach(vh => {
-      start.add(format(parseISO(vh.startDate), 'yyyy-MM-dd'));
-      end.add(format(parseISO(vh.endDate), 'yyyy-MM-dd'));
+      const startDate = parseISO(vh.startDate);
+      const endDate = parseISO(vh.endDate);
+      if (!isValid(startDate) || !isValid(endDate) || endDate < startDate) return;
+      start.add(format(startDate, 'yyyy-MM-dd'));
+      end.add(format(endDate, 'yyyy-MM-dd'));
     });
     return { start, end };
   }, [activeVenueHires]);
@@ -531,6 +532,7 @@ export default function Calendar({
     retreats.forEach(r => {
       const start = parseISO(r.startDate);
       const end = parseISO(r.endDate);
+      if (!isValid(start) || !isValid(end) || end < start) return;
       const interval = eachDayOfInterval({ start, end });
       interval.forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
     });
@@ -541,8 +543,11 @@ export default function Calendar({
     const start = new Set<string>();
     const end = new Set<string>();
     retreats.forEach(r => {
-      start.add(format(parseISO(r.startDate), 'yyyy-MM-dd'));
-      end.add(format(parseISO(r.endDate), 'yyyy-MM-dd'));
+      const startDate = parseISO(r.startDate);
+      const endDate = parseISO(r.endDate);
+      if (!isValid(startDate) || !isValid(endDate) || endDate < startDate) return;
+      start.add(format(startDate, 'yyyy-MM-dd'));
+      end.add(format(endDate, 'yyyy-MM-dd'));
     });
     return { start, end };
   }, [retreats]);
@@ -646,12 +651,6 @@ export default function Calendar({
         onClose={() => setIsRoomModalOpen(false)}
         room={selectedRoom}
         bookings={bookings}
-      />
-
-      <RetreatModal
-        isOpen={isRetreatModalOpen}
-        onClose={() => setIsRetreatModalOpen(false)}
-        retreat={selectedRetreat}
       />
 
       <VenueHireModal

@@ -3,7 +3,7 @@ import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
 import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import SettingsModal from './components/modals/SettingsModal';
+import SettingsModal, { type SettingsOpenOptions } from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
 import DashboardModal from './components/modals/DashboardModal';
 import TrashedItemsModal from './components/modals/TrashedItemsModal';
@@ -25,10 +25,11 @@ import {
 
 function AppContent() {
   const { profile, logout, isAdmin } = useAuth();
-  const { bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
+  const { bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreats, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
   const { housekeeping, updateStatus, checkAutoDirty } = useHousekeeping(rooms, bookings, profile?.name || profile?.email);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsOpenOptions, setSettingsOpenOptions] = useState<SettingsOpenOptions | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
@@ -79,6 +80,11 @@ function AppContent() {
   }, []);
 
   const { arrivalAlerts, balanceAlerts, noteAlerts, commentAlerts, criticalCount, totalCount } = useAlerts(bookings, rooms, housekeeping);
+
+  const openRetreatSettings = (options: SettingsOpenOptions) => {
+    setSettingsOpenOptions(options);
+    setIsSettingsOpen(true);
+  };
 
   const iconBtn = (extra?: string) => cn(
     'hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-blue-600',
@@ -377,6 +383,7 @@ function AppContent() {
           onShowSummaryChange={handleShowSummaryChange}
           onShowTeamRosterChange={handleShowTeamRosterChange}
           onOpenBookingList={() => setIsStatsOpen(true)}
+          onOpenRetreatSettings={isAdmin ? openRetreatSettings : undefined}
         />
       </main>
 
@@ -401,7 +408,10 @@ function AppContent() {
         <>
           <SettingsModal 
             isOpen={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
+            onClose={() => {
+              setIsSettingsOpen(false);
+              setSettingsOpenOptions(null);
+            }}
             bookingTypes={bookingTypes}
             bookingChannels={bookingChannels}
             paymentChannels={paymentChannels}
@@ -409,8 +419,12 @@ function AppContent() {
             users={users}
             rooms={rooms}
             retreatTypes={retreatTypes}
+            retreats={retreats}
+            venueHires={venueHires}
             teamPositions={teamPositions}
             displaySettings={calendarDisplaySettings}
+            openOptions={settingsOpenOptions}
+            onOpenOptionsHandled={() => setSettingsOpenOptions(null)}
           />
           <StatisticsModal
             isOpen={isStatsOpen}

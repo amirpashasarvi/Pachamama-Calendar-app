@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { isAfter, isBefore, differenceInDays, isWeekend } from 'date-fns';
+import { isAfter, isBefore, differenceInDays, isWeekend, parseISO, isValid } from 'date-fns';
 import { Retreat, VenueHire } from '@/types';
 import { Plus, ChevronDown, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -116,8 +116,9 @@ function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onE
 
         <div className="absolute inset-0 pointer-events-none">
           {retreats.map(retreat => {
-            const start = new Date(retreat.startDate);
-            const end = new Date(retreat.endDate);
+            const start = parseISO(retreat.startDate);
+            const end = parseISO(retreat.endDate);
+            if (!isValid(start) || !isValid(end)) return null;
 
             if (isAfter(start, calendarEnd) || isBefore(end, calendarStart)) return null;
 
@@ -142,8 +143,9 @@ function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onE
           })}
 
           {venueHires.map(vh => {
-            const start = new Date(vh.startDate);
-            const end = new Date(vh.endDate);
+            const start = parseISO(vh.startDate);
+            const end = parseISO(vh.endDate);
+            if (!isValid(start) || !isValid(end)) return null;
 
             if (isAfter(start, calendarEnd) || isBefore(end, calendarStart)) return null;
 

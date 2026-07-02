@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '@/services/firebase';
+import { db } from '@/services/firebase';
 import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread, RecurringExpense } from '@/types';
+
+function reportListenerError(error: unknown, path: string) {
+  console.error(`Firestore listener failed (${path}):`, error);
+}
 
 export function useBookingData() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -63,7 +67,7 @@ export function useBookingData() {
       checkLoading('rooms');
     }, (error) => {
       checkLoading('rooms');
-      handleFirestoreError(error, OperationType.LIST, 'rooms');
+      reportListenerError(error, 'rooms');
     });
 
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -87,7 +91,7 @@ export function useBookingData() {
       checkLoading('bookings');
     }, (error) => {
       checkLoading('bookings');
-      handleFirestoreError(error, OperationType.LIST, 'bookings');
+      reportListenerError(error, 'bookings');
     });
 
     const unsubRetreats = onSnapshot(collection(db, 'retreats'), (snap) => {
@@ -99,7 +103,7 @@ export function useBookingData() {
       checkLoading('retreats');
     }, (error) => {
       checkLoading('retreats');
-      handleFirestoreError(error, OperationType.LIST, 'retreats');
+      reportListenerError(error, 'retreats');
     });
 
     const unsubRetreatTypes = onSnapshot(query(collection(db, 'retreatTypes'), orderBy('name', 'asc')), (snap) => {
@@ -111,7 +115,7 @@ export function useBookingData() {
       checkLoading('retreatTypes');
     }, (error) => {
       checkLoading('retreatTypes');
-      handleFirestoreError(error, OperationType.LIST, 'retreatTypes');
+      reportListenerError(error, 'retreatTypes');
     });
 
     const unsubVenueHires = onSnapshot(collection(db, 'venueHires'), (snap) => {
@@ -132,7 +136,7 @@ export function useBookingData() {
       checkLoading('venueHires');
     }, (error) => {
       checkLoading('venueHires');
-      handleFirestoreError(error, OperationType.LIST, 'venueHires');
+      reportListenerError(error, 'venueHires');
     });
 
     const unsubTypes = onSnapshot(collection(db, 'bookingTypes'), (snap) => {
@@ -147,7 +151,7 @@ export function useBookingData() {
       checkLoading('bookingTypes');
     }, (error) => {
       checkLoading('bookingTypes');
-      handleFirestoreError(error, OperationType.LIST, 'bookingTypes');
+      reportListenerError(error, 'bookingTypes');
     });
 
     const unsubChannels = onSnapshot(collection(db, 'bookingChannels'), (snap) => {
@@ -162,7 +166,7 @@ export function useBookingData() {
       checkLoading('bookingChannels');
     }, (error) => {
       checkLoading('bookingChannels');
-      handleFirestoreError(error, OperationType.LIST, 'bookingChannels');
+      reportListenerError(error, 'bookingChannels');
     });
 
     const unsubPaymentChannels = onSnapshot(collection(db, 'paymentChannels'), (snap) => {
@@ -177,7 +181,7 @@ export function useBookingData() {
       checkLoading('paymentChannels');
     }, (error) => {
       checkLoading('paymentChannels');
-      handleFirestoreError(error, OperationType.LIST, 'paymentChannels');
+      reportListenerError(error, 'paymentChannels');
     });
 
     const unsubExpenseCategories = onSnapshot(collection(db, 'expenseCategories'), (snap) => {
@@ -192,7 +196,7 @@ export function useBookingData() {
       checkLoading('expenseCategories');
     }, (error) => {
       checkLoading('expenseCategories');
-      handleFirestoreError(error, OperationType.LIST, 'expenseCategories');
+      reportListenerError(error, 'expenseCategories');
     });
 
     const unsubMonthlyExpenses = onSnapshot(collection(db, 'monthlyExpenses'), (snap) => {
@@ -202,7 +206,7 @@ export function useBookingData() {
       checkLoading('monthlyExpenses');
     }, (error) => {
       checkLoading('monthlyExpenses');
-      handleFirestoreError(error, OperationType.LIST, 'monthlyExpenses');
+      reportListenerError(error, 'monthlyExpenses');
     });
 
     const unsubExpenseSpreads = onSnapshot(collection(db, 'expenseSpreads'), (snap) => {
@@ -212,7 +216,7 @@ export function useBookingData() {
       checkLoading('expenseSpreads');
     }, (error) => {
       checkLoading('expenseSpreads');
-      handleFirestoreError(error, OperationType.LIST, 'expenseSpreads');
+      reportListenerError(error, 'expenseSpreads');
     });
 
     const unsubRecurringExpenses = onSnapshot(collection(db, 'recurringExpenses'), (snap) => {
@@ -222,7 +226,7 @@ export function useBookingData() {
       checkLoading('recurringExpenses');
     }, (error) => {
       checkLoading('recurringExpenses');
-      handleFirestoreError(error, OperationType.LIST, 'recurringExpenses');
+      reportListenerError(error, 'recurringExpenses');
     });
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
@@ -251,8 +255,7 @@ export function useBookingData() {
       checkLoading('users');
     }, (error) => {
       checkLoading('users');
-      console.error('Users listener failed', error);
-      handleFirestoreError(error, OperationType.LIST, 'users');
+      reportListenerError(error, 'users');
     });
 
     const unsubPositions = onSnapshot(query(collection(db, 'teamPositions'), orderBy('order', 'asc')), (snap) => {
@@ -264,7 +267,7 @@ export function useBookingData() {
       checkLoading('teamPositions');
     }, (error) => {
       checkLoading('teamPositions');
-      handleFirestoreError(error, OperationType.LIST, 'teamPositions');
+      reportListenerError(error, 'teamPositions');
     });
 
     const unsubAssignments = onSnapshot(collection(db, 'teamAssignments'), (snap) => {
@@ -276,7 +279,7 @@ export function useBookingData() {
       checkLoading('teamAssignments');
     }, (error) => {
       checkLoading('teamAssignments');
-      handleFirestoreError(error, OperationType.LIST, 'teamAssignments');
+      reportListenerError(error, 'teamAssignments');
     });
 
     const unsubSettings = onSnapshot(collection(db, 'settings'), (snap) => {
@@ -359,7 +362,7 @@ export function useBookingData() {
     }, (error) => {
       checkLoading('settings');
       checkLoading('calendarDisplay');
-      handleFirestoreError(error, OperationType.LIST, 'settings');
+      reportListenerError(error, 'settings');
     });
 
     return () => {

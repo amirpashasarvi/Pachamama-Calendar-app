@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
-import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField, ActivityLogEntry } from '@/types';
+import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField, ActivityLogEntry, Retreat, VenueHire } from '@/types';
+import RetreatProgramsPanel from '@/components/settings/RetreatProgramsPanel';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, writeBatch, setDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle, ClipboardList } from 'lucide-react';
@@ -26,6 +27,14 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+type SettingsView = 'menu' | 'types' | 'channels' | 'paymentChannels' | 'expenseCategories' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
+
+export interface SettingsOpenOptions {
+  view?: SettingsView;
+  retreatRunId?: string;
+  addRetreatRun?: boolean;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -36,16 +45,18 @@ interface SettingsModalProps {
   users: UserRecord[];
   rooms: Room[];
   retreatTypes: RetreatType[];
+  retreats: Retreat[];
+  venueHires: VenueHire[];
   teamPositions: TeamPosition[];
   displaySettings: CalendarDisplaySettings | null;
+  openOptions?: SettingsOpenOptions | null;
+  onOpenOptionsHandled?: () => void;
 }
 
 const COLORS = APP_COLOR_PALETTE;
 const DEFAULT_CONFIG_FORM = { name: '', color: COLORS[0], commission: '' as number | '' };
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const userDocIdFromEmail = (email: string) => normalizeEmail(email);
-
-type SettingsView = 'menu' | 'types' | 'channels' | 'paymentChannels' | 'expenseCategories' | 'users' | 'rooms' | 'retreats' | 'roster' | 'display' | 'activity';
 
 function SortableItem({ id, children, disabled }: { id: string, children: React.ReactNode, key?: string, disabled?: boolean }) {
   const {
@@ -74,7 +85,7 @@ function SortableItem({ id, children, disabled }: { id: string, children: React.
   );
 }
 
-export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, rooms, retreatTypes, teamPositions, displaySettings }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, rooms, retreatTypes, retreats, venueHires, teamPositions, displaySettings, openOptions, onOpenOptionsHandled }: SettingsModalProps) {
   const [view, setView] = useState<SettingsView>('menu');
   const [limitWarning, setLimitWarning] = useState<boolean>(false);
 
@@ -119,8 +130,12 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
     if (!isOpen) {
       setView('menu');
       resetForms();
+      return;
     }
-  }, [isOpen]);
+    if (openOptions?.view) {
+      setView(openOptions.view);
+    }
+  }, [isOpen, openOptions?.view]);
 
   const resetForms = () => {
     setEditingId(null);
@@ -679,104 +694,18 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
         <h3 className="font-bold text-lg">Our Retreats</h3>
       </div>
 
-      {!isAdding && !editingId && (
-        <button
-          onClick={() => {
-            setIsAdding(true);
-            setFormData({ name: '', color: '', commission: '' });
-          }}
-          className="w-full py-2.5 flex items-center justify-center gap-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
-        >
-          <Plus size={14} /> Add New Retreat
-        </button>
-      )}
+      <p className="text-xs text-gray-500 -mt-4">
+        Each program groups its calendar runs. Expand a program to edit dates and facilitators.
+      </p>
 
-      {(isAdding || editingId) && (
-        <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-4 animate-in fade-in slide-in-from-top-2">
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Retreat Name</label>
-            <input
-              autoFocus
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black outline-none"
-              value={formData.name}
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g. Yoga & Surf, Sound Healing..."
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleSaveOption('retreatTypes')}
-              className="flex-1 py-2.5 bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
-            >
-              <Save size={14} /> {editingId ? 'Update Retreat' : 'Create Retreat'}
-            </button>
-            <button
-              onClick={resetForms}
-              className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
-        {retreatTypes.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-xs italic">
-            No retreat programs found. Add one above.
-          </div>
-        ) : (
-          retreatTypes.map(retreat => (
-            <div key={retreat.id} className="flex items-center justify-between p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow group">
-              <span className="text-sm font-semibold text-gray-700">{retreat.name}</span>
-              <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                {confirmDeleteId === retreat.id ? (
-                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
-                    <span className="text-[10px] font-bold text-gray-500 italic">Delete this retreat?</span>
-                    <button
-                      onClick={() => handleDeleteOption('retreatTypes', retreat.id)}
-                      className="px-2 py-1 bg-rose-500 text-white text-[10px] font-bold rounded hover:bg-rose-600 transition-colors"
-                    >
-                      Yes, delete
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="px-2 py-1 bg-gray-100 text-gray-500 text-[10px] font-bold rounded hover:bg-gray-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => {
-                        setEditingId(retreat.id);
-                        setFormData({ 
-                          name: retreat.name, 
-                          color: '',
-                          commission: 0
-                        });
-                        setIsAdding(false);
-                        setConfirmDeleteId(null);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(retreat.id)}
-                      className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      <RetreatProgramsPanel
+        retreats={retreats}
+        retreatTypes={retreatTypes}
+        venueHires={venueHires}
+        focusRunId={openOptions?.retreatRunId}
+        startAdding={openOptions?.addRetreatRun}
+        onFocusHandled={onOpenOptionsHandled}
+      />
     </div>
   );
 
@@ -1267,7 +1196,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
             >
               <div className="text-left">
                 <h4 className="font-bold text-gray-900">Retreats</h4>
-                <p className="text-xs text-gray-500">Retreat programs shown on the calendar</p>
+                <p className="text-xs text-gray-500">Programs, runs, and calendar dates</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>

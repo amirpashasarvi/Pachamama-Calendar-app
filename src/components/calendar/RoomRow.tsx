@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { isWeekend, format } from 'date-fns';
+import { isWeekend, format, addDays } from 'date-fns';
 import { Room, Booking, CalendarDisplaySettings, ConfigOption } from '@/types';
 import BookingBar from './BookingBar';
 import { Plus, GripVertical } from 'lucide-react';
@@ -105,15 +105,22 @@ function RoomRow({
       <div className="flex-1 relative flex">
         {days.map((day, idx) => {
           const dateStr = format(day, 'yyyy-MM-dd');
+          const prevDayStr = format(addDays(day, -1), 'yyyy-MM-dd');
+          const nextDayStr = format(addDays(day, 1), 'yyyy-MM-dd');
           const isVenueHireDay = venueHireTintDates.has(dateStr);
           const isRetreatDay = retreatTintDates.has(dateStr);
           const weekend = isWeekend(day);
 
-          // Boundary diagonal: start = tint on right half, end = tint on left half
-          const isVHStart = venueHireBoundaryDates.start.has(dateStr);
-          const isVHEnd   = venueHireBoundaryDates.end.has(dateStr);
-          const isRStart  = retreatBoundaryDates.start.has(dateStr);
-          const isREnd    = retreatBoundaryDates.end.has(dateStr);
+          // Boundary diagonal: start = tint on right half, end = tint on left half.
+          // Only show when connected to a valid tinted period (avoids orphan markers after date edits).
+          const isVHStart = venueHireBoundaryDates.start.has(dateStr)
+            && (venueHireTintDates.has(dateStr) || venueHireTintDates.has(nextDayStr));
+          const isVHEnd   = venueHireBoundaryDates.end.has(dateStr)
+            && (venueHireTintDates.has(dateStr) || venueHireTintDates.has(prevDayStr));
+          const isRStart  = retreatBoundaryDates.start.has(dateStr)
+            && (retreatTintDates.has(dateStr) || retreatTintDates.has(nextDayStr));
+          const isREnd    = retreatBoundaryDates.end.has(dateStr)
+            && (retreatTintDates.has(dateStr) || retreatTintDates.has(prevDayStr));
           const isBoundary = isVHStart || isVHEnd || isRStart || isREnd;
 
           // clip-path for right-half tint (start day) and left-half tint (end day)
