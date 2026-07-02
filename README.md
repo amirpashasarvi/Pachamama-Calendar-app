@@ -1,4 +1,4 @@
-# Pachamama Booking Management
+# Pachamama Calendar
 
 Booking management for Pachamama — rooms, calendar, housekeeping, venue hires, retreats, and team assignments.
 

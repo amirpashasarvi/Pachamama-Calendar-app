@@ -101,7 +101,7 @@ function AppContent() {
         <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
           <h1 className={cn('font-bold tracking-tight leading-tight truncate', layout.appTitleClass)}>
             <span className="sm:hidden">Pachamama</span>
-            <span className="hidden sm:inline">Pachamama Booking Management</span>
+            <span className="hidden sm:inline">Pachamama Calendar</span>
           </h1>
         </div>
 

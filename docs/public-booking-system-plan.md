@@ -32,6 +32,21 @@ This is a **configurable platform you own and control** — inspired by MangoBed
 - **Different UX** — admin is dense/operational; public site is clean, fast, mobile-first
 - **Independent deploys** — update booking site without touching admin calendar
 
+### Access boundary (confirmed)
+
+| Domain | Access | Purpose |
+|--------|--------|---------|
+| `admin.pachamamaretreat.me` | You + staff only, login required | Calendar, Settings, Dashboard, Finances — the existing app. Guests never reach this. |
+| `booking.pachamamaretreat.me` | Public, no login | Guest-facing booking — **both** retreats and co-living live here, on one site. Booking type is a route/page choice, not a separate domain. |
+
+### One subdomain, not two (confirmed)
+
+Co-living and retreats booking both live on the **same** `booking.pachamamaretreat.me` site, as different pages/routes — not two separate subdomains.
+
+**Why:** one deployment/build/SSL/DNS to maintain, consistent branding across both flows, easy for a guest to move between "Retreats" and "Co-living" without leaving the site, and it matches the Booking Forms model (each form/product is just a new route — no new infrastructure per form).
+
+Two subdomains would only make sense if co-living and retreats were separate brands/products with separate teams — not the case here.
+
 ---
 
 ## Core design principles
@@ -48,7 +63,6 @@ This is a **configurable platform you own and control** — inspired by MangoBed
 | **Extras** | Separate entries per season (e.g. “Extra Kids (3–6) - High Season” vs Low Season) |
 | **Coupons** | Full system: expiry, cap, date restrictions, min/max nights, redemption limit, applies to accommodations/extras |
 | **Booking request mode** | Optional per form (not forced on retreats) |
-| **Room/unit model** | Categories with units (Campground 1/2/3, Stone House shared beds, etc.) |
 | **Form settings** | Restrictions, appearance, advanced, payments — MangoBeds behaviour |
 
 ### Skip entirely (Phase 1 and until explicitly requested)
@@ -111,7 +125,56 @@ Public site will extend this with photos, descriptions, per-run pricing per acco
 
 ---
 
-## Admin app — new sections to build
+## Room / unit model — decided approach
+
+**We keep the existing individual-room data model** (Stone House Shared 1–6, Campground 1–3, etc.) exactly as it is in the admin calendar. We do **not** rebuild MangoBeds' category → units hierarchy.
+
+**Public display grouping (additive, admin-invisible):**
+
+- New optional field on `Room`: `bookingGroup?: string` (e.g. `"Stone House Shared"`, `"Campground"`)
+- Rooms with no `bookingGroup` (private rooms like Ivy, Pomegranate) show individually on the public site
+- Rooms sharing a `bookingGroup` are shown to guests as **one card** with aggregate availability, e.g. *"Stone House Shared — 4 of 6 available — €35/night"*
+- This field is **only read by the public site** — the admin calendar, room rows, and housekeeping are completely unaffected
+
+**Auto-assignment at booking time:**
+
+- Guest books the group (e.g. "Stone House Shared"), never a specific bed
+- A Firestore **transaction** finds an available room in that group for the selected dates and assigns the booking to that specific `roomId`
+- Prevents double-booking if two guests try to book the last bed at the same time (whoever's transaction commits first wins; the other sees "just booked, please choose different dates")
+- The resulting booking appears in the admin calendar on the assigned specific room, indistinguishable from a manually created booking (tagged `source: "booking-site"`)
+
+**Open item to confirm later:** if a guest wants multiple beds in the same shared group (e.g. a couple), whether that becomes 2 linked bookings under one guest — to be decided when we build this.
+
+---
+
+## Admin navigation — “Booking Portal” (decided approach)
+
+The new admin sections do **not** live inside the existing Settings modal. Settings stays as-is (Rooms, Booking Types, Channels, Team Roster, Our Retreats, etc.) — small, focused config only.
+
+Instead, a **new full-screen dashboard** called **Booking Portal** is added, opened from an icon in the top bar — the same pattern already used for **Dashboard** and **Statistics**.
+
+```
+Top bar icons: [Calendar] [Dashboard] [Statistics] [Booking Portal] [Settings] ...
+```
+
+Inside Booking Portal, its own internal navigation:
+
+```
+Booking Portal
+├── Booking Forms
+├── Extras
+├── Promotions        (Coupons, Long Stay Discounts)
+├── Retreats           (public-facing config: photos, description, per-run pricing)
+├── Communications      (email templates)
+├── Guest Profiles
+└── Room Pricing        (per-guest + seasonal rates)
+```
+
+A **Calendar icon (or close/back)** inside Booking Portal returns to the normal calendar view — same as Dashboard/Statistics close today.
+
+**Why separate from Settings:** Booking Forms, Coupons, Communications etc. are each a mini-app (multi-tab builders), not simple lists — mixing them into Settings would clutter a currently simple menu and blend two different mental modes (quick operational config vs. guest-facing product configuration).
+
+**Why lower risk:** built as a new, isolated component (e.g. `BookingPortalModal.tsx`), following the “add, never modify existing files” approach already used for this project. `SettingsModal.tsx` is not touched.
 
 | Section | Features |
 |---------|----------|
@@ -130,6 +193,7 @@ Public site will extend this with photos, descriptions, per-run pricing per acco
 
 | Route | Purpose |
 |-------|---------|
+| `/` | Landing page — guest chooses **Retreats** or **Co-living** (or other active forms) |
 | `/[form-slug]` | Any booking form (co-living, short-stay, etc.) |
 | `/retreats` | Grid of retreat programs with available runs |
 | `/retreats/[slug]` | Single retreat: run date selector + booking |
@@ -212,6 +276,9 @@ iCal, WhatsApp, PDF invoicing, multi-currency, last-minute rates, channel manage
 |------|--------|
 | 2026-07-02 | Initial plan documented from agreed conversation (MangoBeds reference, skip list, improvements, phases) |
 | 2026-07-02 | Added 50 MangoBeds reference screenshots under `docs/public-booking-system/references/` |
+| 2026-07-02 | Decided room/unit model: keep existing individual rooms, add optional `bookingGroup` field for public display grouping + transaction-based auto-assignment. Confirmed access boundary (admin = staff-only, booking = public) and one-subdomain-with-landing-page decision for co-living vs retreats. |
+| 2026-07-02 | Decided admin navigation: new **Booking Portal** full-screen dashboard (top-bar icon, like Dashboard/Statistics) — not folded into Settings. |
+| 2026-07-02 | **Renamed** the existing admin app from "Pachamama Booking Management" to **"Pachamama Calendar"** (browser tab, header, login screen, README). New admin section for booking-site config confirmed as **"Booking Portal"**. |
 
 ---
 
