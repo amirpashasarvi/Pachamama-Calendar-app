@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { isAfter, isBefore, differenceInDays, isWeekend } from 'date-fns';
 import { Retreat, VenueHire } from '@/types';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronDown, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
 
@@ -13,6 +13,7 @@ interface RetreatBarProps {
   onEdit: (retreat: Retreat) => void;
   onAddVenue: () => void;
   onEditVenue: (venueHire: VenueHire) => void;
+  onBlockRooms?: () => void;
   compact?: boolean;
 }
 
@@ -25,38 +26,91 @@ function diagonalClip(width: number, slope = 6): string {
   return `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
 }
 
-function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue, compact = false }: RetreatBarProps) {
+function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onEditVenue, onBlockRooms, compact = false }: RetreatBarProps) {
   const dayWidth = 56;
   const calendarStart = days[0];
   const calendarEnd = days[days.length - 1];
   const layout = calendarLayoutClasses(compact);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
+
+  const barClass = cn(
+    'absolute shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto',
+    layout.bookingBar,
+  );
 
   return (
-    <div className={cn('flex h-12 border-b border-gray-400 sticky z-[85] bg-gray-200 group border-l border-gray-400', layout.retreatStickyTop)}>
-      <div 
-        className={cn('sticky left-0 z-[80] bg-gray-200 border-r border-gray-400 p-2 flex flex-col justify-center gap-1 flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]', layout.roomLabelCol)}
+    <div className={cn('flex border-b border-gray-400 sticky z-[85] bg-gray-200 group border-l border-gray-400', layout.roomRow, layout.retreatStickyTop)}>
+      <div
+        className={cn(
+          'sticky left-0 z-[80] bg-gray-200 border-r border-gray-400 flex items-center flex-shrink-0 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]',
+          layout.roomLabelCol,
+          layout.roomLabelPad,
+        )}
       >
-        <button 
-          onClick={onAdd}
-          className="w-full h-4 flex items-center justify-between px-2 bg-blue-100 hover:bg-blue-200 transition-colors rounded text-[9px] font-black uppercase tracking-tighter text-blue-700 border border-blue-200"
-        >
-          <span>Retreats</span>
-          <Plus size={10} />
-        </button>
-        <button 
-          onClick={onAddVenue}
-          className="w-full h-4 flex items-center justify-between px-2 bg-orange-100 hover:bg-orange-200 transition-colors rounded text-[9px] font-black uppercase tracking-tighter text-orange-700 border border-orange-200"
-        >
-          <span>Venue Hire</span>
-          <Plus size={10} />
-        </button>
+        <div className="relative w-full" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(v => !v)}
+            className={cn(
+              'w-full flex items-center justify-center gap-1 bg-gray-800 text-white hover:bg-gray-700 transition-colors',
+              layout.addBookingBtn,
+            )}
+          >
+            <Plus size={layout.addBookingPlusSize} />
+            <span className="truncate">Add Events</span>
+            <ChevronDown size={layout.addBookingPlusSize} className={cn('shrink-0 transition-transform', menuOpen && 'rotate-180')} />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute left-0 top-full mt-1 w-full min-w-[9rem] bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-[200] animate-in fade-in zoom-in-95 duration-100">
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); onAdd(); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[10px] font-bold text-blue-700 hover:bg-blue-50 transition-colors"
+              >
+                <Plus size={10} className="shrink-0" />
+                Retreats
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); onAddVenue(); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[10px] font-bold text-orange-700 hover:bg-orange-50 transition-colors"
+              >
+                <Plus size={10} className="shrink-0" />
+                Venue Hire
+              </button>
+              {onBlockRooms && (
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); onBlockRooms(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[10px] font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Ban size={10} className="shrink-0" />
+                  Block rooms
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-      
+
       <div className="flex-1 relative flex">
         {days.map((day, idx) => (
-          <div 
-            key={`retreat-grid-${day.toISOString()}-${idx}`} 
-            className={`w-14 flex-shrink-0 border-r border-gray-400 h-full ${isWeekend(day) ? 'bg-gray-300' : ''}`}
+          <div
+            key={`retreat-grid-${day.toISOString()}-${idx}`}
+            className={cn('w-14 flex-shrink-0 border-r border-gray-400 h-full', isWeekend(day) && 'bg-gray-300')}
           />
         ))}
 
@@ -64,23 +118,23 @@ function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onE
           {retreats.map(retreat => {
             const start = new Date(retreat.startDate);
             const end = new Date(retreat.endDate);
-            
+
             if (isAfter(start, calendarEnd) || isBefore(end, calendarStart)) return null;
 
             const startOffset = Math.max(0, differenceInDays(start, calendarStart));
             const duration = differenceInDays(end, start) + 1;
-            
+
             const left = startOffset * dayWidth;
             const width = duration * dayWidth;
 
             return (
-              <div 
+              <div
                 key={`retreat-${retreat.id}`}
-                className="absolute top-0.5 h-5 bg-blue-200 border border-blue-400 shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto"
+                className={cn(barClass, 'bg-blue-200 border border-blue-400')}
                 style={{ left: left - 1, width: width + 2, clipPath: diagonalClip(width + 2) }}
                 onClick={() => onEdit(retreat)}
               >
-                <span className="text-[9px] font-bold text-blue-950 uppercase tracking-tight truncate w-full text-center">
+                <span className={cn('font-bold text-blue-950 uppercase tracking-tight truncate w-full text-center', layout.bookingBarText)}>
                   {retreat.name} · <span className="opacity-60 font-normal lowercase italic">by {retreat.facilitator}</span>
                 </span>
               </div>
@@ -90,23 +144,23 @@ function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onE
           {venueHires.map(vh => {
             const start = new Date(vh.startDate);
             const end = new Date(vh.endDate);
-            
+
             if (isAfter(start, calendarEnd) || isBefore(end, calendarStart)) return null;
 
             const startOffset = Math.max(0, differenceInDays(start, calendarStart));
             const duration = differenceInDays(end, start) + 1;
-            
+
             const left = startOffset * dayWidth;
             const width = duration * dayWidth;
 
             return (
-              <div 
+              <div
                 key={`venue-hire-${vh.id}`}
-                className="absolute bottom-0.5 h-5 bg-orange-200 border border-orange-400 shadow-sm overflow-hidden whitespace-nowrap flex items-center justify-center px-2 cursor-pointer hover:brightness-95 transition-all z-20 pointer-events-auto"
+                className={cn(barClass, 'bg-orange-200 border border-orange-400')}
                 style={{ left: left - 1, width: width + 2, clipPath: diagonalClip(width + 2) }}
                 onClick={() => onEditVenue(vh)}
               >
-                <span className="text-[9px] font-bold text-orange-850 uppercase tracking-tight truncate w-full text-center">
+                <span className={cn('font-bold text-orange-950 uppercase tracking-tight truncate w-full text-center', layout.bookingBarText)}>
                   Venue Hire · {String(vh.name)} <span className="opacity-60 font-normal ml-1 lowercase italic">by {String(vh.organizer)}</span>
                 </span>
               </div>
@@ -119,4 +173,3 @@ function RetreatBar({ days, retreats, venueHires, onAdd, onEdit, onAddVenue, onE
 }
 
 export default memo(RetreatBar);
-

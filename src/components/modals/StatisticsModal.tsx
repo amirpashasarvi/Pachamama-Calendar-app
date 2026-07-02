@@ -72,7 +72,9 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
   };
 
   const combinedItems = useMemo(() => {
-    const mappedBookings = bookings.map(b => ({
+    const mappedBookings = bookings
+      .filter(b => b.type?.toLowerCase() !== 'blocked')
+      .map(b => ({
       ...b,
       isVenueHire: false,
       type: b.type || 'Other',

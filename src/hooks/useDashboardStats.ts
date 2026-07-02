@@ -15,6 +15,7 @@ import {
   getCollectedAmount,
 } from '@/lib/bookingLifecycle';
 import { commissionInputFromRecord } from '@/lib/commission';
+import { isBlockedBooking } from '@/lib/bookingBlock';
 
 export type { PeriodRange };
 
@@ -137,7 +138,7 @@ export function useDashboardStats(
   const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? 'Unknown';
 
   const activeBookings = useMemo(
-    () => bookings.filter(isActiveLifecycle),
+    () => bookings.filter(b => isActiveLifecycle(b) && !isBlockedBooking(b)),
     [bookings]
   );
 

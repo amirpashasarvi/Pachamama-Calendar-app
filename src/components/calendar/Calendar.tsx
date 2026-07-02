@@ -13,6 +13,7 @@ import RoomRow from './RoomRow';
 import RetreatBar from './RetreatBar';
 import SummaryRow from './SummaryRow';
 import BookingModal from '@/components/modals/BookingModal';
+import BlockRoomModal from '@/components/modals/BlockRoomModal';
 import RoomModal from '@/components/modals/RoomModal';
 import RetreatModal from '@/components/modals/RetreatModal';
 import VenueHireModal from '@/components/modals/VenueHireModal';
@@ -43,6 +44,7 @@ import {
 import { doc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { isActiveLifecycle } from '@/lib/bookingLifecycle';
+import { isBlockedBooking } from '@/lib/bookingBlock';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
 import { buildBookingsByRoom, buildOccupiedDatesByRoom, EMPTY_OCCUPIED_DATES } from '@/lib/calendarOccupancy';
 
@@ -106,6 +108,7 @@ interface CalendarGridProps {
   onEditRetreat: (retreat: Retreat) => void;
   onAddVenueHire: () => void;
   onEditVenueHire: (venueHire: VenueHire) => void;
+  onBlockRooms?: () => void;
   onAddTeamAssignment: (positionId: string, date: Date) => void;
   onEditTeamAssignment: (assignment: TeamAssignment) => void;
 }
@@ -142,6 +145,7 @@ const CalendarGrid = memo(function CalendarGrid({
   onEditRetreat,
   onAddVenueHire,
   onEditVenueHire,
+  onBlockRooms,
   onAddTeamAssignment,
   onEditTeamAssignment,
 }: CalendarGridProps) {
@@ -156,7 +160,7 @@ const CalendarGrid = memo(function CalendarGrid({
             {isAdmin ? (
               <button
                 onClick={() => onAddBooking()}
-                className={cn('flex items-center justify-center gap-1 w-full bg-black text-white hover:bg-gray-800 transition-colors', layout.addBookingBtn)}
+                className={cn('flex items-center justify-center gap-1 w-full bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm', layout.addBookingBtn)}
               >
                 <Plus size={layout.addBookingPlusSize} /> Add Booking
               </button>
@@ -188,6 +192,7 @@ const CalendarGrid = memo(function CalendarGrid({
           onEdit={onEditRetreat}
           onAddVenue={onAddVenueHire}
           onEditVenue={onEditVenueHire}
+          onBlockRooms={onBlockRooms}
           compact={compact}
         />
 
@@ -310,6 +315,10 @@ export default function Calendar({
   const [isVenueHireModalOpen, setIsVenueHireModalOpen] = useState(false);
   const [selectedVenueHire, setSelectedVenueHire] = useState<VenueHire | null>(null);
 
+  const [isBlockRoomModalOpen, setIsBlockRoomModalOpen] = useState(false);
+  const [selectedBlockBooking, setSelectedBlockBooking] = useState<Booking | null>(null);
+  const [initialBlockData, setInitialBlockData] = useState<{ roomId?: string; checkIn?: string; checkOut?: string }>({});
+
   const [isTeamAssignmentModalOpen, setIsTeamAssignmentModalOpen] = useState(false);
   const [selectedTeamAssignment, setSelectedTeamAssignment] = useState<TeamAssignment | null>(null);
   const [initialTeamAssignmentData, setInitialTeamAssignmentData] = useState<Partial<TeamAssignment>>({});
@@ -392,9 +401,28 @@ export default function Calendar({
   }, []);
 
   const handleEditBooking = useCallback((booking: Booking) => {
+    if (isBlockedBooking(booking)) {
+      if (!isAdmin) return;
+      setSelectedBlockBooking(booking);
+      setInitialBlockData({});
+      startTransition(() => setIsBlockRoomModalOpen(true));
+      return;
+    }
     setSelectedBooking(booking);
     setInitialBookingData({});
     startTransition(() => setIsBookingModalOpen(true));
+  }, [isAdmin]);
+
+  const handleAddBlockRoom = useCallback(() => {
+    setSelectedBlockBooking(null);
+    setInitialBlockData({});
+    startTransition(() => setIsBlockRoomModalOpen(true));
+  }, []);
+
+  const handleCloseBlockRoomModal = useCallback(() => {
+    setIsBlockRoomModalOpen(false);
+    setSelectedBlockBooking(null);
+    setInitialBlockData({});
   }, []);
 
   const handleAddBooking = useCallback((roomId?: string, date?: Date) => {
@@ -575,6 +603,7 @@ export default function Calendar({
         onEditRetreat={handleEditRetreat}
         onAddVenueHire={handleAddVenueHire}
         onEditVenueHire={handleEditVenueHire}
+        onBlockRooms={isAdmin ? handleAddBlockRoom : undefined}
         onAddTeamAssignment={handleAddTeamAssignment}
         onEditTeamAssignment={handleEditTeamAssignment}
       />
@@ -593,6 +622,20 @@ export default function Calendar({
           bookingChannels={bookingChannels}
           paymentChannels={paymentChannels}
           isAdmin={isAdmin}
+          currentUserName={profile?.name}
+          currentUserEmail={profile?.email}
+        />
+      )}
+
+      {isBlockRoomModalOpen && (
+        <BlockRoomModal
+          isOpen
+          onClose={handleCloseBlockRoomModal}
+          booking={selectedBlockBooking}
+          initialData={initialBlockData}
+          rooms={rooms}
+          bookings={bookings}
+          bookingChannel={bookingChannels[0]?.name || 'Direct'}
           currentUserName={profile?.name}
           currentUserEmail={profile?.email}
         />

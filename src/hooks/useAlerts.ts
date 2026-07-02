@@ -5,6 +5,7 @@ import {
   isToday, isSameDay, addDays, startOfToday,
   parseISO, differenceInDays,
 } from 'date-fns';
+import { isBlockedBooking } from '@/lib/bookingBlock';
 
 export interface ArrivalAlert {
   bookingId: string;
@@ -51,7 +52,10 @@ export function useAlerts(
   housekeeping: HousekeepingRecord[] = [],
 ) {
 
-  const activeBookings = useMemo(() => bookings.filter(isActiveLifecycle), [bookings]);
+  const activeBookings = useMemo(
+    () => bookings.filter(b => isActiveLifecycle(b) && !isBlockedBooking(b)),
+    [bookings],
+  );
 
   const arrivalAlerts = useMemo((): ArrivalAlert[] => {
     const today = startOfToday();

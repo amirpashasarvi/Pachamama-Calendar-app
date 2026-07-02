@@ -4,6 +4,7 @@ import { Booking, CalendarDisplaySettings, ConfigOption } from '@/types';
 import { cn } from '@/lib/utils';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
 import { Pin } from 'lucide-react';
+import { blockedBarLabel, isBlockedBooking } from '@/lib/bookingBlock';
 
 interface BookingBarProps {
   booking: Booking;
@@ -32,6 +33,8 @@ function BookingBar({
   if (isAfter(checkIn, calendarEnd) || isBefore(checkOut, calendarStart)) {
     return null;
   }
+
+  const blocked = isBlockedBooking(booking);
 
   // Calculate position
   const nights = differenceInDays(checkOut, checkIn);
@@ -134,6 +137,32 @@ function BookingBar({
   });
 
   const polygonPath = `polygon(${p1}, ${p2}, ${p3}, ${p4})`;
+
+  if (blocked) {
+    return (
+      <div
+        className={cn(
+          'absolute z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden',
+          layout.bookingBar,
+        )}
+        style={{
+          left: `${left - 1}px`,
+          width: `${totalWidth + 2}px`,
+          clipPath: polygonPath,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onEditBooking(booking);
+        }}
+      >
+        <div className="absolute inset-0 bg-white" />
+        <div className="absolute inset-0 bg-gray-300 border border-gray-400" />
+        <div className={cn('relative z-10 flex items-center justify-center h-full w-full px-10 text-gray-800 font-bold leading-none not-italic', layout.bookingBarText, layout.bookingBarContentPad)}>
+          <span className="truncate w-full text-center">{blockedBarLabel(booking.notes)}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
