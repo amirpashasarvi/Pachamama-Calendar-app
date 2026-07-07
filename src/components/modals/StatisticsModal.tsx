@@ -52,6 +52,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
   const [dateRange, setDateRange] = useState(() => monthRange(now.getFullYear(), now.getMonth()));
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid' | 'cancelled'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'website' | 'direct'>('all');
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [editingVenueHire, setEditingVenueHire] = useState<VenueHire | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -198,8 +199,14 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       });
     }
 
+    if (sourceFilter === 'website') {
+      result = result.filter(b => !b.isVenueHire && (b as Booking).source === 'booking-site');
+    } else if (sourceFilter === 'direct') {
+      result = result.filter(b => b.isVenueHire || (b as Booking).source !== 'booking-site');
+    }
+
     return result;
-  }, [filteredItems, searchQuery, statusFilter]);
+  }, [filteredItems, searchQuery, statusFilter, sourceFilter]);
 
   const listTotals = useMemo(() => {
     let total = 0;
@@ -219,6 +226,12 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
     return { total, paid, remaining: total - paid };
   }, [searchedItems, periodRange]);
+
+  const sourceCounts = useMemo(() => {
+    const bookingItems = filteredItems.filter(b => !b.isVenueHire) as (typeof filteredItems[0] & Booking)[];
+    const website = bookingItems.filter(b => b.source === 'booking-site').length;
+    return { website, direct: bookingItems.length - website };
+  }, [filteredItems]);
 
   const handleExportBookings = () => {
     const ids = new Set(filteredItems.filter(i => !i.isVenueHire).map(i => i.id));
@@ -481,6 +494,38 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
             {/* Bookings Table */}
             <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+              <div className="px-6 pt-5 pb-0 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSourceFilter('all')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors',
+                    sourceFilter === 'all' ? 'bg-black text-white border-black' : 'text-gray-500 border-gray-200 hover:border-gray-300',
+                  )}
+                >
+                  All sources
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceFilter('website')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors',
+                    sourceFilter === 'website' ? 'bg-sky-600 text-white border-sky-600' : 'text-gray-500 border-gray-200 hover:border-gray-300',
+                  )}
+                >
+                  Website ({sourceCounts.website})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceFilter('direct')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors',
+                    sourceFilter === 'direct' ? 'bg-gray-800 text-white border-gray-800' : 'text-gray-500 border-gray-200 hover:border-gray-300',
+                  )}
+                >
+                  Direct / manual ({sourceCounts.direct})
+                </button>
+              </div>
               <div className="p-6 border-b flex flex-wrap items-center justify-between gap-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Bookings Detail</h3>
                 <div className="flex flex-wrap items-center gap-3">
@@ -585,6 +630,9 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
                             <div className={cn('text-sm font-bold', cancelled ? 'text-rose-700' : 'text-gray-900')}>{b.guestName}</div>
                             {!b.isVenueHire && b.type && (
                               <span className={cn('text-[9px] font-black uppercase tracking-wider', cancelled ? 'text-rose-500' : 'text-gray-400')}>{b.type}</span>
+                            )}
+                            {!b.isVenueHire && (b as Booking).source === 'booking-site' && (
+                              <span className="ml-1 px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[8px] font-black uppercase">Website</span>
                             )}
                           </td>
                           <td className="px-6 py-4">

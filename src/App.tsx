@@ -1,11 +1,12 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal, Globe } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import SettingsModal, { type SettingsOpenOptions } from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
 import DashboardModal from './components/modals/DashboardModal';
+import BookingPortalModal from './components/modals/BookingPortalModal';
 import TrashedItemsModal from './components/modals/TrashedItemsModal';
 import HousekeepingModal from './components/modals/HousekeepingModal';
 import ProfileModal from './components/modals/ProfileModal';
@@ -32,6 +33,7 @@ function AppContent() {
   const [settingsOpenOptions, setSettingsOpenOptions] = useState<SettingsOpenOptions | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isBookingPortalOpen, setIsBookingPortalOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isHousekeepingOpen, setIsHousekeepingOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -278,6 +280,20 @@ function AppContent() {
                   </button>
                 </div>
 
+                {/* Booking Portal — separated, distinct styling from the calendar tools above */}
+                <button
+                  type="button"
+                  onClick={() => setIsBookingPortalOpen(true)}
+                  className="hidden sm:flex items-center gap-1.5 border-l border-gray-100 ml-2 pl-4 mr-0.5 text-gray-700 hover:text-black transition-colors"
+                  title="Booking Portal"
+                  aria-label="Booking Portal"
+                >
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-900 text-white text-xs font-bold hover:bg-black transition-colors">
+                    <Globe size={14} />
+                    Booking Portal
+                  </span>
+                </button>
+
                 {/* Mobile: overflow menu */}
                 <div className="relative sm:hidden border-l border-gray-100 ml-0.5 pl-1" ref={moreMenuRef}>
                   <button
@@ -295,7 +311,16 @@ function AppContent() {
                       <div className="px-3 py-2 border-b border-gray-50">
                         <span className="text-xs font-bold text-gray-500">More</span>
                       </div>
-                      <div className="py-1 space-y-0.5">
+                      <div className="pt-1 pb-2">
+                        <button
+                          type="button"
+                          onClick={() => { setIsMoreMenuOpen(false); setIsBookingPortalOpen(true); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl transition-all font-bold text-xs"
+                        >
+                          <Globe size={16} /> Booking Portal
+                        </button>
+                      </div>
+                      <div className="py-1 space-y-0.5 border-t border-gray-50">
                         <button
                           type="button"
                           onClick={() => { setIsMoreMenuOpen(false); setIsTrashOpen(true); }}
@@ -451,6 +476,10 @@ function AppContent() {
             rooms={rooms}
             bookingChannels={bookingChannels}
             paymentChannels={paymentChannels}
+          />
+          <BookingPortalModal
+            isOpen={isBookingPortalOpen}
+            onClose={() => setIsBookingPortalOpen(false)}
           />
         </>
       )}

@@ -20,6 +20,8 @@ export interface Room {
   size: string;
   color: string;
   order: number;
+  /** Public booking site only — rooms sharing this value are shown to guests as one accommodation (e.g. "Stone House Shared"). Admin calendar is unaffected. */
+  bookingGroup?: string;
 }
 
 export type BookingStatus = 'Paid' | 'Partial' | 'Unpaid';
@@ -77,6 +79,18 @@ export interface Booking {
   bookingChannel: string;
   paymentChannel?: string;
   source: string;
+  /** Guest email from public booking site */
+  guestEmail?: string;
+  guestPhone?: string;
+  /** Stripe customer + saved payment method (card on file, charge later) */
+  stripeCustomerId?: string;
+  stripePaymentMethodId?: string;
+  cardSaved?: boolean;
+  /** Slug of the booking form used on the public site */
+  formSlug?: string;
+  /** Linked retreat run when booked via public retreats flow */
+  retreatRunId?: string;
+  retreatTypeId?: string;
   isVenueHire?: boolean;
   createdAt?: string; // ISO Date
   updatedAt?: string; // ISO Date
@@ -118,11 +132,23 @@ export interface Retreat {
   endDate: string;
   facilitator: string;
   createdAt?: string;
+  /** Show this run on the public booking site */
+  published?: boolean;
+  /** Total retreat price per accommodation anchor (accommodationPricing room id) */
+  accommodationPrices?: Record<string, number>;
 }
 
 export interface RetreatType {
   id: string;
   name: string;
+  /** Public URL slug — e.g. womens-retreat */
+  slug?: string;
+  description?: string;
+  shortDescription?: string;
+  photoUrls?: string[];
+  /** bookingForms document id */
+  bookingFormId?: string;
+  published?: boolean;
 }
 
 export interface VenueHire {
@@ -271,4 +297,103 @@ export interface RecurringExpense {
   note?: string;
   updatedAt?: string;
   updatedBy?: string;
+}
+
+// ── Public booking system — Room Pricing (Booking Portal) ──────────────────
+
+export type PricingMode = 'fixed' | 'perGuest';
+
+/**
+ * Price for one "accommodation" as shown to guests on the public site.
+ * Keyed by a stable anchor roomId (the first room in the group, or the room itself if ungrouped) —
+ * so renaming a `bookingGroup` doesn't orphan existing pricing.
+ */
+export interface AccommodationPricing {
+  id: string; // == anchor roomId
+  kind: 'group' | 'room';
+  /** bookingGroup name (kind = 'group') or room name (kind = 'room') at time of last save — for display only. */
+  label: string;
+  publicName: string;
+  description?: string;
+  maxGuests: number;
+  pricingMode: PricingMode;
+  fixedPrice?: number;
+  /** Guest count (as string key, e.g. "1", "2") → price per night. */
+  perGuestPrices?: Record<string, number>;
+  photos?: { url: string; path: string }[];
+  updatedAt?: string;
+}
+
+export interface SeasonalRateOverride {
+  pricingMode: PricingMode;
+  fixedPrice?: number;
+  perGuestPrices?: Record<string, number>;
+}
+
+export type DayOfWeek = 'Su' | 'Mo' | 'Tu' | 'We' | 'Th' | 'Fr' | 'Sa';
+
+export interface SeasonalRate {
+  id: string;
+  name: string;
+  startDate: string; // ISO yyyy-mm-dd
+  endDate: string; // ISO yyyy-mm-dd
+  /** Empty = applies every day of the week. */
+  applyDays: DayOfWeek[];
+  /** accommodationPricing id → override price for this season. */
+  overrides: Record<string, SeasonalRateOverride>;
+  updatedAt?: string;
+}
+
+// ── Public booking system — Booking Forms (Booking Portal) ───────────────────
+
+export type BookingFormCustomFieldType = 'text' | 'textarea' | 'select';
+
+export interface BookingFormCustomField {
+  id: string;
+  label: string;
+  type: BookingFormCustomFieldType;
+  required?: boolean;
+  options?: string[];
+}
+
+export interface BookingFormDatePeriod {
+  startDate: string;
+  endDate: string;
+}
+
+export interface BookingForm {
+  id: string;
+  name: string;
+  slug: string;
+  /** accommodationPricing anchor roomIds included on this form */
+  accommodationIds: string[];
+  extraIds: string[];
+  customFields: BookingFormCustomField[];
+  chargeUpfront: boolean;
+  saveCardDetails: boolean;
+  cancellationPolicyUrl: string;
+  minNights: number;
+  maxNights: number;
+  minAdvanceDays: number;
+  maxAdvanceDays: number;
+  checkInDays: DayOfWeek[];
+  checkOutDays: DayOfWeek[];
+  checkInMonthDays: number[];
+  checkOutMonthDays: number[];
+  fixedCheckIn: string;
+  fixedCheckOut: string;
+  unavailablePeriods: BookingFormDatePeriod[];
+  availablePeriods: BookingFormDatePeriod[];
+  hideAvailabilityCalendar: boolean;
+  hideGuestAddress: boolean;
+  hideCouponForm: boolean;
+  openCalendarByDefault: boolean;
+  hideCalendarOnMobile: boolean;
+  hideAccommodationsUntilSearch: boolean;
+  canBookMultiplePeriods: boolean;
+  minNightsPerPeriod: number;
+  allowBookingRequest: boolean;
+  importantBookingInfo: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

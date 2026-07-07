@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread, RecurringExpense } from '@/types';
+import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread, RecurringExpense, AccommodationPricing, SeasonalRate, BookingForm } from '@/types';
 
 function reportListenerError(error: unknown, path: string) {
   console.error(`Firestore listener failed (${path}):`, error);
@@ -24,6 +24,9 @@ export function useBookingData() {
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [teamPositions, setTeamPositions] = useState<TeamPosition[]>([]);
   const [teamAssignments, setTeamAssignments] = useState<TeamAssignment[]>([]);
+  const [accommodationPricing, setAccommodationPricing] = useState<AccommodationPricing[]>([]);
+  const [seasonalRates, setSeasonalRates] = useState<SeasonalRate[]>([]);
+  const [bookingForms, setBookingForms] = useState<BookingForm[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [calendarDisplaySettings, setCalendarDisplaySettings] = useState<CalendarDisplaySettings | null>(null);
@@ -47,7 +50,10 @@ export function useBookingData() {
       recurringExpenses: false,
       teamPositions: false,
       teamAssignments: false,
-      users: false
+      users: false,
+      accommodationPricing: false,
+      seasonalRates: false,
+      bookingForms: false,
     };
 
     const checkLoading = (key: keyof typeof loaded) => {
@@ -309,6 +315,7 @@ export function useBookingData() {
         { id: 'bookingType', label: 'Booking Type', enabled: false },
         { id: 'notes', label: 'Notes', enabled: false },
         { id: 'bookingChannel', label: 'Booking Channel', enabled: false },
+        { id: 'source', label: 'Booking Source', enabled: false },
         { id: 'paymentStatus', label: 'Payment Status', enabled: false },
         { id: 'dietary', label: 'Dietary Requirements', enabled: false },
       ];
@@ -365,6 +372,34 @@ export function useBookingData() {
       reportListenerError(error, 'settings');
     });
 
+    const unsubAccommodationPricing = onSnapshot(collection(db, 'accommodationPricing'), (snap) => {
+      const data: AccommodationPricing[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as AccommodationPricing));
+      setAccommodationPricing(data);
+      checkLoading('accommodationPricing');
+    }, (error) => {
+      checkLoading('accommodationPricing');
+      reportListenerError(error, 'accommodationPricing');
+    });
+
+    const unsubSeasonalRates = onSnapshot(collection(db, 'seasonalRates'), (snap) => {
+      const data: SeasonalRate[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as SeasonalRate));
+      data.sort((a, b) => a.startDate.localeCompare(b.startDate));
+      setSeasonalRates(data);
+      checkLoading('seasonalRates');
+    }, (error) => {
+      checkLoading('seasonalRates');
+      reportListenerError(error, 'seasonalRates');
+    });
+
+    const unsubBookingForms = onSnapshot(query(collection(db, 'bookingForms'), orderBy('name', 'asc')), (snap) => {
+      const data: BookingForm[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as BookingForm));
+      setBookingForms(data);
+      checkLoading('bookingForms');
+    }, (error) => {
+      checkLoading('bookingForms');
+      reportListenerError(error, 'bookingForms');
+    });
+
     return () => {
       unsubRooms();
       unsubBookings();
@@ -382,8 +417,11 @@ export function useBookingData() {
       unsubPositions();
       unsubAssignments();
       unsubSettings();
+      unsubAccommodationPricing();
+      unsubSeasonalRates();
+      unsubBookingForms();
     };
   }, []);
 
-  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, recurringExpenses, users, loading };
+  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, recurringExpenses, users, accommodationPricing, seasonalRates, bookingForms, loading };
 }

@@ -40,16 +40,15 @@ export default function TeamMemberBar({ assignment, days, color, isOverlapping, 
   // Overlap warning color is no longer needed on the bar itself as grid cells handle it
   const finalColor = color;
 
-  // Polygon points for clinical look
-  const slope = 8; 
-  const gap = -2; // Negative gap to ensure overlap and cover borders
-  
-  // Account for the extra bleed in coordinates relative to (left - 1)
-  const relCheckInCenter = halfDay + 1;
+  // Polygon points — match BookingBar: diagonal edges with a visible gap on turnover days
+  const slope = 12;
+  const gap = 3;
+
+  const relHalfDay = halfDay + 1;
   const relCheckOutMid = totalWidth - halfDay + 1;
 
-  const p1 = `${relCheckInCenter + slope + gap}px 0%`; 
-  const p4 = `${relCheckInCenter - slope + gap}px 100%`;
+  const p1 = `${relHalfDay + slope + gap}px 0%`;
+  const p4 = `${relHalfDay - slope + gap}px 100%`;
   const p2 = `${relCheckOutMid + slope - gap}px 0%`;
   const p3 = `${relCheckOutMid - slope - gap}px 100%`;
 

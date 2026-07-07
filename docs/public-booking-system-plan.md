@@ -1,7 +1,7 @@
 # Pachamama Public Booking System — Master Plan
 
-> **Status:** Planning agreed — not yet built  
-> **Last updated:** 2026-07-02  
+> **Status:** Phase 2 complete — ready for testing  
+> **Last updated:** 2026-07-03  
 > **Owner:** Pachamama Retreat  
 > **How to use this doc:** Read before any booking-site work. Update this file when decisions change. Tell Cursor: *“Follow the public booking plan”* or open this file.  
 > **Visual reference:** [MangoBeds screenshots](./public-booking-system/references/README.md) (50 images from your current setup)
@@ -50,6 +50,15 @@ Two subdomains would only make sense if co-living and retreats were separate bra
 ---
 
 ## Core design principles
+
+### UI/UX fidelity to MangoBeds (confirmed)
+
+**Default to matching MangoBeds' UI/UX directly** — layout, navigation patterns, page structure, form structure — using the [reference screenshots](./public-booking-system/references/README.md) as the source of truth. The user is already used to that interface (as are many other MangoBeds users), so we shouldn't spend time re-deciding layout/UX questions that MangoBeds has already answered.
+
+- When building any admin section or public page that has a MangoBeds equivalent screenshot, **mirror its layout first** (navigation placement, columns vs tabs, field order, card style, etc.) instead of designing from scratch.
+- Deviate from MangoBeds only for the specific, explicitly-agreed items already listed under **"Our improvements over MangoBeds"** below (e.g. retreats-with-runs, guest profiles) or when the user asks for a change.
+- If it's unclear which screenshot applies, ask rather than guessing a new pattern.
+- This does not block iterating later — if something doesn't work well once built, we adjust then.
 
 ### Keep (MangoBeds-style logic)
 
@@ -219,19 +228,20 @@ Bookings write to Firestore → appear on admin calendar immediately.
 
 ### Phase 1 — Foundation (start here)
 
-1. Room pricing model in Firestore (seasonal rates, per accommodation)  
-2. **Booking Forms** manager in admin  
-3. First working public form end-to-end (one form, e.g. co-living or simple stay)  
-4. Stripe SetupIntent integration  
-5. Booking writes to existing `bookings` collection with `source: "booking-site"`  
+0. ✅ **Booking Portal shell** — top-bar icon + full-screen dashboard with the 7 section tabs (Booking Forms, Extras, Promotions, Retreats, Communications, Guest Profiles, Room Pricing) as placeholders. No functionality yet.
+1. ✅ **Room pricing model in Firestore** — `accommodationPricing` + `seasonalRates` collections; Room Pricing section built with Accommodations (group rooms via `bookingGroup`, fixed or per-guest pricing) and Seasonal Rates (dates, apply-on-days, bulk % adjust, per-accommodation override table) tabs. Admin-only; not yet used in actual price calculations (that comes with the booking flow in steps 3–5).
+2. ✅ **Booking Forms manager in admin** — `bookingForms` collection; list view (cards) + editor with MangoBeds tabs: Information, Custom Fields, Payments & Policies, Restrictions, Appearance, Advanced. Extras selection placeholder until Extras section is built.
+3. ✅ **First working public form end-to-end** — `pachamama-booking-site/` Vite app (port 3001): landing page lists forms, `/:slug` booking flow (search dates → accommodation cards with pricing → guest details → submit). Writes to `bookings` with `source: "booking-site"`. Anonymous auth for availability reads. Stripe deferred to step 4.
+4. ✅ **Stripe SetupIntent integration** — Cloud Functions (`createSetupIntent`, `createPublicBooking`); public site payment step when form has "Save card details" enabled.  
+5. ✅ **Booking sync/tagging in admin** — `source: "booking-site"`, globe icon on calendar bars, public-booking panel in booking modal, source filters in Booking List statistics.  
 
 **Estimated effort (original discussion):** ~3–6 weeks focused work for full system; Phase 1 is a subset.
 
 ### Phase 2 — Retreats on public site
 
-1. Public `/retreats` grid using `retreatTypes` + `retreats` runs  
-2. Per-run, per-accommodation pricing  
-3. Retreat booking flow linked to “Retreats” form  
+1. ✅ Public `/retreats` grid using `retreatTypes` + `retreats` runs  
+2. ✅ Per-run, per-accommodation pricing (Booking Portal → Retreats)  
+3. ✅ Retreat booking flow linked to booking form (fixed dates, total price, Stripe optional)  
 
 ### Phase 3 — Promotions & extras
 
@@ -279,6 +289,14 @@ iCal, WhatsApp, PDF invoicing, multi-currency, last-minute rates, channel manage
 | 2026-07-02 | Decided room/unit model: keep existing individual rooms, add optional `bookingGroup` field for public display grouping + transaction-based auto-assignment. Confirmed access boundary (admin = staff-only, booking = public) and one-subdomain-with-landing-page decision for co-living vs retreats. |
 | 2026-07-02 | Decided admin navigation: new **Booking Portal** full-screen dashboard (top-bar icon, like Dashboard/Statistics) — not folded into Settings. |
 | 2026-07-02 | **Renamed** the existing admin app from "Pachamama Booking Management" to **"Pachamama Calendar"** (browser tab, header, login screen, README). New admin section for booking-site config confirmed as **"Booking Portal"**. |
+| 2026-07-02 | Built **Booking Portal shell**: `BookingPortalModal.tsx`, top-bar icon (desktop + mobile overflow menu), 7 placeholder section tabs. First step of Phase 1. |
+| 2026-07-02 | Reworked Booking Portal shell to match MangoBeds layout: left sidebar column for the 7 sections (desktop) instead of a top tab row; top-bar icon made visually distinct/separate from the other calendar tool icons. Confirmed principle: **default to MangoBeds' UI/UX directly** using the reference screenshots, rather than designing layouts from scratch. |
+| 2026-07-02 | Built **Room Pricing** (Phase 1, step 1): `Room.bookingGroup` field, new `accommodationPricing` + `seasonalRates` Firestore collections, `RoomPricingPanel.tsx` with Accommodations (rooms grouped by `bookingGroup`, fixed/per-guest pricing) and Seasonal Rates (dates, apply-on-days, bulk %, per-accommodation table) tabs — mirroring MangoBeds screenshots `02-accommodations-01..06`. **Note:** `firestore.rules` changes need `firebase deploy --only firestore:rules` to take effect. |
+| 2026-07-02 | Added **accommodation photo upload** (Firebase Storage), matching MangoBeds' Photos section exactly, and switched the pricing toggle to a "Price model" dropdown ("Fixed" / "Flexible - depends on guests number") to match its wording. New `storage.rules` (write: any signed-in staff, read: public) needs `firebase deploy --only storage`. Photo upload deferred — requires Blaze plan; user staying on Spark for now. |
+| 2026-07-02 | Built **Booking Forms manager** (Phase 1, step 2): `bookingForms` Firestore collection, `BookingFormsPanel.tsx` with list cards + 6-tab editor mirroring MangoBeds screenshots `03-booking-forms-01..11`. Requires `firebase deploy --only firestore:rules` for `bookingForms` rules. |
+| 2026-07-02 | Built **public booking site** (Phase 1, step 3): `pachamama-booking-site/` — landing + slug-based form flow, pricing/availability from Firestore, anonymous auth, booking create with `source: "booking-site"`. Updated `firestore.rules` with `isValidPublicBooking`. Enable **Anonymous Authentication** in Firebase Console. Run `npm run dev` in `pachamama-booking-site/` (port 3001). Deploy rules: `firebase deploy --only firestore:rules`. |
+| 2026-07-03 | Completed **Phase 1 steps 4–5**: Firebase Functions for Stripe SetupIntent + server-side booking create; public payment step; admin source tagging (calendar globe, booking modal panel, statistics filters). Deploy: `firebase deploy --only functions,firestore:rules`. Set secret: `firebase functions:secrets:set STRIPE_SECRET_KEY`. Add `VITE_STRIPE_PUBLISHABLE_KEY` to `pachamama-booking-site/.env`. |
+| 2026-07-03 | Completed **Phase 2**: Booking Portal `RetreatsPanel` (public config + per-run pricing); public `/retreats` grid and `/retreats/:slug` booking flow; retreat fields on bookings; server-side retreat price/date validation in `createPublicBooking`. |
 
 ---
 

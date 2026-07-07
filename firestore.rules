@@ -52,7 +52,8 @@ service cloud.firestore {
           && data.color is string && data.color.size() <= 30
           && (!('guestCount' in data) || data.guestCount is number)
           && (!('singleBeds' in data) || data.singleBeds is number)
-          && (!('doubleBeds' in data) || data.doubleBeds is number);
+          && (!('doubleBeds' in data) || data.doubleBeds is number)
+          && (!('bookingGroup' in data) || (data.bookingGroup is string && data.bookingGroup.size() <= 100));
     }
 
     function isValidBooking(data) {
@@ -74,7 +75,42 @@ service cloud.firestore {
           && (!('paidLater2' in data) || data.paidLater2 is number)
           && (!('extras' in data) || data.extras is list)
           && (!('singleBeds' in data) || data.singleBeds is number)
-          && (!('doubleBeds' in data) || data.doubleBeds is number);
+          && (!('doubleBeds' in data) || data.doubleBeds is number)
+          && (!('source' in data) || (data.source is string && data.source.size() <= 50))
+          && (!('status' in data) || (data.status in ['Paid', 'Partial', 'Unpaid']))
+          && (!('createdAt' in data) || data.createdAt is string)
+          && (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000))
+          && (!('comments' in data) || (data.comments is string && data.comments.size() <= 500))
+          && (!('additionalNames' in data) || (data.additionalNames is string && data.additionalNames.size() <= 500))
+          && (!('bedSetting' in data) || (data.bedSetting in ['Double', 'Twin']))
+          && (!('dietary' in data) || (data.dietary is string && data.dietary.size() <= 500))
+          && (!('totalGuests' in data) || data.totalGuests is number)
+          && (!('guestEmail' in data) || (data.guestEmail is string && data.guestEmail.size() <= 150))
+          && (!('guestPhone' in data) || (data.guestPhone is string && data.guestPhone.size() <= 50))
+          && (!('stripeCustomerId' in data) || (data.stripeCustomerId is string && data.stripeCustomerId.size() <= 100))
+          && (!('stripePaymentMethodId' in data) || (data.stripePaymentMethodId is string && data.stripePaymentMethodId.size() <= 100))
+          && (!('cardSaved' in data) || data.cardSaved is bool)
+          && (!('formSlug' in data) || (data.formSlug is string && data.formSlug.size() <= 100))
+          && (!('retreatRunId' in data) || (data.retreatRunId is string && isValidId(data.retreatRunId)))
+          && (!('retreatTypeId' in data) || (data.retreatTypeId is string && isValidId(data.retreatTypeId)));
+    }
+
+    function isValidPublicBooking(data) {
+      return isValidBooking(data)
+          && data.source == 'booking-site'
+          && data.status == 'Unpaid'
+          && data.bookingChannel == 'Direct'
+          && !('deletedAt' in data)
+          && !('updatedAt' in data)
+          && !('lifecycleStatus' in data)
+          && !('paymentChannel' in data)
+          && data.price is number && data.price >= 0 && data.price <= 100000
+          && data.adults is number && data.adults >= 1 && data.adults <= 20
+          && data.kids is number && data.kids >= 0 && data.kids <= 20
+          && data.createdAt is string
+          && !('stripeCustomerId' in data)
+          && !('stripePaymentMethodId' in data)
+          && !('cardSaved' in data);
     }
 
     function isValidProfile(data, userId) {
@@ -178,7 +214,8 @@ service cloud.firestore {
     // Bookings
     match /bookings/{bookingId} {
       allow read: if isSignedIn();
-      allow create: if isAdmin() && isValidId(bookingId) && isValidBooking(incoming());
+      allow create: if (isAdmin() && isValidId(bookingId) && isValidBooking(incoming()))
+                   || (isSignedIn() && isValidPublicBooking(incoming()));
       
       allow update: if (isAdmin() && isValidBooking(incoming()))
                    || (isStaff() && incoming().diff(existing()).affectedKeys().hasOnly(['comments', 'commentsUpdatedAt']));
@@ -253,6 +290,22 @@ service cloud.firestore {
     match /retreatTypes/{id} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
+    }
+
+    // Booking Portal — Room Pricing
+    match /accommodationPricing/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /seasonalRates/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /bookingForms/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /users/{id} {

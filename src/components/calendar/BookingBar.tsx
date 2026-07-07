@@ -3,7 +3,7 @@ import { differenceInDays, isAfter, isBefore, parseISO, startOfDay } from 'date-
 import { Booking, CalendarDisplaySettings, ConfigOption } from '@/types';
 import { cn } from '@/lib/utils';
 import { calendarLayoutClasses } from '@/lib/calendarLayout';
-import { Pin } from 'lucide-react';
+import { Pin, Globe } from 'lucide-react';
 import { blockedBarLabel, isBlockedBooking } from '@/lib/bookingBlock';
 
 interface BookingBarProps {
@@ -99,6 +99,8 @@ function BookingBar({
       }
       case 'bookingChannel':
         return booking.bookingChannel;
+      case 'source':
+        return formatBookingSource(booking.source);
       case 'dietary':
         return booking.dietary || null;
       case 'paymentStatus': {
@@ -196,6 +198,16 @@ function BookingBar({
         </div>
       </div>
 
+      {booking.source === 'booking-site' && (
+        <div
+          className="absolute top-1/2 -translate-y-1/2 z-30 pointer-events-none text-sky-600"
+          style={{ left: `${halfDay - 4}px` }}
+          title="Booked via website"
+        >
+          <Globe size={layout.bookingBarPinSize} />
+        </div>
+      )}
+
       {booking.comments && typeof booking.comments === 'string' && booking.comments.trim() !== '' && (
         <div 
           className="absolute top-1/2 -translate-y-[calc(50%+2px)] z-30 pointer-events-none text-red-500"
@@ -209,6 +221,12 @@ function BookingBar({
       <div className={cn('absolute bottom-0 left-0 right-0 z-20', layout.bookingBarStatusLine, statusLineColor)} />
     </div>
   );
+}
+
+function formatBookingSource(source?: string): string | null {
+  if (!source) return 'Direct';
+  if (source === 'booking-site') return 'Website';
+  return source;
 }
 
 export default memo(BookingBar);

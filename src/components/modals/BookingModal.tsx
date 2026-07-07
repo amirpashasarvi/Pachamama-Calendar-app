@@ -523,6 +523,26 @@ export default function BookingModal({
         
         {/* Basic Info */}
         <section className="space-y-3">
+          {(formData.source === 'booking-site' || formData.guestEmail || formData.cardSaved) && (
+            <div className="p-3 bg-sky-50 border border-sky-100 rounded-xl space-y-1.5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-sky-700">Public booking</p>
+              {formData.guestEmail && (
+                <p className="text-xs text-gray-700"><span className="font-bold">Email:</span> {formData.guestEmail}</p>
+              )}
+              {formData.guestPhone && (
+                <p className="text-xs text-gray-700"><span className="font-bold">Phone:</span> {formData.guestPhone}</p>
+              )}
+              {formData.formSlug && (
+                <p className="text-xs text-gray-500">Form: {formData.formSlug}</p>
+              )}
+              {formData.retreatRunId && (
+                <p className="text-xs text-gray-500">Retreat run: {formData.retreatRunId.slice(0, 8)}…</p>
+              )}
+              {formData.cardSaved && (
+                <p className="text-xs font-bold text-emerald-700">Card saved on file — charge manually in Stripe when approved.</p>
+              )}
+            </div>
+          )}
           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Guest Information</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
