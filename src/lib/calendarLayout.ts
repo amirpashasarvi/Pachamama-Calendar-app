@@ -84,7 +84,7 @@ export function calendarLayoutClasses(compact: boolean) {
     dateHeaderRow: compact ? 'h-7' : 'h-9',
     dateHeaderWeekday: compact ? 'text-[7px]' : 'text-[8px]',
     dateHeaderDayNum: compact ? 'text-[10px]' : 'text-xs',
-    roomLabelCol: compact ? 'w-20 sm:w-28' : 'w-24 sm:w-36',
+    roomLabelCol: 'w-24 sm:w-36',
     roomRow: compact ? 'h-8' : 'h-10',
     roomName: compact ? 'text-[10px]' : 'text-[11px]',
     roomLabelPad: compact ? 'p-0.5' : 'p-1',

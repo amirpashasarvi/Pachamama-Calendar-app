@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { updateDoc, doc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { useBooking } from '@/hooks/useBooking';
-import { Retreat, RetreatType, BookingForm } from '@/types';
+import { Retreat, RetreatType, BookingForm, AccommodationPricing } from '@/types';
 import { computeAccommodationGroups, groupDisplayName } from '@/lib/accommodationGroups';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, Save, Pencil } from 'lucide-react';
@@ -58,7 +58,9 @@ export default function RetreatsPanel() {
 
   const accommodationOptions = useMemo(() => {
     if (!linkedForm) return [];
-    const pricingMap = new Map(accommodationPricing.map(p => [p.id, p]));
+    const pricingMap = new Map<string, AccommodationPricing>(
+      accommodationPricing.map(p => [p.id, p]),
+    );
     return computeAccommodationGroups(rooms)
       .filter(g => linkedForm.accommodationIds.includes(g.anchorId))
       .map(g => ({
