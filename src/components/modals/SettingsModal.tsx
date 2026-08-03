@@ -434,7 +434,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
             <ChevronLeft size={20} className="text-gray-500" />
           </button>
-          <h3 className="font-bold text-lg">Calendar Display</h3>
+          <h3 className="font-bold text-lg">Calendar View</h3>
         </div>
 
         {/* Booking Bars Section */}
@@ -1280,7 +1280,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
-                <h4 className="font-bold text-gray-900">Calendar Display</h4>
+                <h4 className="font-bold text-gray-900">Calendar View</h4>
                 <p className="text-xs text-gray-500">Control which fields appear on booking bars</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />

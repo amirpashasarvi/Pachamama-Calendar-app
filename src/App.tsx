@@ -15,12 +15,12 @@ import { useHousekeeping } from './hooks/useHousekeeping';
 import { useAlerts } from './hooks/useAlerts';
 import { cn } from './lib/utils';
 import {
-  loadCompactCalendarPreference,
-  saveCompactCalendarPreference,
   loadShowSummaryPreference,
   saveShowSummaryPreference,
   loadShowTeamRosterPreference,
   saveShowTeamRosterPreference,
+  loadShowHousekeepingStatusPreference,
+  saveShowHousekeepingStatusPreference,
   calendarLayoutClasses,
 } from './lib/calendarLayout';
 
@@ -42,13 +42,13 @@ function AppContent() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(loadShowSummaryPreference);
   const [showTeamRoster, setShowTeamRoster] = useState(loadShowTeamRosterPreference);
-  const [compactCalendar, setCompactCalendar] = useState(loadCompactCalendarPreference);
+  const [showHousekeepingStatus, setShowHousekeepingStatus] = useState(loadShowHousekeepingStatusPreference);
+  const [compactCalendar, setCompactCalendar] = useState(true);
 
   const layout = calendarLayoutClasses(compactCalendar);
 
   const handleCompactCalendarChange = (compact: boolean) => {
     setCompactCalendar(compact);
-    saveCompactCalendarPreference(compact);
   };
 
   const handleShowSummaryChange = (show: boolean) => {
@@ -59,6 +59,11 @@ function AppContent() {
   const handleShowTeamRosterChange = (show: boolean) => {
     setShowTeamRoster(show);
     saveShowTeamRosterPreference(show);
+  };
+
+  const handleShowHousekeepingStatusChange = (show: boolean) => {
+    setShowHousekeepingStatus(show);
+    saveShowHousekeepingStatusPreference(show);
   };
 
   // Close menus on click outside
@@ -403,10 +408,12 @@ function AppContent() {
           housekeeping={housekeeping}
           showSummary={showSummary}
           showTeamRoster={showTeamRoster}
+          showHousekeepingStatus={showHousekeepingStatus}
           compact={compactCalendar}
           onCompactCalendarChange={handleCompactCalendarChange}
           onShowSummaryChange={handleShowSummaryChange}
           onShowTeamRosterChange={handleShowTeamRosterChange}
+          onShowHousekeepingStatusChange={handleShowHousekeepingStatusChange}
           onOpenBookingList={() => setIsStatsOpen(true)}
           onOpenRetreatSettings={isAdmin ? openRetreatSettings : undefined}
         />

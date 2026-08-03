@@ -61,6 +61,7 @@ function bookingFinancials(b: Booking) {
     price: b.price || 0,
     extras: b.extras || [],
     deposit: b.deposit || 0,
+    payments: b.payments,
     paidLater1: b.paidLater1 || 0,
     paidLater2: b.paidLater2 || 0,
   };

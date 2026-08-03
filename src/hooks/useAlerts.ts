@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Booking, Room, HousekeepingRecord } from '@/types';
 import { isActiveLifecycle } from '@/lib/bookingLifecycle';
+import { getCollectedAmount } from '@/lib/bookingFinancials';
 import {
   isToday, isSameDay, addDays, startOfToday,
   parseISO, differenceInDays,
@@ -88,7 +89,7 @@ export function useAlerts(
       .map(b => {
         const extrasTotal = (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
         const total = (b.price || 0) + extrasTotal;
-        const collected = (b.deposit || 0) + (b.paidLater1 || 0) + (b.paidLater2 || 0);
+        const collected = getCollectedAmount(b);
         const checkInDate = parseISO(b.checkIn);
         const now = startOfToday();
         return {

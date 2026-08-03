@@ -9,6 +9,7 @@ import { useBooking } from '@/hooks/useBooking';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { stayOverlapsPeriod } from '@/lib/prorate';
+import { getCollectedAmount } from '@/lib/bookingFinancials';
 import {
   resolveReportingFinancials,
   isCancelledLifecycle,
@@ -83,6 +84,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
       financials: {
         price: b.price || 0,
         deposit: b.deposit || 0,
+        payments: b.payments,
         paidLater1: b.paidLater1 || 0,
         paidLater2: b.paidLater2 || 0,
         extras: b.extras || []
@@ -190,7 +192,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
 
         if (cancelled) return false;
         const total = b.financials.price + (b.financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-        const paid = b.financials.deposit + b.financials.paidLater1 + b.financials.paidLater2;
+        const paid = getCollectedAmount(b.financials);
         const remaining = total - paid;
         if (statusFilter === 'paid') return remaining === 0 && total > 0;
         if (statusFilter === 'partial') return remaining > 0 && paid > 0;

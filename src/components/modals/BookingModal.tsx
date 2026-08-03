@@ -10,6 +10,7 @@ import CommissionFields from '@/components/modals/CommissionFields';
 import { addDays, parseISO, format } from 'date-fns';
 import { logActivity } from '@/lib/activityLog';
 import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle';
+import { getCollectedAmount, getLaterPaymentsTotal, paymentsFromLegacy, syncLegacyPaidLaterFields } from '@/lib/bookingFinancials';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw, Receipt } from 'lucide-react';
 
@@ -31,7 +32,86 @@ interface BookingModalProps {
   elevated?: boolean;
 }
 
-export default function BookingModal({ 
+const FIN_GRID = 'grid grid-cols-2 gap-x-3 gap-y-3';
+const FIN_DELETE_SLOT = 'shrink-0 w-[38px] h-[42px] flex items-center justify-center';
+const FIN_INPUT = 'w-full border border-slate-200 rounded-xl bg-white text-sm';
+const FIN_FIELD = cn(FIN_INPUT, 'py-2.5');
+const FIN_FIELD_ROW = 'h-[42px] flex items-center';
+const FIN_LABEL = 'block text-xs font-bold text-gray-400 mb-1 uppercase';
+
+function FinInputRow({
+  label,
+  children,
+  onDelete,
+  reserveDelete = true,
+  labelHidden = false,
+}: {
+  label?: string;
+  children: React.ReactNode;
+  onDelete?: () => void;
+  reserveDelete?: boolean;
+  labelHidden?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      {label != null && (
+        <label
+          className={cn(FIN_LABEL, labelHidden && 'invisible select-none')}
+          aria-hidden={labelHidden}
+        >
+          {labelHidden ? '\u00A0' : label}
+        </label>
+      )}
+      <div className="flex items-center gap-1">
+        <div className="flex-1 min-w-0">{children}</div>
+        {onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            className={cn(FIN_DELETE_SLOT, 'text-rose-500 hover:bg-rose-50 rounded-lg')}
+            aria-label="Remove"
+          >
+            <X size={14} />
+          </button>
+        ) : reserveDelete ? (
+          <div className={FIN_DELETE_SLOT} aria-hidden />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function FinActionCell({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <FinInputRow labelHidden label="\u00A0">
+      <div className={cn(FIN_FIELD_ROW, 'justify-center w-full')}>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          className={cn(
+            'flex items-center gap-1.5 text-xs font-bold',
+            disabled
+              ? 'text-gray-300 cursor-not-allowed'
+              : 'text-blue-600 hover:text-blue-700'
+          )}
+        >
+          {children}
+        </button>
+      </div>
+    </FinInputRow>
+  );
+}
+
+export default function BookingModal({
   isOpen, 
   onClose, 
   booking, 
@@ -65,6 +145,7 @@ export default function BookingModal({
     price: 0,
     extras: [],
     deposit: 0,
+    payments: [],
     paidLater1: 0,
     paidLater2: 0,
     bookingChannelBasis: 'bookingPrice' as const,
@@ -105,6 +186,7 @@ export default function BookingModal({
             : [],
         paidLater1: booking.paidLater1 ?? (booking as any).paidLater ?? 0,
         paidLater2: booking.paidLater2 ?? 0,
+        payments: paymentsFromLegacy(booking.paidLater1, booking.paidLater2, booking.payments),
         ...migrateCommissionFields(booking),
         comments: typeof (booking as any).comments === 'string' 
           ? (booking as any).comments 
@@ -158,11 +240,12 @@ export default function BookingModal({
   // Status calculation logic
   const totalExtras = (formData.extras || []).reduce((sum, e) => sum + (e.amount || 0), 0);
   const total = (formData.price || 0) + totalExtras;
-  const remaining = total - (formData.deposit || 0) - (formData.paidLater1 || 0) - (formData.paidLater2 || 0);
-  
+  const collected = getCollectedAmount(formData);
+  const remaining = total - collected;
+
   let calculatedStatus: BookingStatus = 'Unpaid';
   if (remaining <= 0 && total > 0) calculatedStatus = 'Paid';
-  else if ((formData.deposit || 0) > 0 || (formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) calculatedStatus = 'Partial';
+  else if (collected > 0) calculatedStatus = 'Partial';
 
   const nights = calculateNights(formData.checkIn || '', formData.checkOut || '');
 
@@ -225,13 +308,15 @@ export default function BookingModal({
       return;
     }
 
-    if (isAdmin && ((formData.paidLater1 || 0) > 0 || (formData.paidLater2 || 0) > 0) && !formData.paymentChannel?.trim()) {
-      setError('Please select a payment channel when Paid Later amounts are entered.');
+    if (isAdmin && getLaterPaymentsTotal(formData) > 0 && !formData.paymentChannel?.trim()) {
+      setError('Please select a payment channel when payment amounts are entered.');
       return;
     }
 
     // Filter out empty extras
     const filteredExtras = (formData.extras || []).filter(e => e.label || e.amount > 0);
+    const filteredPayments = (formData.payments || []).filter(amount => amount > 0);
+    const legacyPaidLater = syncLegacyPaidLaterFields(filteredPayments);
 
     if (formData.roomId === 'ALL') {
       // Check ALL rooms for overlaps
@@ -273,6 +358,8 @@ export default function BookingModal({
       bookingChannelBasis: formData.bookingChannelBasis || 'bookingPrice',
       paymentChannelBasis: formData.paymentChannelBasis || 'bookingPrice',
       extras: filteredExtras,
+      payments: filteredPayments,
+      ...legacyPaidLater,
       status: calculatedStatus,
       totalGuests: (formData.adults || 0) + (formData.kids || 0),
       updatedAt: new Date().toISOString(),
@@ -419,6 +506,26 @@ export default function BookingModal({
     setFormData({
       ...formData,
       extras: (formData.extras || []).filter((_, i) => i !== index)
+    });
+  };
+
+  const addPayment = () => {
+    setFormData(prev => ({
+      ...prev,
+      payments: [...(prev.payments || []), 0],
+    }));
+  };
+
+  const updatePayment = (index: number, value: number) => {
+    const newPayments = [...(formData.payments || [])];
+    newPayments[index] = value;
+    setFormData({ ...formData, payments: newPayments });
+  };
+
+  const removePayment = (index: number) => {
+    setFormData({
+      ...formData,
+      payments: (formData.payments || []).filter((_, i) => i !== index),
     });
   };
 
@@ -601,9 +708,15 @@ export default function BookingModal({
               <button
                 type="button"
                 onClick={() => setShowBedConfig(v => !v)}
-                className="text-xs text-gray-400 hover:text-gray-600 font-bold transition-colors"
+                className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
               >
-                {showBedConfig ? '▾ Hide bed config' : '▸ Bed configuration'}
+                {showBedConfig ? (
+                  <>▾ Hide bed configuration</>
+                ) : (
+                  <>
+                    <Plus size={12} /> Add bed configuration
+                  </>
+                )}
               </button>
               {showBedConfig && (
                 <div className="grid grid-cols-2 gap-3 mt-2">
@@ -845,117 +958,97 @@ export default function BookingModal({
             </div>
 
             <div className="space-y-4">
-              {/* Row 1: Booking Price | Deposit */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Booking Price</label>
-                  <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <CurrencyInput
-                      value={formData.price ?? 0}
-                      onChange={v => setFormData({ ...formData, price: v })}
-                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
-                    />
-                  </div>
-                  {nights > 0 && (formData.price || 0) > 0 && (
-                    <span className="block text-right text-xs font-mono text-gray-400 mt-1">
-                      ≈ €{((formData.price || 0) / nights).toFixed(2)} / night
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Deposit</label>
-                  <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <CurrencyInput
-                      value={formData.deposit ?? 0}
-                      onChange={v => setFormData({ ...formData, deposit: v })}
-                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Extras Section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase">Extras</label>
-                </div>
-                
-                {(formData.extras || []).map((extra, idx) => (
-                  <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
-                    <input 
-                      className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none bg-white"
-                      placeholder="e.g. Airport transfer"
-                      value={extra.label || ''}
-                      onChange={e => updateExtra(idx, 'label', e.target.value)}
-                    />
-                    <div className="relative w-32 font-mono text-sm">
-                      <span className="absolute left-3 top-2 text-gray-400 text-xs">€</span>
+              {/* Pricing */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-600">Pricing</h4>
+                <div className={FIN_GRID}>
+                  <FinInputRow label="Booking Price">
+                    <div className="relative font-mono text-sm">
+                      <span className="absolute left-3 top-2.5 text-gray-400">€</span>
                       <CurrencyInput
-                        value={extra.amount ?? 0}
-                        onChange={v => updateExtra(idx, 'amount' as any, v)}
-                        className="pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                        value={formData.price ?? 0}
+                        onChange={v => setFormData({ ...formData, price: v })}
+                        className={cn(FIN_FIELD, 'pl-8 pr-3')}
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeExtra(idx)}
-                      className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+                  </FinInputRow>
+                  <FinActionCell
+                    onClick={addExtra}
+                    disabled={(formData.extras || []).length >= 5}
+                  >
+                    <Plus size={12} /> Add Extra
+                  </FinActionCell>
+                  {nights > 0 && (formData.price || 0) > 0 && (
+                    <>
+                      <span className="block text-right text-xs font-mono text-gray-400 -mt-1">
+                        ≈ €{((formData.price || 0) / nights).toFixed(2)} / night
+                      </span>
+                      <div aria-hidden />
+                    </>
+                  )}
 
-                {(() => {
-                  const atLimit = (formData.extras || []).length >= 5;
-                  return (
-                    <div className="flex items-center gap-2 mt-1">
-                      <button
-                        type="button"
-                        onClick={addExtra}
-                        disabled={atLimit}
-                        className={cn(
-                          "flex items-center gap-1.5 text-[10px] font-bold",
-                          atLimit
-                            ? "text-gray-300 cursor-not-allowed"
-                            : "text-blue-600 hover:text-blue-700"
-                        )}
-                      >
-                        <Plus size={12} /> Add Extra
-                      </button>
-                      {atLimit && (
-                        <span className="text-[10px] text-gray-400 italic">Maximum 5 extras reached</span>
-                      )}
-                    </div>
-                  );
-                })()}
+                  {(formData.extras || []).map((extra, idx) => (
+                    <React.Fragment key={idx}>
+                      <FinInputRow>
+                        <div className="relative font-mono text-sm">
+                          <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                          <CurrencyInput
+                            value={extra.amount ?? 0}
+                            onChange={v => updateExtra(idx, 'amount' as any, v)}
+                            className={cn(FIN_FIELD, 'pl-8 pr-3')}
+                          />
+                        </div>
+                      </FinInputRow>
+                      <FinInputRow onDelete={() => removeExtra(idx)}>
+                        <input
+                          className={cn(FIN_FIELD, 'px-3 outline-none')}
+                          placeholder="e.g. Airport transfer"
+                          value={extra.label || ''}
+                          onChange={e => updateExtra(idx, 'label', e.target.value)}
+                        />
+                      </FinInputRow>
+                    </React.Fragment>
+                  ))}
+                </div>
+                {(formData.extras || []).length >= 5 && (
+                  <span className="text-[10px] text-gray-400 italic">Maximum 5 extras reached</span>
+                )}
               </div>
 
-              {/* Paid Later Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 1</label>
-                  <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <CurrencyInput
-                      value={formData.paidLater1 ?? 0}
-                      onChange={v => setFormData({ ...formData, paidLater1: v })}
-                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Paid Later 2</label>
-                  <div className="relative font-mono text-sm">
-                    <span className="absolute left-3 top-2.5 text-gray-400">€</span>
-                    <CurrencyInput
-                      value={formData.paidLater2 ?? 0}
-                      onChange={v => setFormData({ ...formData, paidLater2: v })}
-                      className="pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl bg-white"
-                    />
-                  </div>
+              {/* Payments */}
+              <div className="space-y-3 pt-3 border-t border-slate-200">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-600">Payments</h4>
+                <div className={FIN_GRID}>
+                  <FinInputRow label="Deposit">
+                    <div className="relative font-mono text-sm">
+                      <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                      <CurrencyInput
+                        value={formData.deposit ?? 0}
+                        onChange={v => setFormData({ ...formData, deposit: v })}
+                        className={cn(FIN_FIELD, 'pl-8 pr-3')}
+                      />
+                    </div>
+                  </FinInputRow>
+                  <FinActionCell onClick={addPayment}>
+                    <Plus size={12} /> Add Payment
+                  </FinActionCell>
+
+                  {(formData.payments || []).map((amount, idx) => (
+                    <FinInputRow
+                      key={idx}
+                      label={`Payment ${idx + 1}`}
+                      onDelete={() => removePayment(idx)}
+                    >
+                      <div className="relative font-mono text-sm">
+                        <span className="absolute left-3 top-2.5 text-gray-400">€</span>
+                        <CurrencyInput
+                          value={amount ?? 0}
+                          onChange={v => updatePayment(idx, v)}
+                          className={cn(FIN_FIELD, 'pl-8 pr-3')}
+                        />
+                      </div>
+                    </FinInputRow>
+                  ))}
                 </div>
               </div>
 

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { addYears, subYears, addMonths, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, Eye, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -12,9 +12,11 @@ interface HeaderProps {
   compact?: boolean;
   showSummary?: boolean;
   showTeamRoster?: boolean;
+  showHousekeepingStatus?: boolean;
   onCompactCalendarChange?: (compact: boolean) => void;
   onShowSummaryChange?: (show: boolean) => void;
   onShowTeamRosterChange?: (show: boolean) => void;
+  onShowHousekeepingStatusChange?: (show: boolean) => void;
   onOpenBookingList?: () => void;
 }
 
@@ -23,26 +25,20 @@ export default function Header({
   setViewStartDate,
   onScrollToDate,
   visibleMonth,
-  compact = false,
+  compact = true,
   showSummary = false,
   showTeamRoster = false,
+  showHousekeepingStatus = false,
   onCompactCalendarChange,
   onShowSummaryChange,
   onShowTeamRosterChange,
+  onShowHousekeepingStatusChange,
   onOpenBookingList,
 }: HeaderProps) {
   const [isViewOpen, setIsViewOpen] = useState(false);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
-        setIsViewOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const closeViewMenu = () => setIsViewOpen(false);
+
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const viewYear = viewStartDate.getFullYear();
   const layout = calendarLayoutClasses(compact);
@@ -125,22 +121,39 @@ export default function Header({
 
         <div className="flex items-center gap-2">
           {onCompactCalendarChange && (
-            <div className="relative" ref={viewMenuRef}>
+            <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsViewOpen(!isViewOpen)}
                 className={cn(
                   'flex items-center gap-1.5 font-bold border border-gray-400 rounded hover:bg-gray-200 active:scale-95 transition-transform text-gray-700',
-                  layout.todayBtn
+                  layout.todayBtn,
+                  isViewOpen && 'relative z-[201]'
                 )}
-                title="Calendar display"
-                aria-label="Calendar display"
+                title="Calendar View"
+                aria-label="Calendar View"
+                aria-expanded={isViewOpen}
+                aria-haspopup="dialog"
               >
                 <Eye size={layout.navIconSize} />
               </button>
 
               {isViewOpen && (
-                <div className="absolute right-0 mt-2 w-52 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100">
+                <>
+                  <div
+                    className="fixed inset-0 z-[199]"
+                    aria-hidden="true"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      closeViewMenu();
+                    }}
+                  />
+                  <div
+                    role="dialog"
+                    aria-label="Calendar View"
+                    className="absolute right-0 mt-2 w-52 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100"
+                  >
                   <div className="px-3 py-2 border-b border-gray-50">
                     <span className="text-xs font-bold text-gray-500">Calendar View</span>
                   </div>
@@ -176,8 +189,20 @@ export default function Header({
                         <span className="text-xs font-medium text-gray-700">Staff & Volunteers</span>
                       </label>
                     )}
+                    {onShowHousekeepingStatusChange && (
+                      <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showHousekeepingStatus}
+                          onChange={(e) => onShowHousekeepingStatusChange(e.target.checked)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                        />
+                        <span className="text-xs font-medium text-gray-700">Housekeeping status</span>
+                      </label>
+                    )}
                   </div>
                 </div>
+                </>
               )}
             </div>
           )}

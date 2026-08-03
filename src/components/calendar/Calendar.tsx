@@ -100,6 +100,7 @@ interface CalendarGridProps {
   compact: boolean;
   showSummary: boolean;
   showTeamRoster: boolean;
+  showHousekeepingStatus: boolean;
   onAddBooking: (roomId?: string, date?: Date) => void;
   onEditRoom: (room: Room) => void;
   onEditBooking: (booking: Booking) => void;
@@ -137,6 +138,7 @@ const CalendarGrid = memo(function CalendarGrid({
   compact,
   showSummary,
   showTeamRoster,
+  showHousekeepingStatus,
   onAddBooking,
   onEditRoom,
   onEditBooking,
@@ -216,7 +218,7 @@ const CalendarGrid = memo(function CalendarGrid({
                     occupiedDates={occupiedDatesByRoom.get(room.id) ?? EMPTY_OCCUPIED_DATES}
                     bookingTypes={bookingTypes}
                     calendarDisplaySettings={calendarDisplaySettings}
-                    housekeepingStatus={housekeepingByRoom.get(room.id)}
+                    housekeepingStatus={showHousekeepingStatus ? housekeepingByRoom.get(room.id) : undefined}
                     onEditRoom={onEditRoom}
                     onEditBooking={onEditBooking}
                     onAddBooking={onAddBooking}
@@ -259,10 +261,12 @@ interface CalendarProps {
   housekeeping?: HousekeepingRecord[];
   showSummary?: boolean;
   showTeamRoster?: boolean;
+  showHousekeepingStatus?: boolean;
   compact?: boolean;
   onCompactCalendarChange?: (compact: boolean) => void;
   onShowSummaryChange?: (show: boolean) => void;
   onShowTeamRosterChange?: (show: boolean) => void;
+  onShowHousekeepingStatusChange?: (show: boolean) => void;
   onOpenBookingList?: () => void;
   onOpenRetreatSettings?: (options: SettingsOpenOptions) => void;
 }
@@ -273,10 +277,12 @@ export default function Calendar({
   housekeeping: propHousekeeping,
   showSummary = false,
   showTeamRoster = false,
-  compact = false,
+  showHousekeepingStatus = false,
+  compact = true,
   onCompactCalendarChange,
   onShowSummaryChange,
   onShowTeamRosterChange,
+  onShowHousekeepingStatusChange,
   onOpenBookingList,
   onOpenRetreatSettings,
 }: CalendarProps) {
@@ -573,6 +579,8 @@ export default function Calendar({
         onCompactCalendarChange={onCompactCalendarChange}
         onShowSummaryChange={onShowSummaryChange}
         onShowTeamRosterChange={onShowTeamRosterChange}
+        onShowHousekeepingStatusChange={onShowHousekeepingStatusChange}
+        showHousekeepingStatus={showHousekeepingStatus}
         onOpenBookingList={isAdmin ? onOpenBookingList : undefined}
       />
 
@@ -600,6 +608,7 @@ export default function Calendar({
         compact={compact}
         showSummary={showSummary}
         showTeamRoster={showTeamRoster}
+        showHousekeepingStatus={showHousekeepingStatus}
         onAddBooking={handleAddBooking}
         onEditRoom={handleEditRoom}
         onEditBooking={handleEditBooking}

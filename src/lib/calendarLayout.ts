@@ -1,6 +1,7 @@
 export const COMPACT_CALENDAR_STORAGE_KEY = 'pachamama-calendar-compact';
 export const SHOW_SUMMARY_STORAGE_KEY = 'pachamama-calendar-show-summary';
 export const SHOW_TEAM_ROSTER_STORAGE_KEY = 'pachamama-calendar-show-team-roster';
+export const SHOW_HOUSEKEEPING_STATUS_STORAGE_KEY = 'pachamama-calendar-show-housekeeping-status';
 
 function loadBooleanPreference(key: string, defaultValue = false): boolean {
   try {
@@ -20,20 +21,9 @@ function saveBooleanPreference(key: string, value: boolean): void {
   }
 }
 
-/** false = default density; true = extra-compact (checkbox on) */
+/** true = compact (default); false = standard row heights */
 export function loadCompactCalendarPreference(): boolean {
-  try {
-    const stored = localStorage.getItem(COMPACT_CALENDAR_STORAGE_KEY);
-    if (stored === null) return false;
-    // Legacy: "true" was the former compact tier, which is now the default (false).
-    if (stored === 'true') {
-      localStorage.setItem(COMPACT_CALENDAR_STORAGE_KEY, 'false');
-      return false;
-    }
-    return stored === 'true';
-  } catch {
-    return false;
-  }
+  return loadBooleanPreference(COMPACT_CALENDAR_STORAGE_KEY, true);
 }
 
 export function saveCompactCalendarPreference(compact: boolean): void {
@@ -56,6 +46,14 @@ export function saveShowTeamRosterPreference(show: boolean): void {
   saveBooleanPreference(SHOW_TEAM_ROSTER_STORAGE_KEY, show);
 }
 
+export function loadShowHousekeepingStatusPreference(): boolean {
+  return loadBooleanPreference(SHOW_HOUSEKEEPING_STATUS_STORAGE_KEY, false);
+}
+
+export function saveShowHousekeepingStatusPreference(show: boolean): void {
+  saveBooleanPreference(SHOW_HOUSEKEEPING_STATUS_STORAGE_KEY, show);
+}
+
 export function housekeepingStatusLabel(status: string): string {
   if (status === 'dirty') return 'Dirty';
   if (status === 'cleaned') return 'Cleaned';
@@ -63,7 +61,7 @@ export function housekeepingStatusLabel(status: string): string {
   return 'Clean';
 }
 
-/** compact=true → extra-compact tier; compact=false → default (former compact sizing) */
+/** compact=true → compact tier; compact=false → taller rows */
 export function calendarLayoutClasses(compact: boolean) {
   return {
     appHeader: compact ? 'h-10' : 'h-11',
@@ -88,7 +86,7 @@ export function calendarLayoutClasses(compact: boolean) {
     roomRow: compact ? 'h-8' : 'h-10',
     roomName: compact ? 'text-[10px]' : 'text-[11px]',
     roomLabelPad: compact ? 'p-0.5' : 'p-1',
-    roomNameMl: compact ? 'ml-2.5' : 'ml-3',
+    roomNameMl: 'pl-4',
     bookingBar: compact ? 'h-6 top-0.5' : 'h-8 top-1',
     bookingBarText: compact ? 'text-[8px]' : 'text-[9px]',
     bookingBarContentPad: compact ? 'pb-0' : 'pb-0.5',

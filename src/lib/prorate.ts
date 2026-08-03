@@ -11,6 +11,7 @@ export interface StayFinancials {
   price: number;
   extras?: { amount: number }[];
   deposit: number;
+  payments?: number[];
   paidLater1: number;
   paidLater2: number;
 }
@@ -87,11 +88,12 @@ export function prorateAmount(
   return amount * prorateRatio(checkIn, checkOut, periodStart, periodEnd);
 }
 
+import { getCollectedAmount } from '@/lib/bookingFinancials';
+
 export function fullStayFinancials(financials: StayFinancials): ProratedStayAmounts {
   const extrasTotal = (financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
   const revenue = (financials.price || 0) + extrasTotal;
-  const collected =
-    (financials.deposit || 0) + (financials.paidLater1 || 0) + (financials.paidLater2 || 0);
+  const collected = getCollectedAmount(financials);
   return {
     revenue,
     collected,

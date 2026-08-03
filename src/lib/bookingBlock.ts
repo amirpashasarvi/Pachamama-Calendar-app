@@ -38,6 +38,7 @@ export function buildBlockedBookingPayload(
     price: 0,
     extras: [],
     deposit: 0,
+    payments: [],
     paidLater1: 0,
     paidLater2: 0,
     bookingChannelBasis: 'bookingPrice',

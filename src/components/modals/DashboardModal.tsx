@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, startTransition } from 'react';
 import { motion } from 'motion/react';
-import { X, DollarSign, ChevronLeft, ChevronRight, Save, AlertCircle, Plus, Pencil, Trash2 } from 'lucide-react';
+import { X, DollarSign, ChevronLeft, ChevronRight, Save, AlertCircle, Plus, Pencil, Trash2, Receipt } from 'lucide-react';
 import DatePicker from '@/components/ui/DatePicker';
 import Modal from '@/components/ui/Modal';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
@@ -456,14 +456,14 @@ function ExpensesReportSection({
   monthlyExpense,
   expenseSpreads,
   recurringExpenses,
-  onAddExpenses,
+  onOpenExpenseEntry,
 }: {
   monthKey: string | null;
   expenseCategories: ConfigOption[];
   monthlyExpense?: MonthlyExpense;
   expenseSpreads: ExpenseSpread[];
   recurringExpenses: RecurringExpense[];
-  onAddExpenses?: () => void;
+  onOpenExpenseEntry?: () => void;
 }) {
   if (!monthKey) {
     return (
@@ -531,15 +531,15 @@ function ExpensesReportSection({
         {!hasData ? (
           <div className="py-10 text-center">
             <p className="text-sm font-bold text-gray-600">No expenses recorded for this month</p>
-            <p className="text-xs text-gray-400 mt-1">Use Add expenses to enter totals from Spendee.</p>
-            {onAddExpenses && expenseCategories.length > 0 && (
+            <p className="text-xs text-gray-400 mt-1">Enter totals from Spendee when you&apos;re ready.</p>
+            {onOpenExpenseEntry && expenseCategories.length > 0 && (
               <button
                 type="button"
-                onClick={onAddExpenses}
+                onClick={onOpenExpenseEntry}
                 className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800"
               >
                 <Plus size={14} />
-                Add expenses
+                Add expense
               </button>
             )}
           </div>
@@ -594,6 +594,19 @@ function ExpensesReportSection({
             <div className="pt-3 border-t border-gray-100">
               <MetricRow label="Total expenses" value={formatCurrency(total)} />
             </div>
+
+            {onOpenExpenseEntry && expenseCategories.length > 0 && (
+              <div className="pt-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={onOpenExpenseEntry}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800"
+                >
+                  <Pencil size={14} />
+                  Edit expenses
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -634,7 +647,7 @@ function ExpensesEntryPanel({
             tab === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           )}
         >
-          This month
+          Current Month
         </button>
         <button
           type="button"
@@ -644,7 +657,7 @@ function ExpensesEntryPanel({
             tab === 'spread' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           )}
         >
-          Spread
+          Spread Across Months
         </button>
         <button
           type="button"
@@ -654,7 +667,7 @@ function ExpensesEntryPanel({
             tab === 'recurring' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           )}
         >
-          Recurring
+          Repeats Monthly
         </button>
       </div>
 
@@ -702,27 +715,41 @@ function ExpensesEntryForm({
   onClose: () => void;
 }) {
   const { profile } = useAuth();
-  const savedAmounts = monthlyExpense?.amounts ?? {};
-  const savedLabels = monthlyExpense?.categoryLabels;
-  const savedNote = monthlyExpense?.note;
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const categoryIds = useMemo(
+    () => expenseCategories.map(c => c.id).join('\0'),
+    [expenseCategories],
+  );
+
+  const persistedSnapshot = useMemo(
+    () => JSON.stringify({
+      monthKey,
+      amounts: monthlyExpense?.amounts ?? null,
+      note: monthlyExpense?.note ?? '',
+      categoryIds,
+    }),
+    [monthKey, monthlyExpense?.amounts, monthlyExpense?.note, categoryIds],
+  );
+
   useEffect(() => {
     const next: Record<string, string> = {};
     for (const category of expenseCategories) {
-      const value = savedAmounts[category.id];
+      const value = monthlyExpense?.amounts?.[category.id];
       next[category.id] = value != null && value !== 0 ? String(value) : '';
     }
     setAmounts(next);
-    setNote(savedNote || '');
+    setNote(monthlyExpense?.note || '');
     setSaveError(null);
     setSaveSuccess(false);
-  }, [monthKey, expenseCategories, savedAmounts, savedNote]);
+  }, [persistedSnapshot]);
 
+  const savedAmounts = monthlyExpense?.amounts ?? {};
+  const savedLabels = monthlyExpense?.categoryLabels;
   const monthLabel = format(parseISO(`${monthKey}-01`), 'MMMM yyyy');
   const activeCategoryIds = new Set(expenseCategories.map(c => c.id));
   const archivedEntries = Object.entries(savedAmounts)
@@ -906,6 +933,11 @@ function ExpensesSpreadForm({
     [expenseSpreads, year, categoryId],
   );
 
+  const spreadSnapshot = useMemo(() => {
+    if (!existingSpread) return `${categoryId}|${year}|new`;
+    return `${categoryId}|${year}|${existingSpread.totalAmount}|${existingSpread.note ?? ''}|${existingSpread.months.join(',')}`;
+  }, [existingSpread, categoryId, year]);
+
   useEffect(() => {
     if (existingSpread) {
       setTotal(String(existingSpread.totalAmount));
@@ -917,7 +949,7 @@ function ExpensesSpreadForm({
       setSelectedMonths(monthsInYear(year));
     }
     setSaveError(null);
-  }, [existingSpread, categoryId]);
+  }, [spreadSnapshot, year]);
 
   const monthCount = selectedMonths.length;
   const parsedTotal = total.trim() === '' ? 0 : Number(total);
@@ -1492,14 +1524,15 @@ function ExpensesRecurringForm({
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string }[] = [
+const REPORT_TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'expenses', label: 'Expenses' },
   { id: 'retreats', label: 'Retreats' },
   { id: 'coliving', label: 'Coliving' },
   { id: 'venue', label: 'Venue Hire' },
   { id: 'exchange', label: 'Home Exchange' },
 ];
+
+const EXPENSES_TAB: { id: Tab; label: string } = { id: 'expenses', label: 'Expenses' };
 
 export default function DashboardModal(props: DashboardModalProps) {
   if (!props.isOpen) return null;
@@ -1797,9 +1830,9 @@ function DashboardModalContent({
 
           {/* Tabs */}
           <div className="bg-white border-b shrink-0">
-            <div className="flex items-center justify-between px-4 sm:px-8 gap-3 min-h-[45px]">
-              <div className="flex overflow-x-auto min-w-0">
-                {TABS.map(t => (
+            <div className="flex items-center px-4 sm:px-8 gap-3 min-h-[45px]">
+              <div className="flex overflow-x-auto min-w-0 flex-1">
+                {REPORT_TABS.map(t => (
                   <button
                     key={t.id}
                     type="button"
@@ -1815,22 +1848,21 @@ function DashboardModalContent({
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                disabled={!monthKey || expenseCategories.length === 0}
-                onClick={openExpenseEntry}
-                title={!monthKey ? 'Select a month first' : undefined}
-                className={cn(
-                  'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
-                  monthKey && expenseCategories.length > 0
-                    ? 'bg-black text-white border-black hover:bg-gray-800'
-                    : 'bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed'
-                )}
-              >
-                {hasExpenseData ? <Pencil size={13} /> : <Plus size={13} />}
-                <span className="hidden sm:inline">{hasExpenseData ? 'Edit expenses' : 'Add expenses'}</span>
-                <span className="sm:hidden">{hasExpenseData ? 'Edit' : 'Add'}</span>
-              </button>
+              <div className="shrink-0 pl-2 sm:pl-3 ml-auto sm:ml-1 sm:border-l sm:border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => startTransition(() => setTab(EXPENSES_TAB.id))}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
+                    tab === EXPENSES_TAB.id
+                      ? 'bg-black text-white border-black shadow-sm'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                  )}
+                >
+                  <Receipt size={14} />
+                  {EXPENSES_TAB.label}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1843,7 +1875,7 @@ function DashboardModalContent({
                 monthlyExpense={currentMonthlyExpense}
                 expenseSpreads={expenseSpreads}
                 recurringExpenses={recurringExpenses}
-                onAddExpenses={monthKey ? openExpenseEntry : undefined}
+                onOpenExpenseEntry={monthKey && expenseCategories.length > 0 ? openExpenseEntry : undefined}
               />
             ) : (
               <StatsTabContent

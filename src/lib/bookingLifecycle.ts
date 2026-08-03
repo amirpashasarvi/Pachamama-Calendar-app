@@ -11,6 +11,7 @@ import {
 } from '@/lib/prorate';
 
 export type { LifecycleStatus };
+export { getPaymentEntries, getCollectedAmount } from '@/lib/bookingFinancials';
 
 export function getLifecycleStatus(item: { lifecycleStatus?: LifecycleStatus }): LifecycleStatus {
   return item.lifecycleStatus ?? 'active';
@@ -23,10 +24,6 @@ export function isActiveLifecycle(item: { lifecycleStatus?: LifecycleStatus; del
 
 export function isCancelledLifecycle(item: { lifecycleStatus?: LifecycleStatus }): boolean {
   return getLifecycleStatus(item) === 'cancelled';
-}
-
-export function getCollectedAmount(financials: StayFinancials): number {
-  return (financials.deposit || 0) + (financials.paidLater1 || 0) + (financials.paidLater2 || 0);
 }
 
 export function getFullRevenue(financials: StayFinancials): number {

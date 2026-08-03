@@ -62,6 +62,8 @@ export interface Booking {
   price: number;
   extras: { label: string; amount: number }[];
   deposit: number;
+  /** Additional payment amounts (excludes deposit). Legacy paidLater1/2 kept in sync on save. */
+  payments?: number[];
   paidLater1: number;
   paidLater2: number;
   bookingChannelBasis?: 'bookingPrice' | 'deposit' | 'custom';
