@@ -61,6 +61,11 @@ export default function Header({
     active ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'
   );
 
+  const calToolBtn = cn(
+    'inline-flex items-center gap-1 font-bold border border-gray-400 rounded hover:bg-gray-200 active:scale-95 transition-transform text-gray-700 whitespace-nowrap shrink-0',
+    layout.todayBtn,
+  );
+
   return (
     <div className="bg-[#f0f2f5] border-b print:hidden">
       <div className={cn('flex items-center justify-between px-4', layout.calHeaderRow)}>
@@ -125,17 +130,14 @@ export default function Header({
               <button
                 type="button"
                 onClick={() => setIsViewOpen(!isViewOpen)}
-                className={cn(
-                  'flex items-center gap-1.5 font-bold border border-gray-400 rounded hover:bg-gray-200 active:scale-95 transition-transform text-gray-700',
-                  layout.todayBtn,
-                  isViewOpen && 'relative z-[201]'
-                )}
+                className={cn(calToolBtn, isViewOpen && 'relative z-[201]')}
                 title="Calendar View"
                 aria-label="Calendar View"
                 aria-expanded={isViewOpen}
                 aria-haspopup="dialog"
               >
                 <Eye size={layout.navIconSize} />
+                <span>Calendar View</span>
               </button>
 
               {isViewOpen && (
@@ -211,15 +213,12 @@ export default function Header({
             <button
               type="button"
               onClick={onOpenBookingList}
-              className={cn(
-                'flex items-center gap-1.5 font-bold border border-gray-400 rounded hover:bg-gray-200 active:scale-95 transition-transform text-gray-700',
-                layout.todayBtn
-              )}
+              className={calToolBtn}
               title="Booking List"
               aria-label="Booking List"
             >
               <List size={layout.navIconSize} />
-              <span className="hidden sm:inline uppercase">List</span>
+              <span>Booking List</span>
             </button>
           )}
         </div>

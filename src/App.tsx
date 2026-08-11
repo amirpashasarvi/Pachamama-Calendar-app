@@ -1,7 +1,7 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal, Globe } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import SettingsModal, { type SettingsOpenOptions } from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
@@ -254,7 +254,7 @@ function AppContent() {
                   )}
                 </div>
 
-                {/* Desktop: Trash, Finances, Settings */}
+                {/* Desktop: Trash, Settings */}
                 <div className="hidden sm:flex items-center gap-1 border-l border-gray-100 ml-1 pl-2">
                   <button
                     type="button"
@@ -265,37 +265,30 @@ function AppContent() {
                   >
                     <Trash2 size={layout.appIconSize} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDashboardOpen(true)}
-                    className={iconBtn()}
-                    title="Finances"
-                    aria-label="Finances"
-                  >
-                    <DollarSign size={layout.appIconSize} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSettingsOpen(true)}
-                    className={iconBtn()}
-                    title="Settings"
-                    aria-label="Settings"
-                  >
-                    <Settings size={layout.appIconSize} />
-                  </button>
+                  <div className="border-l border-gray-100 ml-1 pl-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsSettingsOpen(true)}
+                      className={iconBtn()}
+                      title="Settings"
+                      aria-label="Settings"
+                    >
+                      <Settings size={layout.appIconSize} />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Booking Portal — separated, distinct styling from the calendar tools above */}
+                {/* Finances — same pill pattern as former Booking Portal entry */}
                 <button
                   type="button"
-                  onClick={() => setIsBookingPortalOpen(true)}
+                  onClick={() => setIsDashboardOpen(true)}
                   className="hidden sm:flex items-center gap-1.5 border-l border-gray-100 ml-2 pl-4 mr-0.5 text-gray-700 hover:text-black transition-colors"
-                  title="Booking Portal"
-                  aria-label="Booking Portal"
+                  title="Finances"
+                  aria-label="Finances"
                 >
                   <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-900 text-white text-xs font-bold hover:bg-black transition-colors">
-                    <Globe size={14} />
-                    Booking Portal
+                    <DollarSign size={14} />
+                    Finances
                   </span>
                 </button>
 
@@ -319,10 +312,10 @@ function AppContent() {
                       <div className="pt-1 pb-2">
                         <button
                           type="button"
-                          onClick={() => { setIsMoreMenuOpen(false); setIsBookingPortalOpen(true); }}
+                          onClick={() => { setIsMoreMenuOpen(false); setIsDashboardOpen(true); }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl transition-all font-bold text-xs"
                         >
-                          <Globe size={16} /> Booking Portal
+                          <DollarSign size={16} /> Finances
                         </button>
                       </div>
                       <div className="py-1 space-y-0.5 border-t border-gray-50">
@@ -333,13 +326,6 @@ function AppContent() {
                         >
                           <Trash2 size={16} className="text-gray-400" />
                           Recently Deleted
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setIsMoreMenuOpen(false); setIsDashboardOpen(true); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
-                        >
-                          <DollarSign size={16} className="text-gray-400" /> Finances
                         </button>
                         <button
                           type="button"
