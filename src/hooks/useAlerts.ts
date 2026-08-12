@@ -1,152 +1,102 @@
 import { useMemo } from 'react';
-import { Booking, Room, HousekeepingRecord } from '@/types';
+import { Booking, Room } from '@/types';
 import { isActiveLifecycle } from '@/lib/bookingLifecycle';
-import { getCollectedAmount } from '@/lib/bookingFinancials';
+import { getCollectedAmount, asExtrasList } from '@/lib/bookingFinancials';
 import {
-  isToday, isSameDay, addDays, startOfToday,
-  parseISO, differenceInDays,
+  startOfDay, startOfToday,
+  parseISO, differenceInDays, addDays,
 } from 'date-fns';
 import { isBlockedBooking } from '@/lib/bookingBlock';
-
-export interface ArrivalAlert {
-  bookingId: string;
-  guestName: string;
-  room: string;
-  checkIn: string;
-  isToday: boolean;
-  adults: number;
-  kids: number;
-  paymentStatus: string;
-}
 
 export interface BalanceAlert {
   bookingId: string;
   guestName: string;
   room: string;
   checkIn: string;
+  checkOut: string;
   remaining: number;
-  paymentStatus: string;
   daysUntilCheckIn: number;
-  isToday: boolean;
+  daysUntilCheckOut: number;
+  daysSinceCheckout: number;
 }
 
-export interface NoteAlert {
-  roomId: string;
-  roomName: string;
-  note: string;
-  updatedAt: string; // ISO
-  updatedByName?: string;
+function bookingRemaining(b: Booking): number {
+  const extrasTotal = asExtrasList(b.extras).reduce((s, e) => s + (e.amount || 0), 0);
+  const total = (b.price || 0) + extrasTotal;
+  const collected = getCollectedAmount(b);
+  return Math.max(0, total - collected);
 }
 
-export interface CommentAlert {
-  bookingId: string;
-  guestName: string;
-  room: string;
-  checkIn: string;
-  comment: string;
-  updatedAt: string; // ISO
-}
-
-export function useAlerts(
-  bookings: Booking[],
-  rooms: Room[],
-  housekeeping: HousekeepingRecord[] = [],
-) {
-
+export function useAlerts(bookings: Booking[], rooms: Room[]) {
   const activeBookings = useMemo(
     () => bookings.filter(b => isActiveLifecycle(b) && !isBlockedBooking(b)),
     [bookings],
   );
 
-  const arrivalAlerts = useMemo((): ArrivalAlert[] => {
+  /** Orange — balance due before checkout (from 10 days pre-arrival through last night of stay). */
+  const preDepartureBalanceAlerts = useMemo((): BalanceAlert[] => {
     const today = startOfToday();
-    const tomorrow = addDays(today, 1);
 
     return activeBookings
-      .filter(b => isToday(parseISO(b.checkIn)) || isSameDay(parseISO(b.checkIn), tomorrow))
-      .map(b => ({
-        bookingId: b.id,
-        guestName: b.guestName,
-        room: rooms.find(r => r.id === b.roomId)?.name || '',
-        checkIn: b.checkIn,
-        isToday: isToday(parseISO(b.checkIn)),
-        adults: b.adults || 0,
-        kids: b.kids || 0,
-        paymentStatus: b.status,
-      }))
-      .sort((a, b) => (a.isToday === b.isToday ? 0 : a.isToday ? -1 : 1));
-  }, [activeBookings, rooms]);
-
-  const balanceAlerts = useMemo((): BalanceAlert[] => {
-    const today = startOfToday();
-    const in7days = addDays(today, 7);
-
-    return activeBookings
-      .filter(b => {
-        const d = parseISO(b.checkIn);
-        return d >= today && d <= in7days && b.status !== 'Paid';
-      })
       .map(b => {
-        const extrasTotal = (b.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-        const total = (b.price || 0) + extrasTotal;
-        const collected = getCollectedAmount(b);
-        const checkInDate = parseISO(b.checkIn);
-        const now = startOfToday();
+        const checkIn = startOfDay(parseISO(b.checkIn));
+        const checkOut = startOfDay(parseISO(b.checkOut));
+        const remaining = bookingRemaining(b);
+        const windowStart = addDays(checkIn, -10);
+        const inWindow = today >= windowStart && today < checkOut;
+        if (!inWindow || remaining <= 0) return null;
+
         return {
           bookingId: b.id,
           guestName: b.guestName,
           room: rooms.find(r => r.id === b.roomId)?.name || '',
           checkIn: b.checkIn,
-          remaining: total - collected,
-          paymentStatus: b.status,
-          daysUntilCheckIn: differenceInDays(checkInDate, now),
-          isToday: isToday(checkInDate),
+          checkOut: b.checkOut,
+          remaining,
+          daysUntilCheckIn: differenceInDays(checkIn, today),
+          daysUntilCheckOut: differenceInDays(checkOut, today),
+          daysSinceCheckout: differenceInDays(today, checkOut),
         };
       })
-      .sort((a, b) => a.daysUntilCheckIn - b.daysUntilCheckIn);
+      .filter((a): a is BalanceAlert => a != null)
+      .sort((a, b) => {
+        const aInHouse = a.daysUntilCheckIn <= 0;
+        const bInHouse = b.daysUntilCheckIn <= 0;
+        if (aInHouse !== bInHouse) return aInHouse ? -1 : 1;
+        if (aInHouse) return a.daysUntilCheckOut - b.daysUntilCheckOut;
+        return a.daysUntilCheckIn - b.daysUntilCheckIn;
+      });
   }, [activeBookings, rooms]);
 
-  // Staff comments saved within the last 24 hours
-  const commentAlerts = useMemo((): CommentAlert[] => {
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  /** Red — balance still owed after checkout day. */
+  const postDepartureBalanceAlerts = useMemo((): BalanceAlert[] => {
+    const today = startOfToday();
+
     return activeBookings
-      .filter(b => b.comments && b.commentsUpdatedAt && new Date(b.commentsUpdatedAt).getTime() > cutoff)
-      .map(b => ({
-        bookingId: b.id,
-        guestName: b.guestName,
-        room: rooms.find(r => r.id === b.roomId)?.name || '',
-        checkIn: b.checkIn,
-        comment: b.comments,
-        updatedAt: b.commentsUpdatedAt!,
-      }))
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      .map(b => {
+        const checkIn = startOfDay(parseISO(b.checkIn));
+        const checkOut = startOfDay(parseISO(b.checkOut));
+        const remaining = bookingRemaining(b);
+        if (today < checkOut || remaining <= 0) return null;
+
+        return {
+          bookingId: b.id,
+          guestName: b.guestName,
+          room: rooms.find(r => r.id === b.roomId)?.name || '',
+          checkIn: b.checkIn,
+          checkOut: b.checkOut,
+          remaining,
+          daysUntilCheckIn: differenceInDays(checkIn, today),
+          daysUntilCheckOut: differenceInDays(checkOut, today),
+          daysSinceCheckout: differenceInDays(today, checkOut),
+        };
+      })
+      .filter((a): a is BalanceAlert => a != null)
+      .sort((a, b) => b.daysSinceCheckout - a.daysSinceCheckout);
   }, [activeBookings, rooms]);
 
-  // Notes added/updated within the last 24 hours
-  const noteAlerts = useMemo((): NoteAlert[] => {
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    return housekeeping
-      .filter(h => h.notes && h.notesUpdatedAt && new Date(h.notesUpdatedAt).getTime() > cutoff)
-      .map(h => ({
-        roomId: h.roomId,
-        roomName: rooms.find(r => r.id === h.roomId)?.name || h.roomId,
-        note: h.notes!,
-        updatedAt: h.notesUpdatedAt!,
-        updatedByName: h.history?.slice().reverse().find(e => e.action === 'Marked cleaned' || e.action === 'Reset to dirty' || e.action === 'Marked ready')?.userName,
-      }))
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [housekeeping, rooms]);
+  const criticalCount = postDepartureBalanceAlerts.length;
+  const totalCount = preDepartureBalanceAlerts.length + postDepartureBalanceAlerts.length;
 
-  // Badge count: today's arrivals + today's unpaid balances (deduped by booking ID)
-  const criticalCount = useMemo(() => {
-    const ids = new Set([
-      ...arrivalAlerts.filter(a => a.isToday).map(a => a.bookingId),
-      ...balanceAlerts.filter(a => a.isToday && a.paymentStatus === 'Unpaid').map(a => a.bookingId),
-    ]);
-    return ids.size;
-  }, [arrivalAlerts, balanceAlerts]);
-
-  const totalCount = arrivalAlerts.length + balanceAlerts.length + noteAlerts.length + commentAlerts.length;
-
-  return { arrivalAlerts, balanceAlerts, noteAlerts, commentAlerts, criticalCount, totalCount };
+  return { preDepartureBalanceAlerts, postDepartureBalanceAlerts, criticalCount, totalCount };
 }

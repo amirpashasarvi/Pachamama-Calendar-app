@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/Modal';
-import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField, ActivityLogEntry, Retreat, VenueHire } from '@/types';
+import { ConfigOption, UserRecord, UserRole, Room, RetreatType, TeamPosition, CalendarDisplaySettings, CalendarDisplayField, ActivityLogEntry, Retreat, VenueHire, Booking } from '@/types';
+import { buildRecoverableItems, daysRemaining, recoverableKey, restoreDeletedItem, RecoverableItem } from '@/lib/recoverDeleted';
 import RetreatProgramsPanel from '@/components/settings/RetreatProgramsPanel';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, writeBatch, setDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle, ClipboardList } from 'lucide-react';
+import { Trash2, Plus, Save, ChevronRight, ChevronLeft, Shield, User, Pencil, GripVertical, Layout, Check, AlertCircle, ClipboardList, RotateCcw, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { APP_COLOR_PALETTE } from '@/lib/colorPalette';
@@ -47,6 +48,10 @@ interface SettingsModalProps {
   retreatTypes: RetreatType[];
   retreats: Retreat[];
   venueHires: VenueHire[];
+  deletedBookings: Booking[];
+  deletedVenueHires: VenueHire[];
+  currentUserName?: string;
+  currentUserEmail?: string;
   teamPositions: TeamPosition[];
   displaySettings: CalendarDisplaySettings | null;
   openOptions?: SettingsOpenOptions | null;
@@ -85,7 +90,7 @@ function SortableItem({ id, children, disabled }: { id: string, children: React.
   );
 }
 
-export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, rooms, retreatTypes, retreats, venueHires, teamPositions, displaySettings, openOptions, onOpenOptionsHandled }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, rooms, retreatTypes, retreats, venueHires, deletedBookings, deletedVenueHires, currentUserName = '', currentUserEmail = '', teamPositions, displaySettings, openOptions, onOpenOptionsHandled }: SettingsModalProps) {
   const [view, setView] = useState<SettingsView>('menu');
   const [limitWarning, setLimitWarning] = useState<boolean>(false);
 
@@ -117,6 +122,81 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
 
   // Activity Log state
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const [restoringKey, setRestoringKey] = useState<string | null>(null);
+
+  const recoverableItems = useMemo(
+    () => buildRecoverableItems(deletedBookings, deletedVenueHires),
+    [deletedBookings, deletedVenueHires],
+  );
+
+  const recoverableKeys = useMemo(
+    () => new Set(recoverableItems.map(item => recoverableKey(item.entityType, item.id))),
+    [recoverableItems],
+  );
+
+  const handleRestore = async (item: RecoverableItem) => {
+    const key = recoverableKey(item.entityType, item.id);
+    setRestoringKey(key);
+    try {
+      await restoreDeletedItem({
+        collectionName: item.collectionName,
+        entityType: item.entityType,
+        id: item.id,
+        name: item.name,
+        userName: currentUserName,
+        userEmail: currentUserEmail,
+      });
+    } catch {
+      // handleFirestoreError already surfaced
+    } finally {
+      setRestoringKey(null);
+    }
+  };
+
+  const renderRecoverableRow = (item: RecoverableItem, compact = false) => {
+    const key = recoverableKey(item.entityType, item.id);
+    const remaining = daysRemaining(item.deletedAt);
+    const isExpiringSoon = remaining <= 5;
+    const isRestoring = restoringKey === key;
+
+    return (
+      <div
+        key={key}
+        className={cn(
+          'flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50',
+          compact ? 'p-2.5' : 'p-3',
+        )}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-bold text-gray-800 truncate">{item.name}</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded uppercase tracking-wide shrink-0">
+              {item.badge}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-xs text-gray-500 flex items-center gap-1">
+              <Calendar size={10} />
+              {item.dateRange}
+            </span>
+            <span className={cn('text-[10px] font-black', isExpiringSoon ? 'text-rose-500' : 'text-amber-500')}>
+              {remaining}d left
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={isRestoring}
+          onClick={() => handleRestore(item)}
+          className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shrink-0 disabled:opacity-50"
+        >
+          <RotateCcw size={12} />
+          {isRestoring ? 'Restoring…' : 'Restore'}
+        </button>
+      </div>
+    );
+  };
+
   useEffect(() => {
     if (view !== 'activity') return;
     const q = query(collection(db, 'activityLog'), orderBy('timestamp', 'desc'), limit(50));
@@ -434,7 +514,7 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
           <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
             <ChevronLeft size={20} className="text-gray-500" />
           </button>
-          <h3 className="font-bold text-lg">Calendar View</h3>
+          <h3 className="font-bold text-lg">Calendar bar fields</h3>
         </div>
 
         {/* Booking Bars Section */}
@@ -1280,8 +1360,8 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
-                <h4 className="font-bold text-gray-900">Calendar View</h4>
-                <p className="text-xs text-gray-500">Control which fields appear on booking bars</p>
+                <h4 className="font-bold text-gray-900">Calendar bar fields</h4>
+                <p className="text-xs text-gray-500">Control which fields appear on booking and staff bars</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
@@ -1293,8 +1373,8 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               className="w-full flex items-center justify-between p-4 bg-white border rounded-2xl hover:border-blue-200 hover:bg-blue-50 transition-all group"
             >
               <div className="text-left">
-                <h4 className="font-bold text-gray-900">Activity Log</h4>
-                <p className="text-xs text-gray-500">Recent actions by admins and staff</p>
+                <h4 className="font-bold text-gray-900">Activity & recovery</h4>
+                <p className="text-xs text-gray-500">Recent actions and restore deleted items</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </button>
@@ -1319,40 +1399,83 @@ export default function SettingsModal({ isOpen, onClose, bookingTypes, bookingCh
               </button>
               <div className="flex items-center gap-2">
                 <ClipboardList size={16} className="text-gray-400" />
-                <h3 className="font-bold text-gray-900">Activity Log</h3>
+                <h3 className="font-bold text-gray-900">Activity & recovery</h3>
               </div>
             </div>
-            {activityLog.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
-                <ClipboardList size={28} strokeWidth={1.5} />
-                <p className="text-sm font-bold">No activity yet</p>
-                <p className="text-xs text-center text-gray-400">Actions will appear here as bookings are created, updated, or deleted.</p>
-              </div>
-            ) : (
-              <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
-                {activityLog.map(entry => {
-                  let timeStr = '';
-                  try { timeStr = format(parseISO(entry.timestamp), 'dd MMM · HH:mm'); } catch { timeStr = entry.timestamp; }
-                  const actionColors: Record<string, string> = {
-                    created: 'bg-green-100 text-green-700',
-                    updated: 'bg-blue-100 text-blue-700',
-                    deleted: 'bg-rose-100 text-rose-700',
-                    restored: 'bg-amber-100 text-amber-700',
-                  };
-                  return (
-                    <div key={entry.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                      <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${actionColors[entry.action] ?? 'bg-gray-100 text-gray-500'}`}>
-                        {entry.action}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-800 leading-snug">{entry.summary}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{entry.userName || entry.userEmail} · {timeStr}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+
+            {recoverableItems.length > 0 && (
+              <div className="mb-5 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">
+                  Recoverable ({recoverableItems.length})
+                </p>
+                <p className="text-xs text-gray-400 px-1 pb-1">
+                  Deleted items stay recoverable for 30 days.
+                </p>
+                <div className="space-y-2">
+                  {recoverableItems.map(item => renderRecoverableRow(item))}
+                </div>
               </div>
             )}
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">
+                Recent activity
+              </p>
+              {activityLog.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
+                  <ClipboardList size={28} strokeWidth={1.5} />
+                  <p className="text-sm font-bold">No activity yet</p>
+                  <p className="text-xs text-center text-gray-400">Actions will appear here as bookings are created, updated, or deleted.</p>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-[50vh] overflow-y-auto pr-1">
+                  {activityLog.map(entry => {
+                    let timeStr = '';
+                    try { timeStr = format(parseISO(entry.timestamp), 'dd MMM · HH:mm'); } catch { timeStr = entry.timestamp; }
+                    const actionColors: Record<string, string> = {
+                      created: 'bg-green-100 text-green-700',
+                      updated: 'bg-blue-100 text-blue-700',
+                      deleted: 'bg-rose-100 text-rose-700',
+                      restored: 'bg-amber-100 text-amber-700',
+                    };
+                    const canRestore = entry.action === 'deleted'
+                      && recoverableKeys.has(recoverableKey(entry.entityType, entry.entityId));
+                    const restoreItem = canRestore
+                      ? recoverableItems.find(
+                        item => item.entityType === entry.entityType && item.id === entry.entityId,
+                      )
+                      : undefined;
+                    const restoreKey = restoreItem
+                      ? recoverableKey(restoreItem.entityType, restoreItem.id)
+                      : null;
+                    const isRestoring = restoreKey != null && restoringKey === restoreKey;
+
+                    return (
+                      <div key={entry.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                        <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${actionColors[entry.action] ?? 'bg-gray-100 text-gray-500'}`}>
+                          {entry.action}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-800 leading-snug">{entry.summary}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{entry.userName || entry.userEmail} · {timeStr}</p>
+                        </div>
+                        {restoreItem && (
+                          <button
+                            type="button"
+                            disabled={isRestoring}
+                            onClick={() => handleRestore(restoreItem)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 hover:bg-gray-50 transition-colors shrink-0 disabled:opacity-50"
+                          >
+                            <RotateCcw size={11} />
+                            {isRestoring ? '…' : 'Restore'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

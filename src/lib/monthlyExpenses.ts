@@ -1,36 +1,42 @@
 import { format } from 'date-fns';
 import { PeriodRange } from '@/lib/prorate';
 import { MonthlyExpense } from '@/types';
+import { asAmountMap } from '@/lib/expenseSpreads';
 
 export {
-  getCombinedAmounts,
-  sumCombinedExpenseAmounts,
   monthsInYear,
   splitAmountEvenly,
-  spreadDocId,
   formatSpreadMonthLabel,
   saveExpenseSpread,
-  findSpreadForCategoryYear,
+  deleteExpenseSpread,
   spreadHintForCategory,
+  spreadsForYear,
+  spreadsForMonth,
+  spreadAmountForMonth,
+  getSpreadAmountsForMonth,
+  spreadDisplayName,
+  asAmountMap,
 } from '@/lib/expenseSpreads';
 
 export function monthKeyFromRange(periodRange: PeriodRange | null): string | null {
   if (!periodRange) return null;
-  return format(periodRange.start, 'yyyy-MM');
+  const start = periodRange.start;
+  if (!(start instanceof Date) || Number.isNaN(start.getTime())) return null;
+  return format(start, 'yyyy-MM');
 }
 
 export function sumExpenseAmounts(amounts: Record<string, number> | undefined): number {
-  if (!amounts) return 0;
-  return Object.values(amounts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  return Object.values(asAmountMap(amounts)).reduce((sum, value) => sum + (Number(value) || 0), 0);
 }
 
 export function sumMonthlyExpenseTotal(
   expense?: MonthlyExpense | null,
   recurringByCategory?: Record<string, number>,
+  spreadByCategory?: Record<string, number>,
 ): number {
-  const manual = expense?.amounts || {};
-  const spread = expense?.spreadAmounts || {};
-  const recurring = recurringByCategory || {};
+  const manual = asAmountMap(expense?.amounts);
+  const recurring = asAmountMap(recurringByCategory);
+  const spread = asAmountMap(spreadByCategory);
   const ids = new Set([...Object.keys(manual), ...Object.keys(spread), ...Object.keys(recurring)]);
   let total = 0;
   for (const id of ids) {

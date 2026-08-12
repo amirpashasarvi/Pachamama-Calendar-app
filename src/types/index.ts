@@ -261,9 +261,9 @@ export interface MonthlyExpense {
   month: string; // YYYY-MM
   /** Manual totals for this month (e.g. from Spendee). */
   amounts: Record<string, number>;
-  /** Amounts allocated from annual/multi-month spreads. */
+  /** @deprecated Legacy per-month copies of spread shares; allocations are computed from expenseSpreads. */
   spreadAmounts?: Record<string, number>;
-  /** categoryId → expenseSpreads doc id */
+  /** @deprecated Legacy categoryId → expenseSpreads doc id. */
   spreadIds?: Record<string, string>;
   /** Snapshot of category names at save time — used when a category is later removed. */
   categoryLabels?: Record<string, string>;
@@ -275,6 +275,8 @@ export interface MonthlyExpense {
 /** Even split of one payment across multiple months (e.g. annual tax). */
 export interface ExpenseSpread {
   id: string;
+  /** Short label so several spreads in the same category can be told apart (e.g. "Company tax"). */
+  name?: string;
   year: number;
   categoryId: string;
   categoryLabel: string;

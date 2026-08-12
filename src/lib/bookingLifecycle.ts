@@ -10,6 +10,8 @@ import {
   ProratedStayAmounts,
 } from '@/lib/prorate';
 
+import { getCollectedAmount, extrasTotal } from '@/lib/bookingFinancials';
+
 export type { LifecycleStatus };
 export { getPaymentEntries, getCollectedAmount } from '@/lib/bookingFinancials';
 
@@ -27,8 +29,7 @@ export function isCancelledLifecycle(item: { lifecycleStatus?: LifecycleStatus }
 }
 
 export function getFullRevenue(financials: StayFinancials): number {
-  const extrasTotal = (financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-  return (financials.price || 0) + extrasTotal;
+  return (financials.price || 0) + extrasTotal(financials.extras);
 }
 
 /** Cancelled bookings count in a period by original check-in date. */

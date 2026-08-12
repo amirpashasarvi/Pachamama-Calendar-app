@@ -27,6 +27,7 @@ interface RoomRowProps {
   retreatBoundaryDates?: BoundaryDates;
   isAdmin?: boolean;
   compact?: boolean;
+  highlightedBookingId?: string | null;
 }
 
 const EMPTY_START = new Set<string>();
@@ -38,7 +39,7 @@ function RoomRow({
   housekeepingStatus, onEditRoom, onEditBooking, onAddBooking,
   venueHireTintDates = EMPTY_START, venueHireBoundaryDates = EMPTY_BOUNDARY,
   retreatTintDates = EMPTY_START, retreatBoundaryDates = EMPTY_BOUNDARY,
-  isAdmin = false, compact = false,
+  isAdmin = false, compact = false, highlightedBookingId = null,
 }: RoomRowProps) {
   const {
     attributes,
@@ -175,6 +176,7 @@ function RoomRow({
               calendarDisplaySettings={calendarDisplaySettings}
               onEditBooking={onEditBooking}
               compact={compact}
+              highlighted={highlightedBookingId === booking.id}
             />
           ))}
         </div>

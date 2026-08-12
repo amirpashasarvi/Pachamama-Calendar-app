@@ -1,3 +1,11 @@
+export function asExtrasList(extras: unknown): { amount?: number; label?: string }[] {
+  return Array.isArray(extras) ? extras : [];
+}
+
+export function extrasTotal(extras: unknown): number {
+  return asExtrasList(extras).reduce((sum, item) => sum + (Number(item?.amount) || 0), 0);
+}
+
 export function getPaymentEntries(financials: {
   payments?: number[];
   paidLater1?: number;

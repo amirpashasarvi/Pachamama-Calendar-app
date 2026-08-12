@@ -11,6 +11,34 @@
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
   }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}
+
+@keyframes guest-booking-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.85);
+    filter: brightness(1.08);
+  }
+  40% {
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.35);
+    filter: brightness(1.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    filter: brightness(1);
+  }
+}
+
+.guest-booking-highlight {
+  animation: guest-booking-pulse 2.2s ease-out;
+  outline: 2px solid rgb(245, 158, 11);
+  outline-offset: 1px;
+  z-index: 40 !important;
 }
 
 @media print {

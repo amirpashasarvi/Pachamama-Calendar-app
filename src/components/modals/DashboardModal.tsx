@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, startTransition } from 'react';
 import { motion } from 'motion/react';
-import { X, DollarSign, ChevronLeft, ChevronRight, Save, AlertCircle, Plus, Pencil, Trash2, Receipt } from 'lucide-react';
+import { X, DollarSign, ChevronLeft, ChevronRight, Save, AlertCircle, Pencil, Trash2, Receipt } from 'lucide-react';
 import DatePicker from '@/components/ui/DatePicker';
 import Modal from '@/components/ui/Modal';
 import { Booking, VenueHire, Room, ConfigOption } from '@/types';
@@ -9,13 +9,27 @@ import { useBooking } from '@/hooks/useBooking';
 import { useAuth } from '@/hooks/useAuth';
 import BookingModal from '@/components/modals/BookingModal';
 import VenueHireModal from '@/components/modals/VenueHireModal';
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency, safeFormatISO } from '@/lib/utils';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
 import { MONTH_LABELS, FILTER_CTRL, monthRange, isFullMonthRange } from '@/lib/reportPeriod';
-import { monthKeyFromRange, sumMonthlyExpenseTotal, sumExpenseAmounts, splitAmountEvenly, monthsInYear, saveExpenseSpread, findSpreadForCategoryYear, spreadHintForCategory, getCombinedAmounts, formatSpreadMonthLabel } from '@/lib/monthlyExpenses';
+import {
+  monthKeyFromRange,
+  sumMonthlyExpenseTotal,
+  sumExpenseAmounts,
+  splitAmountEvenly,
+  monthsInYear,
+  saveExpenseSpread,
+  deleteExpenseSpread,
+  spreadHintForCategory,
+  spreadsForYear,
+  spreadAmountForMonth,
+  getSpreadAmountsForMonth,
+  spreadDisplayName,
+  formatSpreadMonthLabel,
+  asAmountMap,
+} from '@/lib/monthlyExpenses';
 import {
   getRecurringAmountsForMonth,
-  getActiveSubscriptionsForMonth,
   recurringHintForCategory,
   formatMonthsOfYearLabel,
   monthsOfYearFromKeys,
@@ -123,7 +137,7 @@ function UpcomingTable({ items, showBalance = true }: { items: UpcomingItem[]; s
                 <span className="text-xs text-gray-500 font-bold">{item.roomName}</span>
               </td>
               <td className="py-2 pr-4">
-                <span className="text-xs font-bold text-gray-700">{format(parseISO(item.checkIn), 'dd MMM')}</span>
+                <span className="text-xs font-bold text-gray-700">{safeFormatISO(item.checkIn, 'dd MMM')}</span>
               </td>
               <td className="py-2 text-right">
                 <span className="text-xs font-black text-gray-700">{item.nights}n</span>
@@ -149,6 +163,118 @@ function SectionTitle({ children }: { children: string }) {
   return (
     <h3 className="text-xs font-bold text-gray-400 mb-3">{children}</h3>
   );
+}
+
+const EXPENSE_SOURCE_LABEL = {
+  month: 'current month',
+  spread: 'spread across months',
+  recurring: 'repeats monthly',
+} as const;
+
+type ExpenseSource = keyof typeof EXPENSE_SOURCE_LABEL;
+
+function expenseSourceLabel(categoryName: string, source: ExpenseSource): string {
+  return `${categoryName} (${EXPENSE_SOURCE_LABEL[source]})`;
+}
+
+interface ExpenseSourceRow {
+  key: string;
+  label: string;
+  amount: number;
+  hint: string | null;
+}
+
+function buildExpenseSourceRows(
+  monthKey: string,
+  expenseCategories: ConfigOption[],
+  monthlyExpense: MonthlyExpense | undefined,
+  expenseSpreads: ExpenseSpread[],
+  recurringExpenses: RecurringExpense[],
+): ExpenseSourceRow[] {
+  const manual = asAmountMap(monthlyExpense?.amounts);
+  const spread = getSpreadAmountsForMonth(monthKey, expenseSpreads);
+  const recurringByCategory = getRecurringAmountsForMonth(monthKey, recurringExpenses);
+  const activeCategoryIds = new Set(expenseCategories.map(c => c.id));
+  const rows: ExpenseSourceRow[] = [];
+
+  const pushRow = (
+    categoryId: string,
+    categoryName: string,
+    source: ExpenseSource,
+    amount: number,
+    hint: string | null = null,
+  ) => {
+    if (amount <= 0) return;
+    rows.push({
+      key: `${categoryId}:${source}`,
+      label: expenseSourceLabel(categoryName, source),
+      amount,
+      hint,
+    });
+  };
+
+  for (const category of expenseCategories) {
+    const manualAmount = Number(manual[category.id]) || 0;
+    const spreadAmount = Number(spread[category.id]) || 0;
+    const recurringAmount = Number(recurringByCategory[category.id]) || 0;
+    pushRow(category.id, category.name, 'month', manualAmount);
+    pushRow(
+      category.id,
+      category.name,
+      'spread',
+      spreadAmount,
+      spreadAmount > 0 ? spreadHintForCategory(monthKey, category.id, expenseSpreads) : null,
+    );
+    pushRow(
+      category.id,
+      category.name,
+      'recurring',
+      recurringAmount,
+      recurringAmount > 0 ? recurringHintForCategory(monthKey, category.id, recurringExpenses) : null,
+    );
+  }
+
+  const archivedIds = new Set([
+    ...Object.keys(manual),
+    ...Object.keys(spread),
+    ...Object.keys(recurringByCategory),
+  ].filter(id => !activeCategoryIds.has(id)));
+
+  for (const categoryId of archivedIds) {
+    const categoryName = monthlyExpense?.categoryLabels?.[categoryId]
+      || expenseSpreads.find(s => s.categoryId === categoryId)?.categoryLabel
+      || 'Removed category';
+    pushRow(categoryId, categoryName, 'month', Number(manual[categoryId]) || 0);
+    pushRow(
+      categoryId,
+      categoryName,
+      'spread',
+      Number(spread[categoryId]) || 0,
+      Number(spread[categoryId]) > 0 ? spreadHintForCategory(monthKey, categoryId, expenseSpreads) : null,
+    );
+    pushRow(
+      categoryId,
+      categoryName,
+      'recurring',
+      Number(recurringByCategory[categoryId]) || 0,
+      Number(recurringByCategory[categoryId]) > 0
+        ? recurringHintForCategory(monthKey, categoryId, recurringExpenses)
+        : null,
+    );
+  }
+
+  const sourceOrder: Record<ExpenseSource, number> = { month: 0, spread: 1, recurring: 2 };
+  rows.sort((a, b) => {
+    const baseA = a.label.replace(/\s\([^)]+\)$/, '');
+    const baseB = b.label.replace(/\s\([^)]+\)$/, '');
+    const nameCompare = baseA.localeCompare(baseB);
+    if (nameCompare !== 0) return nameCompare;
+    const sourceA = a.key.split(':')[1] as ExpenseSource;
+    const sourceB = b.key.split(':')[1] as ExpenseSource;
+    return sourceOrder[sourceA] - sourceOrder[sourceB];
+  });
+
+  return rows;
 }
 
 // ── Tab sections ──────────────────────────────────────────────────────────────
@@ -456,14 +582,12 @@ function ExpensesReportSection({
   monthlyExpense,
   expenseSpreads,
   recurringExpenses,
-  onOpenExpenseEntry,
 }: {
   monthKey: string | null;
   expenseCategories: ConfigOption[];
   monthlyExpense?: MonthlyExpense;
   expenseSpreads: ExpenseSpread[];
   recurringExpenses: RecurringExpense[];
-  onOpenExpenseEntry?: () => void;
 }) {
   if (!monthKey) {
     return (
@@ -474,30 +598,18 @@ function ExpensesReportSection({
     );
   }
 
-  const monthLabel = format(parseISO(`${monthKey}-01`), 'MMMM yyyy');
-  const previewYear = parseInt(monthKey.slice(0, 4), 10);
+  const monthLabel = safeFormatISO(`${monthKey}-01`, 'MMMM yyyy', monthKey);
   const recurringByCategory = getRecurringAmountsForMonth(monthKey, recurringExpenses);
-  const subscriptions = getActiveSubscriptionsForMonth(monthKey, recurringExpenses);
-  const combined = getCombinedAmounts(monthlyExpense, recurringByCategory);
-  const activeCategoryIds = new Set(expenseCategories.map(c => c.id));
-  const archivedEntries = Object.entries(combined)
-    .filter(([id, value]) => !activeCategoryIds.has(id) && (Number(value) || 0) > 0);
+  const expenseRows = buildExpenseSourceRows(
+    monthKey,
+    expenseCategories,
+    monthlyExpense,
+    expenseSpreads,
+    recurringExpenses,
+  );
 
-  const categoryRows = expenseCategories
-    .map(category => {
-      const spreadHint = spreadHintForCategory(monthlyExpense, category.id, expenseSpreads);
-      const recurringHint = recurringHintForCategory(monthKey, category.id, recurringExpenses);
-      const hint = [spreadHint, recurringHint].filter(Boolean).join(' · ') || null;
-      return {
-        id: category.id,
-        name: category.name,
-        amount: Number(combined[category.id]) || 0,
-        hint,
-      };
-    })
-    .filter(row => row.amount > 0);
-
-  const total = sumMonthlyExpenseTotal(monthlyExpense, recurringByCategory);
+  const spreadByCategory = getSpreadAmountsForMonth(monthKey, expenseSpreads);
+  const total = sumMonthlyExpenseTotal(monthlyExpense, recurringByCategory, spreadByCategory);
   const savedNote = monthlyExpense?.note;
   const hasData = total > 0 || !!savedNote?.trim();
   const updatedAt = monthlyExpense?.updatedAt;
@@ -531,40 +643,23 @@ function ExpensesReportSection({
         {!hasData ? (
           <div className="py-10 text-center">
             <p className="text-sm font-bold text-gray-600">No expenses recorded for this month</p>
-            <p className="text-xs text-gray-400 mt-1">Enter totals from Spendee when you&apos;re ready.</p>
-            {onOpenExpenseEntry && expenseCategories.length > 0 && (
-              <button
-                type="button"
-                onClick={onOpenExpenseEntry}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800"
-              >
-                <Plus size={14} />
-                Add expense
-              </button>
-            )}
+            <p className="text-xs text-gray-400 mt-1">Use Manage expenses to add them.</p>
           </div>
         ) : (
           <>
             <div className="space-y-1">
-              {categoryRows.length === 0 && archivedEntries.length === 0 ? (
+              {expenseRows.length === 0 ? (
                 <p className="text-xs text-gray-400 italic py-2">No category amounts recorded.</p>
               ) : (
-                categoryRows.map(row => (
-                  <div key={row.id} className="py-1 border-b border-gray-50 last:border-0">
-                    <MetricRow label={row.name} value={formatCurrency(row.amount)} />
+                expenseRows.map(row => (
+                  <div key={row.key} className="py-1 border-b border-gray-50 last:border-0">
+                    <MetricRow label={row.label} value={formatCurrency(row.amount)} />
                     {row.hint && (
                       <p className="text-[10px] text-gray-400 pb-1.5">{row.hint}</p>
                     )}
                   </div>
                 ))
               )}
-              {archivedEntries.map(([id, value]) => (
-                <MetricRow
-                  key={id}
-                  label={monthlyExpense?.categoryLabels?.[id] || 'Removed category'}
-                  value={formatCurrency(Number(value) || 0)}
-                />
-              ))}
             </div>
 
             {savedNote?.trim() && (
@@ -574,39 +669,9 @@ function ExpensesReportSection({
               </div>
             )}
 
-            {subscriptions.length > 0 && (
-              <div className="pt-3 border-t border-gray-100 space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subscriptions this month</p>
-                {subscriptions.map(item => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 py-1">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-800 truncate">{item.name}</p>
-                      <p className="text-[10px] text-gray-400">
-                        {item.categoryLabel} · {formatMonthsOfYearLabel(item.monthsOfYear, previewYear)}
-                      </p>
-                    </div>
-                    <p className="text-xs font-black text-gray-900 shrink-0">{formatCurrency(item.amountPerMonth)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="pt-3 border-t border-gray-100">
               <MetricRow label="Total expenses" value={formatCurrency(total)} />
             </div>
-
-            {onOpenExpenseEntry && expenseCategories.length > 0 && (
-              <div className="pt-4 flex justify-center">
-                <button
-                  type="button"
-                  onClick={onOpenExpenseEntry}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800"
-                >
-                  <Pencil size={14} />
-                  Edit expenses
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>
@@ -617,27 +682,48 @@ function ExpensesReportSection({
 type ExpenseEntryTab = 'month' | 'spread' | 'recurring';
 
 function ExpensesEntryPanel({
-  monthKey,
+  year,
+  onYearChange,
   expenseCategories,
-  monthlyExpense,
+  monthlyExpenses,
   expenseSpreads,
   recurringExpenses,
   onSaved,
   onClose,
 }: {
-  monthKey: string;
+  year: number;
+  onYearChange: (year: number) => void;
   expenseCategories: ConfigOption[];
-  monthlyExpense?: MonthlyExpense;
+  monthlyExpenses: MonthlyExpense[];
   expenseSpreads: ExpenseSpread[];
   recurringExpenses: RecurringExpense[];
   onSaved: () => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<ExpenseEntryTab>('month');
-  const previewYear = parseInt(monthKey.slice(0, 4), 10);
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => onYearChange(year - 1)}
+          className="h-8 w-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          aria-label="Previous year"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-sm font-black text-gray-900 min-w-[3.5rem] text-center">{year}</span>
+        <button
+          type="button"
+          onClick={() => onYearChange(year + 1)}
+          className="h-8 w-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          aria-label="Next year"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
         <button
           type="button"
@@ -673,30 +759,152 @@ function ExpensesEntryPanel({
 
       <div className="min-h-[30rem] sm:min-h-[32rem] flex flex-col">
         {tab === 'month' ? (
-          <ExpensesEntryForm
-            monthKey={monthKey}
+          <ExpensesMonthTab
+            year={year}
             expenseCategories={expenseCategories}
-            monthlyExpense={monthlyExpense}
+            monthlyExpenses={monthlyExpenses}
             onSaved={onSaved}
             onClose={onClose}
           />
         ) : tab === 'spread' ? (
           <ExpensesSpreadForm
-            monthKey={monthKey}
+            year={year}
             expenseCategories={expenseCategories}
             expenseSpreads={expenseSpreads}
-            onSaved={onSaved}
             onClose={onClose}
           />
         ) : (
           <ExpensesRecurringForm
             expenseCategories={expenseCategories}
             recurringExpenses={recurringExpenses}
-            previewYear={previewYear}
+            previewYear={year}
             onClose={onClose}
           />
         )}
       </div>
+    </div>
+  );
+}
+
+function ExpensesMonthTab({
+  year,
+  expenseCategories,
+  monthlyExpenses,
+  onSaved,
+  onClose,
+}: {
+  year: number;
+  expenseCategories: ConfigOption[];
+  monthlyExpenses: MonthlyExpense[];
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
+  const yearMonths = useMemo(() => monthsInYear(year), [year]);
+
+  useEffect(() => {
+    setSelectedMonthKey(null);
+  }, [year]);
+
+  const findMonthlyExpense = (monthKey: string) =>
+    monthlyExpenses.find(e => e.month === monthKey || e.id === monthKey);
+
+  const monthTotals = yearMonths.map(monthKey => ({
+    monthKey,
+    total: sumExpenseAmounts(findMonthlyExpense(monthKey)?.amounts),
+  }));
+  const filledMonths = monthTotals.filter(m => m.total > 0);
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-400">
+        Pick a month, then enter that month&apos;s totals from Spendee.
+      </p>
+
+      <div>
+        <label className="block text-[10px] font-bold text-gray-400 mb-2 uppercase">Month</label>
+        <div className="grid grid-cols-6 gap-1">
+          {yearMonths.map((monthKey, i) => {
+            const hasData = monthTotals[i].total > 0;
+            return (
+              <button
+                key={monthKey}
+                type="button"
+                onClick={() => setSelectedMonthKey(monthKey)}
+                className={cn(
+                  'h-9 rounded-lg text-[11px] font-bold transition-all',
+                  selectedMonthKey === monthKey
+                    ? 'bg-green-600 text-white shadow-sm'
+                    : hasData
+                      ? 'text-gray-900 hover:bg-gray-100'
+                      : 'text-gray-600 hover:bg-gray-100',
+                )}
+              >
+                {MONTH_LABELS[i]}
+                {hasData && (
+                  <span
+                    className={cn(
+                      'block w-1 h-1 rounded-full mx-auto mt-0.5',
+                      selectedMonthKey === monthKey ? 'bg-white' : 'bg-green-600',
+                    )}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedMonthKey ? (
+        <ExpensesEntryForm
+          key={selectedMonthKey}
+          monthKey={selectedMonthKey}
+          expenseCategories={expenseCategories}
+          monthlyExpense={findMonthlyExpense(selectedMonthKey)}
+          onSaved={onSaved}
+          onClose={onClose}
+        />
+      ) : (
+        <div className="space-y-4">
+          <div className="py-8 text-center border border-dashed border-gray-200 rounded-xl">
+            <p className="text-sm font-bold text-gray-600">Select a month above</p>
+            <p className="text-xs text-gray-400 mt-1">Nothing is selected yet.</p>
+          </div>
+
+          <div className="pt-3 border-t border-gray-100 space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 pb-1">
+              Months with entries in {year}
+            </p>
+            {filledMonths.length === 0 ? (
+              <p className="text-xs text-gray-400 italic py-1">No months filled in yet.</p>
+            ) : (
+              filledMonths.map(({ monthKey, total }) => (
+                <button
+                  key={monthKey}
+                  type="button"
+                  onClick={() => setSelectedMonthKey(monthKey)}
+                  className="w-full flex items-center justify-between gap-3 py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                >
+                  <span className="text-xs font-bold text-gray-800">
+                    {safeFormatISO(`${monthKey}-01`, 'MMMM yyyy', monthKey)}
+                  </span>
+                  <span className="text-xs font-black text-gray-900 shrink-0">{formatCurrency(total)}</span>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 bg-white border text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -750,7 +958,7 @@ function ExpensesEntryForm({
 
   const savedAmounts = monthlyExpense?.amounts ?? {};
   const savedLabels = monthlyExpense?.categoryLabels;
-  const monthLabel = format(parseISO(`${monthKey}-01`), 'MMMM yyyy');
+  const monthLabel = safeFormatISO(`${monthKey}-01`, 'MMMM yyyy', monthKey);
   const activeCategoryIds = new Set(expenseCategories.map(c => c.id));
   const archivedEntries = Object.entries(savedAmounts)
     .filter(([id, value]) => !activeCategoryIds.has(id) && (Number(value) || 0) > 0);
@@ -783,8 +991,6 @@ function ExpensesEntryForm({
       await setDoc(doc(db, 'monthlyExpenses', monthKey), {
         month: monthKey,
         amounts: parsedAmounts,
-        spreadAmounts: monthlyExpense?.spreadAmounts || {},
-        spreadIds: monthlyExpense?.spreadIds || {},
         categoryLabels,
         note: note.trim(),
         updatedAt: new Date().toISOString(),
@@ -804,12 +1010,14 @@ function ExpensesEntryForm({
     Object.fromEntries(
       Object.entries(amounts).map(([id, raw]) => [id, raw.trim() === '' ? 0 : Number(raw) || 0])
     )
-  ) + archivedEntries.reduce((sum, [, value]) => sum + (Number(value) || 0), 0)
-    + sumExpenseAmounts(monthlyExpense?.spreadAmounts);
+  ) + archivedEntries.reduce((sum, [, value]) => sum + (Number(value) || 0), 0);
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-gray-400">Enter this month&apos;s totals from Spendee — spread and subscription amounts are added automatically.</p>
+      <p className="text-xs font-bold text-gray-900">{monthLabel}</p>
+      <p className="text-xs text-gray-400 -mt-3">
+        Totals paid in this month. Spreads and subscriptions are added separately.
+      </p>
 
       {expenseCategories.length === 0 ? (
         <div className="py-8 text-center text-gray-400">
@@ -820,7 +1028,9 @@ function ExpensesEntryForm({
         <div className="space-y-3">
           {expenseCategories.map(category => (
             <div key={category.id} className="flex items-center gap-3">
-              <label className="flex-1 text-xs font-bold text-gray-700">{category.name}</label>
+              <label className="flex-1 text-xs font-bold text-gray-700">
+                {expenseSourceLabel(category.name, 'month')}
+              </label>
               <div className="relative w-36">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">€</span>
                 <input
@@ -843,7 +1053,9 @@ function ExpensesEntryForm({
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Removed categories (kept for history)</p>
           {archivedEntries.map(([id, value]) => (
             <div key={id} className="flex items-center justify-between text-xs">
-              <span className="text-gray-500 font-bold truncate">{savedLabels?.[id] || 'Removed category'}</span>
+              <span className="text-gray-500 font-bold truncate">
+                {expenseSourceLabel(savedLabels?.[id] || 'Removed category', 'month')}
+              </span>
               <span className="font-black text-gray-700">{formatCurrency(Number(value) || 0)}</span>
             </div>
           ))}
@@ -902,54 +1114,56 @@ function ExpensesEntryForm({
 }
 
 function ExpensesSpreadForm({
-  monthKey,
+  year,
   expenseCategories,
   expenseSpreads,
-  onSaved,
   onClose,
 }: {
-  monthKey: string;
+  year: number;
   expenseCategories: ConfigOption[];
   expenseSpreads: ExpenseSpread[];
-  onSaved: () => void;
   onClose: () => void;
 }) {
   const { profile } = useAuth();
-  const defaultYear = parseInt(monthKey.slice(0, 4), 10);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState(expenseCategories[0]?.id || '');
-  const [year, setYear] = useState(defaultYear);
   const [total, setTotal] = useState('');
   const [note, setNote] = useState('');
-  const [selectedMonths, setSelectedMonths] = useState<string[]>(() => monthsInYear(defaultYear));
+  const [selectedMonths, setSelectedMonths] = useState<string[]>(() => monthsInYear(year));
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const yearMonths = useMemo(() => monthsInYear(year), [year]);
   const allMonthsSelected = selectedMonths.length === yearMonths.length
     && yearMonths.every(m => selectedMonths.includes(m));
 
-  const existingSpread = useMemo(
-    () => (categoryId ? findSpreadForCategoryYear(expenseSpreads, year, categoryId) : undefined),
-    [expenseSpreads, year, categoryId],
-  );
+  const yearSpreads = useMemo(() => spreadsForYear(expenseSpreads, year), [expenseSpreads, year]);
 
-  const spreadSnapshot = useMemo(() => {
-    if (!existingSpread) return `${categoryId}|${year}|new`;
-    return `${categoryId}|${year}|${existingSpread.totalAmount}|${existingSpread.note ?? ''}|${existingSpread.months.join(',')}`;
-  }, [existingSpread, categoryId, year]);
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setCategoryId(expenseCategories[0]?.id || '');
+    setTotal('');
+    setNote('');
+    setSelectedMonths(monthsInYear(year));
+    setSaveError(null);
+  };
 
   useEffect(() => {
-    if (existingSpread) {
-      setTotal(String(existingSpread.totalAmount));
-      setNote(existingSpread.note || '');
-      setSelectedMonths([...existingSpread.months].sort());
-    } else {
-      setTotal('');
-      setNote('');
-      setSelectedMonths(monthsInYear(year));
-    }
+    resetForm();
+  }, [year]);
+
+  const startEdit = (spread: ExpenseSpread) => {
+    setEditingId(spread.id);
+    setName(spread.name || '');
+    setCategoryId(spread.categoryId);
+    setTotal(String(spread.totalAmount));
+    setNote(spread.note || '');
+    setSelectedMonths([...(Array.isArray(spread.months) ? spread.months : [])].sort());
     setSaveError(null);
-  }, [spreadSnapshot, year]);
+  };
 
   const monthCount = selectedMonths.length;
   const parsedTotal = total.trim() === '' ? 0 : Number(total);
@@ -968,16 +1182,11 @@ function ExpensesSpreadForm({
     });
   };
 
-  const handleYearChange = (newYear: number) => {
-    const validYear = newYear || defaultYear;
-    setYear(validYear);
-    const monthIndices = selectedMonths.map(k => parseInt(k.slice(5, 7), 10));
-    setSelectedMonths(
-      monthIndices.map(i => `${validYear}-${String(i).padStart(2, '0')}`).sort(),
-    );
-  };
-
   const handleSave = async () => {
+    if (!name.trim()) {
+      setSaveError('Give this spread a short name.');
+      return;
+    }
     if (!categoryId || !selectedCategory) {
       setSaveError('Select a category.');
       return;
@@ -995,6 +1204,8 @@ function ExpensesSpreadForm({
     setIsSaving(true);
     try {
       await saveExpenseSpread({
+        id: editingId || undefined,
+        name: name.trim(),
         year,
         categoryId,
         categoryLabel: selectedCategory.name,
@@ -1003,12 +1214,30 @@ function ExpensesSpreadForm({
         note: note.trim(),
         updatedBy: profile?.name || profile?.email || '',
       });
-      onSaved();
+      resetForm();
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `expenseSpreads/${year}__${categoryId}`);
+      handleFirestoreError(err, OperationType.UPDATE, `expenseSpreads/${editingId || 'new'}`);
       setSaveError('Could not save spread. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (spread: ExpenseSpread) => {
+    if (!window.confirm(`Delete "${spreadDisplayName(spread)}"? Its amounts will be removed from every month it covers.`)) {
+      return;
+    }
+
+    setSaveError(null);
+    setDeletingId(spread.id);
+    try {
+      await deleteExpenseSpread(spread.id);
+      if (editingId === spread.id) resetForm();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `expenseSpreads/${spread.id}`);
+      setSaveError('Could not delete spread. Please try again.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -1027,6 +1256,80 @@ function ExpensesSpreadForm({
         Pay once (e.g. annual tax or notary), split evenly across selected months.
       </p>
 
+      <div className="space-y-2">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+          Spreads in {year}
+        </p>
+        {yearSpreads.length === 0 ? (
+          <p className="text-xs text-gray-400 italic py-1">
+            No spreads yet for {year}. Add one below.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {yearSpreads.map(spread => {
+              const months = Array.isArray(spread.months) ? spread.months : [];
+              const share = months.length > 0 ? spreadAmountForMonth(spread, months[0]) : 0;
+              return (
+                <div
+                  key={spread.id}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-xl border transition-colors',
+                    editingId === spread.id ? 'border-gray-900 bg-gray-50' : 'border-gray-100 bg-white',
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-gray-900 truncate">
+                      {spreadDisplayName(spread)}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                      {spread.categoryLabel} · {formatCurrency(share)}/mo · {formatSpreadMonthLabel(months)}
+                    </p>
+                  </div>
+                  <span className="text-xs font-black text-gray-900 shrink-0">
+                    {formatCurrency(Number(spread.totalAmount) || 0)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(spread)}
+                    disabled={deletingId === spread.id}
+                    className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                    aria-label={`Edit ${spreadDisplayName(spread)}`}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(spread)}
+                    disabled={deletingId === spread.id}
+                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
+                    aria-label={`Delete ${spreadDisplayName(spread)}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="pt-3 border-t border-gray-100">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+          {editingId ? 'Edit spread' : 'Add spread'}
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. Company tax"
+          className="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-black outline-none"
+        />
+      </div>
+
       <div>
         <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Category</label>
         <select
@@ -1035,36 +1338,28 @@ function ExpensesSpreadForm({
           className="w-full px-4 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
         >
           {expenseCategories.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>{expenseSourceLabel(c.name, 'spread')}</option>
           ))}
         </select>
+        {selectedCategory && (
+          <p className="text-[10px] text-gray-400 mt-1">
+            Allocates to each selected month as {expenseSourceLabel(selectedCategory.name, 'spread')}.
+          </p>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Total amount</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">€</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={total}
-              onChange={e => setTotal(e.target.value)}
-              className="w-full pl-7 pr-3 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
-              placeholder="0"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Year</label>
+      <div>
+        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Total amount</label>
+        <div className="relative w-full sm:w-1/2">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">€</span>
           <input
             type="number"
-            min="2020"
-            max="2100"
-            value={year}
-            onChange={e => handleYearChange(Number(e.target.value))}
-            className="w-full px-4 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
+            min="0"
+            step="0.01"
+            value={total}
+            onChange={e => setTotal(e.target.value)}
+            className="w-full pl-7 pr-3 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
+            placeholder="0"
           />
         </div>
       </div>
@@ -1123,19 +1418,13 @@ function ExpensesSpreadForm({
         </p>
       )}
 
-      {existingSpread && (
-        <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-          Updating existing spread for {selectedCategory?.name} in {year}.
-        </p>
-      )}
-
       <div>
         <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Note (optional)</label>
         <input
           type="text"
           value={note}
           onChange={e => setNote(e.target.value)}
-          placeholder="e.g. Company tax 2026"
+          placeholder="e.g. Paid to the accountant in March"
           className="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-black outline-none"
         />
       </div>
@@ -1148,11 +1437,11 @@ function ExpensesSpreadForm({
       )}
 
       <div className="pt-2 border-t border-gray-100 space-y-4">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             disabled={isSaving}
-            onClick={onClose}
+            onClick={editingId ? resetForm : onClose}
             className="px-4 py-2.5 bg-white border text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
@@ -1161,10 +1450,10 @@ function ExpensesSpreadForm({
             type="button"
             disabled={isSaving}
             onClick={handleSave}
-            className="flex items-center gap-2 px-5 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 disabled:opacity-50 ml-auto"
           >
             <Save size={14} />
-            {isSaving ? 'Saving…' : existingSpread ? 'Update spread' : 'Save spread'}
+            {isSaving ? 'Saving…' : editingId ? 'Update spread' : 'Save spread'}
           </button>
         </div>
       </div>
@@ -1350,7 +1639,7 @@ function ExpensesRecurringForm({
               >
                 <p className="text-xs font-bold text-gray-900 truncate">{item.name}</p>
                 <p className="text-[10px] text-gray-400">
-                  {item.categoryLabel} · {formatCurrency(item.amountPerMonth)}/mo · {formatMonthsOfYearLabel(item.monthsOfYear, previewYear)}
+                  {expenseSourceLabel(item.categoryLabel, 'recurring')} · {formatCurrency(item.amountPerMonth)}/mo · {formatMonthsOfYearLabel(item.monthsOfYear, previewYear)}
                 </p>
               </button>
               <button
@@ -1391,7 +1680,7 @@ function ExpensesRecurringForm({
               className="w-full px-4 py-2 border rounded-lg text-sm font-bold focus:ring-2 focus:ring-black outline-none"
             >
               {expenseCategories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>{expenseSourceLabel(c.name, 'recurring')}</option>
               ))}
             </select>
           </div>
@@ -1524,19 +1813,73 @@ function ExpensesRecurringForm({
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-const REPORT_TABS: { id: Tab; label: string }[] = [
+const SUMMARY_TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
+  { id: 'expenses', label: 'Expenses' },
+];
+
+const SEGMENT_TABS: { id: Tab; label: string }[] = [
   { id: 'retreats', label: 'Retreats' },
   { id: 'coliving', label: 'Coliving' },
   { id: 'venue', label: 'Venue Hire' },
   { id: 'exchange', label: 'Home Exchange' },
 ];
 
-const EXPENSES_TAB: { id: Tab; label: string } = { id: 'expenses', label: 'Expenses' };
+class DashboardErrorBoundary extends React.Component<
+  { children: React.ReactNode; onClose: () => void },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('Finances view error:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="fixed inset-0 z-[200] bg-gray-50 flex flex-col pt-safe pb-safe px-safe">
+          <header className="h-14 bg-white border-b px-4 sm:px-8 flex items-center justify-between shrink-0">
+            <h2 className="text-lg font-semibold text-gray-900">Finances</h2>
+            <button onClick={this.props.onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors">
+              <X size={20} />
+            </button>
+          </header>
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-lg mx-auto">
+            <AlertCircle size={32} className="text-rose-500 mb-4" />
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Could not load this month</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Something in this month&apos;s data could not be displayed. Your bookings are safe. Try another month, or check the browser console for details.
+            </p>
+            <p className="text-xs text-rose-600 font-mono bg-rose-50 rounded-lg p-3 mb-6 break-all">
+              {this.state.error.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ error: null })}
+              className="px-4 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-800"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function DashboardModal(props: DashboardModalProps) {
   if (!props.isOpen) return null;
-  return <DashboardModalContent {...props} />;
+  return (
+    <DashboardErrorBoundary onClose={props.onClose}>
+      <DashboardModalContent {...props} />
+    </DashboardErrorBoundary>
+  );
 }
 
 function DashboardModalContent({
@@ -1547,6 +1890,7 @@ function DashboardModalContent({
   const now = new Date();
   const [tab, setTab] = useState<Tab>('overview');
   const [isExpenseEntryOpen, setIsExpenseEntryOpen] = useState(false);
+  const [manageYear, setManageYear] = useState(now.getFullYear());
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [editingVenueHire, setEditingVenueHire] = useState<VenueHire | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -1594,23 +1938,25 @@ function DashboardModalContent({
     [monthKey, recurringExpenses],
   );
 
-  const totalExpenses = useMemo(
-    () => sumMonthlyExpenseTotal(currentMonthlyExpense, recurringByCategory),
-    [currentMonthlyExpense, recurringByCategory],
+  const spreadByCategory = useMemo(
+    () => (monthKey ? getSpreadAmountsForMonth(monthKey, expenseSpreads) : {}),
+    [monthKey, expenseSpreads],
   );
 
-  const hasExpenseData = totalExpenses > 0 || !!currentMonthlyExpense?.note?.trim();
+  const totalExpenses = useMemo(
+    () => sumMonthlyExpenseTotal(currentMonthlyExpense, recurringByCategory, spreadByCategory),
+    [currentMonthlyExpense, recurringByCategory, spreadByCategory],
+  );
 
-  const openExpenseEntry = () => setIsExpenseEntryOpen(true);
+  const openExpenseEntry = () => {
+    setManageYear(selectedYear);
+    setIsExpenseEntryOpen(true);
+  };
 
   const handleExpenseSaved = () => {
     setIsExpenseEntryOpen(false);
     setTab('expenses');
   };
-
-  const expenseEntryTitle = monthKey
-    ? `${hasExpenseData ? 'Edit' : 'Add'} expenses — ${format(parseISO(`${monthKey}-01`), 'MMMM yyyy')}`
-    : 'Add expenses';
 
   const handleOpenOutstanding = (item: OutstandingItem) => {
     if (item.isVenueHire) {
@@ -1831,8 +2177,24 @@ function DashboardModalContent({
           {/* Tabs */}
           <div className="bg-white border-b shrink-0">
             <div className="flex items-center px-4 sm:px-8 gap-3 min-h-[45px]">
-              <div className="flex overflow-x-auto min-w-0 flex-1">
-                {REPORT_TABS.map(t => (
+              <div className="flex items-center overflow-x-auto min-w-0 flex-1">
+                {SUMMARY_TABS.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => startTransition(() => setTab(t.id))}
+                    className={cn(
+                      'px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all',
+                      tab === t.id
+                        ? 'border-black text-black'
+                        : 'border-transparent text-gray-400 hover:text-gray-700'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+                <span className="w-px h-5 bg-gray-300 mx-3 shrink-0" aria-hidden="true" />
+                {SEGMENT_TABS.map(t => (
                   <button
                     key={t.id}
                     type="button"
@@ -1851,16 +2213,16 @@ function DashboardModalContent({
               <div className="shrink-0 pl-2 sm:pl-3 ml-auto sm:ml-1 sm:border-l sm:border-gray-200">
                 <button
                   type="button"
-                  onClick={() => startTransition(() => setTab(EXPENSES_TAB.id))}
+                  onClick={openExpenseEntry}
+                  disabled={expenseCategories.length === 0}
                   className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
-                    tab === EXPENSES_TAB.id
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                    'bg-black text-white border-black shadow-sm hover:bg-gray-800',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
                   )}
                 >
                   <Receipt size={14} />
-                  {EXPENSES_TAB.label}
+                  Manage expenses
                 </button>
               </div>
             </div>
@@ -1875,7 +2237,6 @@ function DashboardModalContent({
                 monthlyExpense={currentMonthlyExpense}
                 expenseSpreads={expenseSpreads}
                 recurringExpenses={recurringExpenses}
-                onOpenExpenseEntry={monthKey && expenseCategories.length > 0 ? openExpenseEntry : undefined}
               />
             ) : (
               <StatsTabContent
@@ -1893,17 +2254,18 @@ function DashboardModalContent({
             )}
           </main>
 
-          {monthKey && isExpenseEntryOpen && (
+          {isExpenseEntryOpen && (
             <Modal
               isOpen
               onClose={() => setIsExpenseEntryOpen(false)}
-              title={expenseEntryTitle}
+              title="Manage expenses"
               elevated
             >
               <ExpensesEntryPanel
-                monthKey={monthKey}
+                year={manageYear}
+                onYearChange={setManageYear}
                 expenseCategories={expenseCategories}
-                monthlyExpense={currentMonthlyExpense}
+                monthlyExpenses={monthlyExpenses}
                 expenseSpreads={expenseSpreads}
                 recurringExpenses={recurringExpenses}
                 onSaved={handleExpenseSaved}

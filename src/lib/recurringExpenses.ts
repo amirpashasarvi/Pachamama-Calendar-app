@@ -20,6 +20,7 @@ export function formatMonthsOfYearLabel(monthsOfYear: number[], year: number): s
 
 export function recurringAppliesToMonth(item: RecurringExpense, monthKey: string): boolean {
   if (!item.active) return false;
+  if (!Array.isArray(item.monthsOfYear) || item.monthsOfYear.length === 0) return false;
   return item.monthsOfYear.includes(monthIndexFromKey(monthKey));
 }
 
@@ -41,7 +42,7 @@ export function getActiveSubscriptionsForMonth(
 ): RecurringExpense[] {
   return items
     .filter(item => recurringAppliesToMonth(item, monthKey))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 }
 
 export function recurringHintForCategory(

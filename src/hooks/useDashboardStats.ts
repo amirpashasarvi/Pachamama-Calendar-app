@@ -6,13 +6,13 @@ import {
   stayIncludedInPeriod,
   stayTotalNights,
 } from '@/lib/prorate';
+import { getCollectedAmount, asExtrasList } from '@/lib/bookingFinancials';
 import {
   isActiveLifecycle,
   isCancelledLifecycle,
   cancelledIncludedInPeriod,
   resolveReportingFinancials,
   commissionForReporting,
-  getCollectedAmount,
 } from '@/lib/bookingLifecycle';
 import { commissionInputFromRecord } from '@/lib/commission';
 import { isBlockedBooking } from '@/lib/bookingBlock';
@@ -98,11 +98,22 @@ export interface HomeExchangeStats {
   estimatedValue: number;
 }
 
+function safeParseISO(value: string | undefined | null): Date | null {
+  if (!value) return null;
+  try {
+    const parsed = parseISO(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
 function bookingFinancials(b: Booking) {
   return {
     price: b.price || 0,
-    extras: b.extras || [],
+    extras: asExtrasList(b.extras),
     deposit: b.deposit || 0,
+    payments: b.payments,
     paidLater1: b.paidLater1 || 0,
     paidLater2: b.paidLater2 || 0,
   };
@@ -111,7 +122,7 @@ function bookingFinancials(b: Booking) {
 function vhFinancials(vh: VenueHire) {
   return {
     price: vh.bookingPrice || 0,
-    extras: vh.extras || [],
+    extras: asExtrasList(vh.extras),
     deposit: vh.deposit || 0,
     paidLater1: vh.paidLater1 || 0,
     paidLater2: vh.paidLater2 || 0,
@@ -239,7 +250,8 @@ export function useDashboardStats(
           checkIn,
           checkOut,
         });
-        if (isBefore(parseISO(checkOut), today)) {
+        const checkoutDate = safeParseISO(checkOut);
+        if (checkoutDate && isBefore(checkoutDate, today)) {
           overdueOutstanding += amounts.remaining;
         } else {
           expectedOutstanding += amounts.remaining;
@@ -259,8 +271,27 @@ export function useDashboardStats(
       }
     };
 
+    const safeAccumulate = (
+      id: string,
+      name: string,
+      isVenueHire: boolean,
+      checkIn: string,
+      checkOut: string,
+      financials: ReturnType<typeof bookingFinancials>,
+      lifecycleStatus: Booking['lifecycleStatus'] | VenueHire['lifecycleStatus'],
+      commissionInput: ReturnType<typeof commissionInputFromBooking>,
+      typeKey: string,
+      channelKey?: string,
+    ) => {
+      try {
+        accumulate(id, name, isVenueHire, checkIn, checkOut, financials, lifecycleStatus, commissionInput, typeKey, channelKey);
+      } catch (err) {
+        console.error('Dashboard stats skipped record', { id, checkIn, checkOut, err });
+      }
+    };
+
     for (const b of filteredBookings) {
-      accumulate(
+      safeAccumulate(
         b.id, b.guestName, false, b.checkIn, b.checkOut,
         bookingFinancials(b), b.lifecycleStatus,
         commissionInputFromBooking(b), b.type || 'Other', b.bookingChannel || 'Direct'
@@ -268,7 +299,7 @@ export function useDashboardStats(
     }
 
     for (const b of filteredCancelledBookings) {
-      accumulate(
+      safeAccumulate(
         b.id, b.guestName, false, b.checkIn, b.checkOut,
         bookingFinancials(b), b.lifecycleStatus,
         commissionInputFromBooking(b), 'Cancelled'
@@ -276,7 +307,7 @@ export function useDashboardStats(
     }
 
     for (const vh of filteredVH) {
-      accumulate(
+      safeAccumulate(
         vh.id, vh.organizer, true, vh.startDate, vh.endDate,
         vhFinancials(vh), vh.lifecycleStatus,
         commissionInputFromVenueHire(vh), 'Venue Hire'
@@ -284,7 +315,7 @@ export function useDashboardStats(
     }
 
     for (const vh of filteredCancelledVH) {
-      accumulate(
+      safeAccumulate(
         vh.id, vh.organizer, true, vh.startDate, vh.endDate,
         vhFinancials(vh), vh.lifecycleStatus,
         commissionInputFromVenueHire(vh), 'Cancelled Venue Hire'
@@ -295,13 +326,15 @@ export function useDashboardStats(
 
     let futureOutstanding = 0;
     for (const b of activeBookings) {
-      if (!isBefore(parseISO(b.checkIn), today)) {
+      const checkInDate = safeParseISO(b.checkIn);
+      if (checkInDate && !isBefore(checkInDate, today)) {
         const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
         futureOutstanding += full.remaining;
       }
     }
     for (const vh of activeVenueHires) {
-      if (!isBefore(parseISO(vh.startDate), today)) {
+      const startDate = safeParseISO(vh.startDate);
+      if (startDate && !isBefore(startDate, today)) {
         const full = resolveReportingFinancials(vh.startDate, vh.endDate, null, vhFinancials(vh), vh.lifecycleStatus);
         futureOutstanding += full.remaining;
       }
@@ -346,7 +379,7 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeBookings
-      .filter(b => b.type?.toLowerCase() === 'retreat' && !isBefore(parseISO(b.checkIn), today))
+      .filter(b => b.type?.toLowerCase() === 'retreat' && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
       .map(b => {
         const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
         return {
@@ -358,7 +391,7 @@ export function useDashboardStats(
         };
       })
       .filter(x => x.remaining > 0)
-      .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+      .sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''))
       .slice(0, 8);
 
     return {
@@ -391,7 +424,7 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeBookings
-      .filter(b => b.type?.toLowerCase() === 'coliving' && !isBefore(parseISO(b.checkIn), today))
+      .filter(b => b.type?.toLowerCase() === 'coliving' && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
       .map(b => {
         const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
         return {
@@ -402,7 +435,7 @@ export function useDashboardStats(
           remaining: full.remaining,
         };
       })
-      .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+      .sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''))
       .slice(0, 8);
 
     return {
@@ -432,7 +465,7 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeVenueHires
-      .filter(vh => !isBefore(parseISO(vh.startDate), today))
+      .filter(vh => safeParseISO(vh.startDate) && !isBefore(safeParseISO(vh.startDate)!, today))
       .map(vh => {
         const full = resolveReportingFinancials(vh.startDate, vh.endDate, null, vhFinancials(vh), vh.lifecycleStatus);
         return {
@@ -443,7 +476,7 @@ export function useDashboardStats(
           remaining: full.remaining,
         };
       })
-      .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+      .sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''))
       .slice(0, 8);
 
     return {
@@ -469,14 +502,14 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeBookings
-      .filter(b => b.type?.toLowerCase().includes('exchange') && !isBefore(parseISO(b.checkIn), today))
+      .filter(b => b.type?.toLowerCase().includes('exchange') && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
       .map(b => ({
         id: b.id, name: b.guestName, roomName: roomName(b.roomId),
         checkIn: b.checkIn, checkOut: b.checkOut,
         nights: stayTotalNights(b.checkIn, b.checkOut),
         revenue: 0, remaining: 0,
       }))
-      .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+      .sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''))
       .slice(0, 8);
 
     return {

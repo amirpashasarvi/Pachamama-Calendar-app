@@ -207,7 +207,7 @@ export function useBookingData() {
 
     const unsubMonthlyExpenses = onSnapshot(collection(db, 'monthlyExpenses'), (snap) => {
       const data: MonthlyExpense[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as MonthlyExpense));
-      data.sort((a, b) => b.month.localeCompare(a.month));
+      data.sort((a, b) => (b.month || b.id || '').localeCompare(a.month || a.id || ''));
       setMonthlyExpenses(data);
       checkLoading('monthlyExpenses');
     }, (error) => {
@@ -217,7 +217,7 @@ export function useBookingData() {
 
     const unsubExpenseSpreads = onSnapshot(collection(db, 'expenseSpreads'), (snap) => {
       const data: ExpenseSpread[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as ExpenseSpread));
-      data.sort((a, b) => b.year - a.year || a.categoryLabel.localeCompare(b.categoryLabel));
+      data.sort((a, b) => b.year - a.year || (a.categoryLabel || '').localeCompare(b.categoryLabel || ''));
       setExpenseSpreads(data);
       checkLoading('expenseSpreads');
     }, (error) => {
@@ -227,7 +227,7 @@ export function useBookingData() {
 
     const unsubRecurringExpenses = onSnapshot(collection(db, 'recurringExpenses'), (snap) => {
       const data: RecurringExpense[] = snap.docs.map(d => ({ ...d.data(), id: d.id } as RecurringExpense));
-      data.sort((a, b) => a.name.localeCompare(b.name));
+      data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setRecurringExpenses(data);
       checkLoading('recurringExpenses');
     }, (error) => {

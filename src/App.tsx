@@ -1,13 +1,13 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, DollarSign, Trash2, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, MoreHorizontal } from 'lucide-react';
+import CalendarViewMenu from './components/calendar/CalendarViewMenu';
 import { useState, useRef, useEffect } from 'react';
 import SettingsModal, { type SettingsOpenOptions } from './components/modals/SettingsModal';
 import StatisticsModal from './components/modals/StatisticsModal';
 import DashboardModal from './components/modals/DashboardModal';
 import BookingPortalModal from './components/modals/BookingPortalModal';
-import TrashedItemsModal from './components/modals/TrashedItemsModal';
 import HousekeepingModal from './components/modals/HousekeepingModal';
 import ProfileModal from './components/modals/ProfileModal';
 import { BookingDataProvider, useBooking } from './hooks/useBooking';
@@ -25,7 +25,7 @@ import {
 } from './lib/calendarLayout';
 
 function AppContent() {
-  const { profile, logout, isAdmin } = useAuth();
+  const { profile, logout, isAdmin, user } = useAuth();
   const { bookingTypes, bookingChannels, paymentChannels, expenseCategories, users, bookings, deletedBookings, venueHires, deletedVenueHires, rooms, retreats, retreatTypes, teamPositions, calendarDisplaySettings } = useBooking();
   const { housekeeping, updateStatus, checkAutoDirty } = useHousekeeping(rooms, bookings, profile?.name || profile?.email);
   
@@ -34,7 +34,6 @@ function AppContent() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isBookingPortalOpen, setIsBookingPortalOpen] = useState(false);
-  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isHousekeepingOpen, setIsHousekeepingOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -86,7 +85,7 @@ function AppContent() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { arrivalAlerts, balanceAlerts, noteAlerts, commentAlerts, criticalCount, totalCount } = useAlerts(bookings, rooms, housekeeping);
+  const { preDepartureBalanceAlerts, postDepartureBalanceAlerts, criticalCount, totalCount } = useAlerts(bookings, rooms);
 
   const openRetreatSettings = (options: SettingsOpenOptions) => {
     setSettingsOpenOptions(options);
@@ -104,27 +103,41 @@ function AppContent() {
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden print:h-auto print:overflow-visible">
       {/* Header bar */}
-      <header className={cn('border-b flex items-center justify-between bg-white relative z-[150] print:hidden pt-safe px-safe', layout.appHeaderMinH, layout.appHeaderPx)}>
-        <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+      <header className={cn('border-b flex items-center justify-between bg-white relative z-[150] print:hidden pt-safe pl-safe pr-safe', layout.appHeaderMinH)}>
+        <div className="flex items-center gap-3 min-w-0 flex-1 mr-2 pl-3 sm:pl-5">
           <h1 className={cn('font-bold tracking-tight leading-tight truncate', layout.appTitleClass)}>
             <span className="sm:hidden">Pachamama</span>
             <span className="hidden sm:inline">Pachamama Calendar</span>
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0 pr-3 sm:pr-5">
           <div className="flex items-center gap-0.5 sm:gap-1">
 
-            {/* Housekeeping — visible to all staff */}
-            <button
-              type="button"
-              onClick={() => setIsHousekeepingOpen(true)}
-              className={iconBtn()}
-              title="Housekeeping"
-              aria-label="Housekeeping"
-            >
-              <BrushCleaning size={layout.appIconSize} />
-            </button>
+            <CalendarViewMenu
+              iconSize={layout.appIconSize}
+              buttonClassName={iconBtn()}
+              compact={compactCalendar}
+              showSummary={showSummary}
+              showTeamRoster={showTeamRoster}
+              showHousekeepingStatus={showHousekeepingStatus}
+              onCompactCalendarChange={handleCompactCalendarChange}
+              onShowSummaryChange={handleShowSummaryChange}
+              onShowTeamRosterChange={handleShowTeamRosterChange}
+              onShowHousekeepingStatusChange={handleShowHousekeepingStatusChange}
+            />
+
+            <div className="border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2">
+              <button
+                type="button"
+                onClick={() => setIsHousekeepingOpen(true)}
+                className={iconBtn()}
+                title="Housekeeping"
+                aria-label="Housekeeping"
+              >
+                <BrushCleaning size={layout.appIconSize} />
+              </button>
+            </div>
 
             {/* Admin-only controls */}
             {isAdmin && (
@@ -140,7 +153,7 @@ function AppContent() {
                   >
                     <Bell size={layout.appIconSize} />
                     {criticalCount > 0 && (
-                      <span className="absolute top-2 right-2 sm:top-1.5 sm:right-1.5 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white">
+                      <span className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 min-w-[13px] h-3.5 px-0.5 bg-rose-500 text-white text-[7px] font-bold rounded-full flex items-center justify-center border border-white leading-none pointer-events-none">
                         {criticalCount}
                       </span>
                     )}
@@ -161,86 +174,60 @@ function AppContent() {
                         'sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-w-[90vw] sm:max-h-none sm:flex-none',
                       )}>
                         <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between shrink-0">
-                          <span className="text-xs font-bold text-gray-500">Today's Alerts</span>
+                          <span className="text-xs font-bold text-gray-500">Balance Alerts</span>
                           {totalCount > 0 && <span className="text-xs text-gray-400">{totalCount} items</span>}
                         </div>
                         <div className="overflow-y-auto flex-1 min-h-0 sm:max-h-[70vh]">
                         {totalCount === 0 ? (
-                          <div className="p-6 text-center text-xs text-gray-400 font-bold italic">All clear — no alerts today</div>
+                          <div className="p-6 text-center text-xs text-gray-400 font-bold italic">All clear — no outstanding balances</div>
                         ) : (
                           <>
-                            {arrivalAlerts.length > 0 && (
+                            {preDepartureBalanceAlerts.length > 0 && (
                               <div className="mt-1">
-                                <p className="px-3 pt-2 pb-1 text-xs font-bold text-blue-500">
-                                  Check-ins ({arrivalAlerts.length})
-                                </p>
-                                {arrivalAlerts.map(a => (
-                                  <div key={a.bookingId} className="px-3 py-2 rounded-xl hover:bg-gray-50 flex items-start gap-2.5">
-                                    <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 shrink-0', a.isToday ? 'bg-blue-500' : 'bg-gray-300')} />
-                                    <div className="min-w-0">
-                                      <p className="text-xs font-bold text-gray-900 truncate">{a.guestName}</p>
-                                      <p className="text-xs text-gray-400 mt-0.5">
-                                        {a.room} · {a.isToday ? 'Today' : 'Tomorrow'} · {a.adults}A{a.kids > 0 ? ` ${a.kids}K` : ''}
-                                      </p>
-                                      {a.paymentStatus !== 'Paid' && (
-                                        <span className={cn('text-xs font-bold', a.paymentStatus === 'Unpaid' ? 'text-rose-500' : 'text-amber-500')}>
-                                          {a.paymentStatus}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {balanceAlerts.length > 0 && (
-                              <div className={cn('mt-1', arrivalAlerts.length > 0 && 'border-t border-gray-50 pt-1')}>
                                 <p className="px-3 pt-2 pb-1 text-xs font-bold text-amber-500">
-                                  Balance Due ({balanceAlerts.length})
+                                  Before & during stay ({preDepartureBalanceAlerts.length})
                                 </p>
-                                {balanceAlerts.map(a => (
-                                  <div key={a.bookingId} className={cn('px-3 py-2 rounded-xl hover:bg-gray-50 flex items-start gap-2.5', a.isToday && a.paymentStatus === 'Unpaid' && 'bg-rose-50/40')}>
-                                    <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 shrink-0', a.isToday ? 'bg-rose-500' : 'bg-amber-400')} />
+                                {preDepartureBalanceAlerts.map(a => (
+                                  <div key={a.bookingId} className="px-3 py-2 rounded-xl hover:bg-amber-50/40 flex items-start gap-2.5">
+                                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-amber-500" />
                                     <div className="min-w-0">
                                       <p className="text-xs font-bold text-gray-900 truncate">{a.guestName}</p>
                                       <p className="text-xs text-gray-400 mt-0.5">
-                                        {a.room} · {a.isToday ? 'Arriving today' : `In ${a.daysUntilCheckIn}d`}
+                                        {a.room} ·{' '}
+                                        {a.daysUntilCheckIn > 0
+                                          ? (a.daysUntilCheckIn === 1 ? 'Arrives tomorrow' : `Arrives in ${a.daysUntilCheckIn}d`)
+                                          : a.daysUntilCheckIn === 0
+                                            ? 'Arrives today'
+                                            : a.daysUntilCheckOut === 0
+                                              ? 'Checks out today'
+                                              : a.daysUntilCheckOut === 1
+                                                ? 'Checks out tomorrow'
+                                                : `Currently staying · ${a.daysUntilCheckOut}d left`}
                                       </p>
-                                      <p className={cn('text-xs font-bold mt-0.5', a.paymentStatus === 'Unpaid' ? 'text-rose-600' : 'text-amber-500')}>
-                                        €{a.remaining.toFixed(0)} remaining · {a.paymentStatus}
+                                      <p className="text-xs font-bold text-amber-600 mt-0.5">
+                                        €{a.remaining.toFixed(0)} remaining
                                       </p>
                                     </div>
                                   </div>
                                 ))}
                               </div>
                             )}
-                            {commentAlerts.length > 0 && (
-                              <div className={cn('mt-1', (arrivalAlerts.length > 0 || balanceAlerts.length > 0) && 'border-t border-gray-50 pt-1')}>
-                                <p className="px-3 pt-2 pb-1 text-xs font-bold text-indigo-500">
-                                  Booking Comments ({commentAlerts.length})
+                            {postDepartureBalanceAlerts.length > 0 && (
+                              <div className={cn('mt-1', preDepartureBalanceAlerts.length > 0 && 'border-t border-gray-50 pt-1')}>
+                                <p className="px-3 pt-2 pb-1 text-xs font-bold text-rose-500">
+                                  After departure ({postDepartureBalanceAlerts.length})
                                 </p>
-                                {commentAlerts.map(a => (
-                                  <div key={a.bookingId} className="px-3 py-2 rounded-xl hover:bg-gray-50 flex items-start gap-2.5">
-                                    <MessageSquare size={12} className="mt-0.5 shrink-0 text-indigo-400" />
+                                {postDepartureBalanceAlerts.map(a => (
+                                  <div key={a.bookingId} className="px-3 py-2 rounded-xl hover:bg-rose-50/40 flex items-start gap-2.5">
+                                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-rose-500" />
                                     <div className="min-w-0">
                                       <p className="text-xs font-bold text-gray-900 truncate">{a.guestName}</p>
-                                      <p className="text-xs text-gray-400 mt-0.5">{a.room} · check-in {a.checkIn}</p>
-                                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.comment}</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {noteAlerts.length > 0 && (
-                              <div className={cn('mt-1', (arrivalAlerts.length > 0 || balanceAlerts.length > 0 || commentAlerts.length > 0) && 'border-t border-gray-50 pt-1')}>
-                                <p className="px-3 pt-2 pb-1 text-xs font-bold text-violet-500">
-                                  Housekeeping Notes ({noteAlerts.length})
-                                </p>
-                                {noteAlerts.map(a => (
-                                  <div key={a.roomId} className="px-3 py-2 rounded-xl hover:bg-gray-50 flex items-start gap-2.5">
-                                    <MessageSquare size={12} className="mt-0.5 shrink-0 text-violet-400" />
-                                    <div className="min-w-0">
-                                      <p className="text-xs font-bold text-gray-900">{a.roomName}</p>
-                                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.note}</p>
+                                      <p className="text-xs text-gray-400 mt-0.5">
+                                        {a.room} · {a.daysSinceCheckout === 0 ? 'Checked out today' : `${a.daysSinceCheckout}d since checkout`}
+                                      </p>
+                                      <p className="text-xs font-bold text-rose-600 mt-0.5">
+                                        €{a.remaining.toFixed(0)} remaining
+                                      </p>
                                     </div>
                                   </div>
                                 ))}
@@ -254,43 +241,18 @@ function AppContent() {
                   )}
                 </div>
 
-                {/* Desktop: Trash, Settings */}
+                {/* Desktop: Settings */}
                 <div className="hidden sm:flex items-center gap-1 border-l border-gray-100 ml-1 pl-2">
                   <button
                     type="button"
-                    onClick={() => setIsTrashOpen(true)}
-                    className={cn(iconBtn('hover:text-rose-500'))}
-                    title="Recently Deleted"
-                    aria-label="Recently Deleted"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className={iconBtn()}
+                    title="Settings"
+                    aria-label="Settings"
                   >
-                    <Trash2 size={layout.appIconSize} />
+                    <Settings size={layout.appIconSize} />
                   </button>
-                  <div className="border-l border-gray-100 ml-1 pl-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsSettingsOpen(true)}
-                      className={iconBtn()}
-                      title="Settings"
-                      aria-label="Settings"
-                    >
-                      <Settings size={layout.appIconSize} />
-                    </button>
-                  </div>
                 </div>
-
-                {/* Finances — same pill pattern as former Booking Portal entry */}
-                <button
-                  type="button"
-                  onClick={() => setIsDashboardOpen(true)}
-                  className="hidden sm:flex items-center gap-1.5 border-l border-gray-100 ml-2 pl-4 mr-0.5 text-gray-700 hover:text-black transition-colors"
-                  title="Finances"
-                  aria-label="Finances"
-                >
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-900 text-white text-xs font-bold hover:bg-black transition-colors">
-                    <DollarSign size={14} />
-                    Finances
-                  </span>
-                </button>
 
                 {/* Mobile: overflow menu */}
                 <div className="relative sm:hidden border-l border-gray-100 ml-0.5 pl-1" ref={moreMenuRef}>
@@ -309,24 +271,7 @@ function AppContent() {
                       <div className="px-3 py-2 border-b border-gray-50">
                         <span className="text-xs font-bold text-gray-500">More</span>
                       </div>
-                      <div className="pt-1 pb-2">
-                        <button
-                          type="button"
-                          onClick={() => { setIsMoreMenuOpen(false); setIsDashboardOpen(true); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl transition-all font-bold text-xs"
-                        >
-                          <DollarSign size={16} /> Finances
-                        </button>
-                      </div>
-                      <div className="py-1 space-y-0.5 border-t border-gray-50">
-                        <button
-                          type="button"
-                          onClick={() => { setIsMoreMenuOpen(false); setIsTrashOpen(true); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
-                        >
-                          <Trash2 size={16} className="text-gray-400" />
-                          Recently Deleted
-                        </button>
+                      <div className="py-1 space-y-0.5">
                         <button
                           type="button"
                           onClick={() => { setIsMoreMenuOpen(false); setIsSettingsOpen(true); }}
@@ -352,8 +297,17 @@ function AppContent() {
                   <p className="text-[10px] font-bold leading-none text-gray-900 group-hover:text-blue-600 transition-colors">{profile?.name || profile?.email}</p>
                   <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-0.5 font-black">{profile?.role}</p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50 overflow-hidden">
-                  <UserIcon size={16} className="text-gray-400 group-hover:text-blue-500" />
+                <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50 overflow-hidden shrink-0">
+                  {user?.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <UserIcon size={16} className="text-gray-400 group-hover:text-blue-500" />
+                  )}
                 </div>
               </button>
 
@@ -396,11 +350,8 @@ function AppContent() {
           showTeamRoster={showTeamRoster}
           showHousekeepingStatus={showHousekeepingStatus}
           compact={compactCalendar}
-          onCompactCalendarChange={handleCompactCalendarChange}
-          onShowSummaryChange={handleShowSummaryChange}
-          onShowTeamRosterChange={handleShowTeamRosterChange}
-          onShowHousekeepingStatusChange={handleShowHousekeepingStatusChange}
-          onOpenBookingList={() => setIsStatsOpen(true)}
+          onOpenBookings={isAdmin ? () => setIsStatsOpen(true) : undefined}
+          onOpenFinances={isAdmin ? () => setIsDashboardOpen(true) : undefined}
           onOpenRetreatSettings={isAdmin ? openRetreatSettings : undefined}
         />
       </main>
@@ -439,6 +390,10 @@ function AppContent() {
             retreatTypes={retreatTypes}
             retreats={retreats}
             venueHires={venueHires}
+            deletedBookings={deletedBookings}
+            deletedVenueHires={deletedVenueHires}
+            currentUserName={profile?.name}
+            currentUserEmail={profile?.email}
             teamPositions={teamPositions}
             displaySettings={calendarDisplaySettings}
             openOptions={settingsOpenOptions}
@@ -452,14 +407,6 @@ function AppContent() {
             rooms={rooms}
             bookingChannels={bookingChannels}
             paymentChannels={paymentChannels}
-          />
-          <TrashedItemsModal
-            isOpen={isTrashOpen}
-            onClose={() => setIsTrashOpen(false)}
-            deletedBookings={deletedBookings}
-            deletedVenueHires={deletedVenueHires}
-            currentUserName={profile?.name}
-            currentUserEmail={profile?.email}
           />
           <DashboardModal
             isOpen={isDashboardOpen}

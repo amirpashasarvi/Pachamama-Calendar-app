@@ -1,5 +1,6 @@
 import { addDays, differenceInDays, endOfDay, parseISO, startOfDay } from 'date-fns';
 import { calcTotalCommission, CommissionInput } from '@/lib/commission';
+import { getCollectedAmount, extrasTotal } from '@/lib/bookingFinancials';
 import { ConfigOption } from '@/types';
 
 export interface PeriodRange {
@@ -88,11 +89,8 @@ export function prorateAmount(
   return amount * prorateRatio(checkIn, checkOut, periodStart, periodEnd);
 }
 
-import { getCollectedAmount } from '@/lib/bookingFinancials';
-
 export function fullStayFinancials(financials: StayFinancials): ProratedStayAmounts {
-  const extrasTotal = (financials.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-  const revenue = (financials.price || 0) + extrasTotal;
+  const revenue = (financials.price || 0) + extrasTotal(financials.extras);
   const collected = getCollectedAmount(financials);
   return {
     revenue,

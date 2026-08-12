@@ -273,7 +273,7 @@ export default function StatisticsModal({ isOpen, onClose, bookings, venueHires 
               <div className="p-1.5 bg-gray-100 text-gray-600 rounded-lg">
                 <List size={16} />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Booking List</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Bookings</h2>
             </div>
             <button 
               onClick={onClose}

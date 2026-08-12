@@ -14,10 +14,11 @@ interface BookingBarProps {
   calendarDisplaySettings: CalendarDisplaySettings | null;
   onEditBooking: (booking: Booking) => void;
   compact?: boolean;
+  highlighted?: boolean;
 }
 
 function BookingBar({
-  booking, days, bookingTypes, calendarDisplaySettings, onEditBooking, compact = false,
+  booking, days, bookingTypes, calendarDisplaySettings, onEditBooking, compact = false, highlighted = false,
 }: BookingBarProps) {
   const layout = calendarLayoutClasses(compact);
   const dayWidth = 56;
@@ -143,9 +144,11 @@ function BookingBar({
   if (blocked) {
     return (
       <div
+        data-booking-id={booking.id}
         className={cn(
           'absolute z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden',
           layout.bookingBar,
+          highlighted && 'guest-booking-highlight',
         )}
         style={{
           left: `${left - 1}px`,
@@ -168,9 +171,11 @@ function BookingBar({
 
   return (
     <div
+      data-booking-id={booking.id}
       className={cn(
         'absolute z-20 cursor-pointer pointer-events-auto shadow-sm transition-transform hover:scale-[1.01] active:brightness-95 overflow-hidden',
         layout.bookingBar,
+        highlighted && 'guest-booking-highlight',
       )}
       style={{
         left: `${left - 1}px`,

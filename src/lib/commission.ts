@@ -1,4 +1,5 @@
 import { ConfigOption } from '@/types';
+import { extrasTotal } from '@/lib/bookingFinancials';
 
 export type BookingChannelBasis = 'bookingPrice' | 'deposit' | 'custom';
 export type PaymentChannelBasis = 'bookingPrice' | 'remaining' | 'custom';
@@ -20,8 +21,7 @@ export interface CommissionInput {
 }
 
 export function bookingTotal(input: Pick<CommissionInput, 'price' | 'extras'>): number {
-  const extrasTotal = (input.extras || []).reduce((s, e) => s + (e.amount || 0), 0);
-  return (input.price || 0) + extrasTotal;
+  return (input.price || 0) + extrasTotal(input.extras);
 }
 
 export function migrateCommissionFields(record: {

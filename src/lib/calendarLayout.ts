@@ -71,12 +71,21 @@ export function calendarLayoutClasses(compact: boolean) {
     appTitleClass: compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-base',
     appIconBtn: compact ? 'p-1' : 'p-1.5',
     appIconSize: compact ? 14 : 16,
-    calHeaderRow: compact ? 'h-8' : 'h-10',
+    calHeaderRow: compact ? 'min-h-10 h-10' : 'min-h-11 h-11',
     monthBtn: compact
-      ? 'px-1.5 py-0.5 rounded text-[10px] font-bold transition-all'
-      : 'px-2 py-0.5 rounded text-xs font-bold transition-all',
+      ? 'inline-flex items-center justify-center h-7 px-2 rounded text-[11px] font-bold transition-all'
+      : 'inline-flex items-center justify-center h-8 px-2.5 rounded text-xs font-bold transition-all',
+    /** Shared pill sizing — same height and corners as month buttons, slightly wider for labels. */
+    calActionPill: compact
+      ? 'inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded text-[11px] font-bold leading-none whitespace-nowrap'
+      : 'inline-flex items-center justify-center gap-1 h-8 px-3 rounded text-xs font-bold leading-none whitespace-nowrap',
+    addBookingBtn: compact
+      ? 'inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded text-[11px] font-bold leading-none whitespace-nowrap'
+      : 'inline-flex items-center justify-center gap-1 h-8 px-3 rounded text-xs font-bold leading-none whitespace-nowrap',
+    addBookingPlusSize: compact ? 11 : 13,
+    calActionPillIconSize: compact ? 11 : 13,
     todayBtn: compact ? 'text-[9px] px-1.5 py-0.5' : 'text-[10px] px-2 py-1',
-    navChevronSize: compact ? 10 : 12,
+    navChevronSize: compact ? 11 : 13,
     navYearText: compact ? 'text-[10px]' : 'text-xs',
     navIconSize: compact ? 12 : 14,
     dateHeaderRow: compact ? 'h-7' : 'h-9',
@@ -101,10 +110,6 @@ export function calendarLayoutClasses(compact: boolean) {
     teamLabelRow: compact ? 'h-5' : 'h-6',
     teamLabelPad: compact ? 'px-1.5' : 'px-2',
     teamMemberBar: compact ? 'h-5 top-1' : 'h-7 top-1.5',
-    addBookingBtn: compact
-      ? 'px-1 py-0.5 rounded-md text-[8px] font-bold'
-      : 'px-1.5 py-1 rounded-lg text-[9px] font-bold',
-    addBookingPlusSize: compact ? 8 : 10,
     cellPlusSize: compact ? 10 : 12,
   };
 }

@@ -11,6 +11,7 @@ import { useBooking } from '@/hooks/useBooking';
 import Header from './Header';
 import RoomRow from './RoomRow';
 import RetreatBar from './RetreatBar';
+import AddMenu from './AddMenu';
 import SummaryRow from './SummaryRow';
 import BookingModal from '@/components/modals/BookingModal';
 import BlockRoomModal from '@/components/modals/BlockRoomModal';
@@ -23,7 +24,7 @@ import { Room, Booking, Retreat, HousekeepingRecord, VenueHire, TeamPosition, Te
 import { useAuth } from '@/hooks/useAuth';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isWithinInterval, parseISO, isValid } from 'date-fns';
+import { isWithinInterval, parseISO, isValid, isBefore } from 'date-fns';
 
 // Sorting imports
 import {
@@ -112,6 +113,8 @@ interface CalendarGridProps {
   onBlockRooms?: () => void;
   onAddTeamAssignment: (positionId: string, date: Date) => void;
   onEditTeamAssignment: (assignment: TeamAssignment) => void;
+  highlightedBookingId?: string | null;
+  onSelectGuestBooking?: (booking: Booking) => void;
 }
 
 const CalendarGrid = memo(function CalendarGrid({
@@ -150,6 +153,8 @@ const CalendarGrid = memo(function CalendarGrid({
   onBlockRooms,
   onAddTeamAssignment,
   onEditTeamAssignment,
+  highlightedBookingId = null,
+  onSelectGuestBooking,
 }: CalendarGridProps) {
   return (
     <div
@@ -157,15 +162,16 @@ const CalendarGrid = memo(function CalendarGrid({
       className="flex-1 overflow-auto border-t border-gray-200 scrollbar-thin scrollbar-thumb-gray-200 print:overflow-visible print:h-auto print:flex-none"
     >
       <div className="inline-block min-w-full">
-        <div className="flex sticky top-0 z-[90] bg-white border-b border-gray-200 shadow-sm">
-          <div className={cn('sticky left-0 z-[100] bg-white border-r border-gray-200 flex items-center justify-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]', layout.roomLabelCol, layout.roomLabelPad)}>
+        <div className="flex sticky top-0 z-[90] bg-white overflow-visible">
+          <div className={cn('sticky left-0 z-[100] bg-gray-200 border-r border-gray-400 border-b-0 flex items-center justify-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] overflow-visible', layout.roomLabelCol, layout.roomLabelPad, layout.dateHeaderRow)}>
             {isAdmin ? (
-              <button
-                onClick={() => onAddBooking()}
-                className={cn('flex items-center justify-center gap-1 w-full bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm', layout.addBookingBtn)}
-              >
-                <Plus size={layout.addBookingPlusSize} /> Add Booking
-              </button>
+              <AddMenu
+                compact={compact}
+                onAddBooking={() => onAddBooking()}
+                onAddRetreat={onAddRetreat}
+                onAddVenueHire={onAddVenueHire}
+                onBlockRooms={onBlockRooms}
+              />
             ) : (
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Rooms</span>
             )}
@@ -174,7 +180,7 @@ const CalendarGrid = memo(function CalendarGrid({
             <div
               key={`header-${day.toISOString()}-${idx}`}
               className={cn(
-                'w-14 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-200 font-mono',
+                'w-14 flex-shrink-0 flex flex-col items-center justify-center border-r border-b border-gray-200 font-mono',
                 layout.dateHeaderRow,
                 layout.dateHeaderWeekday,
                 isWeekend(day) ? 'bg-gray-50 text-gray-500' : 'text-gray-500'
@@ -190,12 +196,12 @@ const CalendarGrid = memo(function CalendarGrid({
           days={days}
           retreats={retreats}
           venueHires={activeVenueHires}
-          onAdd={onAddRetreat}
           onEdit={onEditRetreat}
-          onAddVenue={onAddVenueHire}
           onEditVenue={onEditVenueHire}
-          onBlockRooms={onBlockRooms}
           compact={compact}
+          bookings={activeBookings}
+          rooms={rooms}
+          onSelectGuestBooking={onSelectGuestBooking}
         />
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -228,6 +234,7 @@ const CalendarGrid = memo(function CalendarGrid({
                     retreatBoundaryDates={retreatBoundaryDates}
                     isAdmin={isAdmin}
                     compact={compact}
+                    highlightedBookingId={highlightedBookingId}
                   />
                 ))}
               </SortableContext>
@@ -263,11 +270,8 @@ interface CalendarProps {
   showTeamRoster?: boolean;
   showHousekeepingStatus?: boolean;
   compact?: boolean;
-  onCompactCalendarChange?: (compact: boolean) => void;
-  onShowSummaryChange?: (show: boolean) => void;
-  onShowTeamRosterChange?: (show: boolean) => void;
-  onShowHousekeepingStatusChange?: (show: boolean) => void;
-  onOpenBookingList?: () => void;
+  onOpenBookings?: () => void;
+  onOpenFinances?: () => void;
   onOpenRetreatSettings?: (options: SettingsOpenOptions) => void;
 }
 
@@ -279,11 +283,8 @@ export default function Calendar({
   showTeamRoster = false,
   showHousekeepingStatus = false,
   compact = true,
-  onCompactCalendarChange,
-  onShowSummaryChange,
-  onShowTeamRosterChange,
-  onShowHousekeepingStatusChange,
-  onOpenBookingList,
+  onOpenBookings,
+  onOpenFinances,
   onOpenRetreatSettings,
 }: CalendarProps) {
   const { rooms: localRooms, bookings: localBookings, retreats, venueHires, settings, bookingTypes, bookingChannels, paymentChannels, teamPositions, teamAssignments, calendarDisplaySettings, loading } = useBooking();
@@ -338,13 +339,61 @@ export default function Calendar({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll the grid to bring a specific date into view (56px per day column)
-  const scrollToDate = (date: Date) => {
+  const scrollToDate = useCallback((date: Date) => {
     const yearStart = new Date(date.getFullYear(), 0, 1);
     const dayIndex = differenceInDays(date, yearStart);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollLeft = dayIndex * 56;
     }
-  };
+  }, []);
+
+  const [highlightedBookingId, setHighlightedBookingId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+    };
+  }, []);
+
+  const handleSelectGuestBooking = useCallback((booking: Booking) => {
+    const checkIn = parseISO(booking.checkIn);
+    const checkOut = parseISO(booking.checkOut);
+    if (!isValid(checkIn) || !isValid(checkOut)) return;
+
+    const today = startOfToday();
+    const scrollTarget =
+      !isBefore(today, checkIn) && isBefore(today, checkOut) ? today : checkIn;
+
+    const targetYear = scrollTarget.getFullYear();
+    const needsYearChange = viewStartDate.getFullYear() !== targetYear;
+    if (needsYearChange) {
+      setViewStartDate(new Date(targetYear, 0, 1));
+    }
+
+    const runScrollAndHighlight = () => {
+      scrollToDate(scrollTarget);
+      setHighlightedBookingId(booking.id);
+      if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = window.setTimeout(() => {
+        setHighlightedBookingId(null);
+        highlightTimeoutRef.current = null;
+      }, 2200);
+
+      requestAnimationFrame(() => {
+        const el = scrollContainerRef.current?.querySelector(
+          `[data-booking-id="${CSS.escape(booking.id)}"]`,
+        );
+        (el as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+    };
+
+    if (needsYearChange) {
+      window.setTimeout(runScrollAndHighlight, 80);
+    } else {
+      runScrollAndHighlight();
+    }
+  }, [viewStartDate, scrollToDate]);
 
   // Update visibleMonth from scroll position using rAF for smooth performance
   const handleScroll = useCallback(() => {
@@ -574,14 +623,8 @@ export default function Calendar({
         onScrollToDate={scrollToDate}
         visibleMonth={visibleMonth}
         compact={compact}
-        showSummary={showSummary}
-        showTeamRoster={showTeamRoster}
-        onCompactCalendarChange={onCompactCalendarChange}
-        onShowSummaryChange={onShowSummaryChange}
-        onShowTeamRosterChange={onShowTeamRosterChange}
-        onShowHousekeepingStatusChange={onShowHousekeepingStatusChange}
-        showHousekeepingStatus={showHousekeepingStatus}
-        onOpenBookingList={isAdmin ? onOpenBookingList : undefined}
+        onOpenBookings={isAdmin ? onOpenBookings : undefined}
+        onOpenFinances={isAdmin ? onOpenFinances : undefined}
       />
 
       <CalendarGrid
@@ -620,6 +663,8 @@ export default function Calendar({
         onBlockRooms={isAdmin ? handleAddBlockRoom : undefined}
         onAddTeamAssignment={handleAddTeamAssignment}
         onEditTeamAssignment={handleEditTeamAssignment}
+        highlightedBookingId={highlightedBookingId}
+        onSelectGuestBooking={handleSelectGuestBooking}
       />
 
       {isBookingModalOpen && (

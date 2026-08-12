@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { differenceInDays, parseISO } from "date-fns";
+import { differenceInDays, format, parseISO } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -69,8 +69,20 @@ export function findPeriodOverlapError(
 }
 
 export function formatCurrency(amount: number) {
+  if (!Number.isFinite(amount)) return '—';
   return new Intl.NumberFormat('de-DE', {
     style: 'currency',
     currency: 'EUR',
   }).format(amount);
+}
+
+export function safeFormatISO(value: string | undefined | null, pattern: string, fallback = '—'): string {
+  if (!value) return fallback;
+  try {
+    const parsed = parseISO(value);
+    if (Number.isNaN(parsed.getTime())) return fallback;
+    return format(parsed, pattern);
+  } catch {
+    return fallback;
+  }
 }
