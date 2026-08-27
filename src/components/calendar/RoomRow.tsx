@@ -75,19 +75,19 @@ function RoomRow({
         )}
         onClick={isAdmin ? () => onEditRoom(room) : undefined}
       >
-        {/* Thicker Color Strip Drag Handle */}
+        {/* Color strip drag handle — thinner on mobile */}
         <div 
           {...attributes}
           {...listeners}
-          className="absolute left-0 top-0 bottom-0 w-3 cursor-grab active:cursor-grabbing group/handle hover:w-6 transition-all duration-200 flex items-center justify-center overflow-hidden"
+          className="absolute left-0 top-0 bottom-0 w-1 sm:w-3 cursor-grab active:cursor-grabbing group/handle sm:hover:w-6 transition-all duration-200 flex items-center justify-center overflow-hidden"
           style={{ backgroundColor: room.color }}
           title="Drag to reorder"
           onClick={(e) => e.stopPropagation()}
         >
-          <GripVertical size={12} className="text-white opacity-0 group-hover/handle:opacity-100 transition-opacity" />
+          <GripVertical size={12} className="text-white opacity-0 group-hover/handle:opacity-100 transition-opacity hidden sm:block" />
         </div>
 
-        <div className={cn('flex flex-1 min-w-0 items-center gap-1.5', layout.roomNameMl)}>
+        <div className={cn('flex flex-1 min-w-0 items-center gap-1.5 pl-2 sm:pl-4')}>
           {housekeepingStatus && (
             <div
               className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${
@@ -98,7 +98,14 @@ function RoomRow({
               title={housekeepingStatusLabel(housekeepingStatus)}
             />
           )}
-          <span className={cn('font-bold truncate tracking-tight leading-tight', layout.roomName)}>{String(room.name)}</span>
+          <span
+            className={cn(
+              'font-bold tracking-tight leading-tight overflow-hidden whitespace-nowrap sm:truncate',
+              compact ? 'text-[9px] sm:text-[10px]' : 'text-[10px] sm:text-[11px]',
+            )}
+          >
+            {String(room.name)}
+          </span>
         </div>
       </div>
 

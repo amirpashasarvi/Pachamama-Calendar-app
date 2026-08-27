@@ -1,7 +1,7 @@
 import AuthContainer from './components/auth/AuthContainer';
 import Calendar from './components/calendar/Calendar';
 import { useAuth } from './hooks/useAuth';
-import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, MoreHorizontal } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings, BrushCleaning, Bell, MoreHorizontal, Eye } from 'lucide-react';
 import CalendarViewMenu from './components/calendar/CalendarViewMenu';
 import { useState, useRef, useEffect } from 'react';
 import SettingsModal, { type SettingsOpenOptions } from './components/modals/SettingsModal';
@@ -39,6 +39,7 @@ function AppContent() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isMoreCalendarViewOpen, setIsMoreCalendarViewOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(loadShowSummaryPreference);
   const [showTeamRoster, setShowTeamRoster] = useState(loadShowTeamRosterPreference);
   const [showHousekeepingStatus, setShowHousekeepingStatus] = useState(loadShowHousekeepingStatusPreference);
@@ -69,15 +70,20 @@ function AppContent() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const notificationsMenuRef = useRef<HTMLDivElement>(null);
+  const mobileNotificationsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
         setIsUserMenuOpen(false);
       }
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
         setIsMoreMenuOpen(false);
+        setIsMoreCalendarViewOpen(false);
       }
-      if (notificationsMenuRef.current && !notificationsMenuRef.current.contains(event.target as Node)) {
+      const inDesktopAlerts = notificationsMenuRef.current?.contains(target);
+      const inMobileAlerts = mobileNotificationsRef.current?.contains(target);
+      if (!inDesktopAlerts && !inMobileAlerts) {
         setIsNotificationsOpen(false);
       }
     }
@@ -114,36 +120,38 @@ function AppContent() {
         <div className="flex items-center gap-2 sm:gap-4 shrink-0 pr-3 sm:pr-5">
           <div className="flex items-center gap-0.5 sm:gap-1">
 
-            <CalendarViewMenu
-              iconSize={layout.appIconSize}
-              buttonClassName={iconBtn()}
-              compact={compactCalendar}
-              showSummary={showSummary}
-              showTeamRoster={showTeamRoster}
-              showHousekeepingStatus={showHousekeepingStatus}
-              onCompactCalendarChange={handleCompactCalendarChange}
-              onShowSummaryChange={handleShowSummaryChange}
-              onShowTeamRosterChange={handleShowTeamRosterChange}
-              onShowHousekeepingStatusChange={handleShowHousekeepingStatusChange}
-            />
+            {/* Desktop: Calendar View, Housekeeping, Alerts stay as icons */}
+            <div className="hidden sm:contents">
+              <CalendarViewMenu
+                iconSize={layout.appIconSize}
+                buttonClassName={iconBtn()}
+                compact={compactCalendar}
+                showSummary={showSummary}
+                showTeamRoster={showTeamRoster}
+                showHousekeepingStatus={showHousekeepingStatus}
+                onCompactCalendarChange={handleCompactCalendarChange}
+                onShowSummaryChange={handleShowSummaryChange}
+                onShowTeamRosterChange={handleShowTeamRosterChange}
+                onShowHousekeepingStatusChange={handleShowHousekeepingStatusChange}
+              />
 
-            <div className="border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2">
-              <button
-                type="button"
-                onClick={() => setIsHousekeepingOpen(true)}
-                className={iconBtn()}
-                title="Housekeeping"
-                aria-label="Housekeeping"
-              >
-                <BrushCleaning size={layout.appIconSize} />
-              </button>
+              <div className="border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2">
+                <button
+                  type="button"
+                  onClick={() => setIsHousekeepingOpen(true)}
+                  className={iconBtn()}
+                  title="Housekeeping"
+                  aria-label="Housekeeping"
+                >
+                  <BrushCleaning size={layout.appIconSize} />
+                </button>
+              </div>
             </div>
 
-            {/* Admin-only controls */}
+            {/* Admin-only desktop alerts + settings */}
             {isAdmin && (
               <>
-                {/* Alerts — always visible */}
-                <div className="relative border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2" ref={notificationsMenuRef}>
+                <div className="relative hidden sm:block border-l border-gray-100 ml-0.5 pl-1 sm:ml-1 sm:pl-2" ref={notificationsMenuRef}>
                   <button
                     type="button"
                     onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
@@ -241,7 +249,6 @@ function AppContent() {
                   )}
                 </div>
 
-                {/* Desktop: Settings */}
                 <div className="hidden sm:flex items-center gap-1 border-l border-gray-100 ml-1 pl-2">
                   <button
                     type="button"
@@ -253,25 +260,104 @@ function AppContent() {
                     <Settings size={layout.appIconSize} />
                   </button>
                 </div>
+              </>
+            )}
 
-                {/* Mobile: overflow menu */}
-                <div className="relative sm:hidden border-l border-gray-100 ml-0.5 pl-1" ref={moreMenuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                    className={iconBtn()}
-                    title="More"
-                    aria-label="More"
-                  >
-                    <MoreHorizontal size={layout.appIconSize} />
-                  </button>
+            {/* Mobile: overflow menu holds Calendar View, Housekeeping, Alerts, Settings */}
+            <div className="relative sm:hidden border-l border-gray-100 ml-0.5 pl-1" ref={moreMenuRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMoreMenuOpen(!isMoreMenuOpen);
+                  setIsMoreCalendarViewOpen(false);
+                }}
+                className={cn(iconBtn(), 'relative')}
+                title="More"
+                aria-label="More"
+              >
+                <MoreHorizontal size={layout.appIconSize} />
+                {isAdmin && criticalCount > 0 && (
+                  <span className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 min-w-[13px] h-3.5 px-0.5 bg-rose-500 text-white text-[7px] font-bold rounded-full flex items-center justify-center border border-white leading-none pointer-events-none">
+                    {criticalCount}
+                  </span>
+                )}
+              </button>
 
-                  {isMoreMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-52 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100">
-                      <div className="px-3 py-2 border-b border-gray-50">
-                        <span className="text-xs font-bold text-gray-500">More</span>
+              {isMoreMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[200] animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3 py-2 border-b border-gray-50">
+                    <span className="text-xs font-bold text-gray-500">More</span>
+                  </div>
+                  <div className="py-1 space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsMoreCalendarViewOpen(v => !v)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
+                    >
+                      <Eye size={16} className="text-gray-400" /> Calendar View
+                    </button>
+                    {isMoreCalendarViewOpen && (
+                      <div className="mx-1 mb-1 px-2 py-1.5 bg-gray-50 rounded-xl space-y-0.5">
+                        <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={compactCalendar}
+                            onChange={(e) => handleCompactCalendarChange(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Compact calendar</span>
+                        </label>
+                        <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showSummary}
+                            onChange={(e) => handleShowSummaryChange(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Summary</span>
+                        </label>
+                        <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showTeamRoster}
+                            onChange={(e) => handleShowTeamRosterChange(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Staff & Volunteers</span>
+                        </label>
+                        <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showHousekeepingStatus}
+                            onChange={(e) => handleShowHousekeepingStatusChange(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Housekeeping status</span>
+                        </label>
                       </div>
-                      <div className="py-1 space-y-0.5">
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setIsMoreMenuOpen(false); setIsHousekeepingOpen(true); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
+                    >
+                      <BrushCleaning size={16} className="text-gray-400" /> Housekeeping
+                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setIsMoreMenuOpen(false); setIsNotificationsOpen(true); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl transition-all font-bold text-xs"
+                        >
+                          <Bell size={16} className="text-gray-400" />
+                          <span className="flex-1 text-left">Alerts</span>
+                          {criticalCount > 0 && (
+                            <span className="min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                              {criticalCount}
+                            </span>
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={() => { setIsMoreMenuOpen(false); setIsSettingsOpen(true); }}
@@ -279,9 +365,92 @@ function AppContent() {
                         >
                           <Settings size={16} className="text-gray-400" /> Settings
                         </button>
-                      </div>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile alerts panel — opened from More menu */}
+            {isAdmin && isNotificationsOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close alerts"
+                  className="fixed inset-0 z-[205] bg-black/30 sm:hidden"
+                  onClick={() => setIsNotificationsOpen(false)}
+                />
+                <div
+                  ref={mobileNotificationsRef}
+                  className={cn(
+                  'sm:hidden bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[210]',
+                  'animate-in fade-in zoom-in-95 duration-100',
+                  'fixed left-3 right-3 top-[calc(env(safe-area-inset-top)+3.25rem)] max-h-[min(70vh,calc(100dvh-5rem))] flex flex-col',
+                )}>
+                  <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between shrink-0">
+                    <span className="text-xs font-bold text-gray-500">Balance Alerts</span>
+                    {totalCount > 0 && <span className="text-xs text-gray-400">{totalCount} items</span>}
+                  </div>
+                  <div className="overflow-y-auto flex-1 min-h-0">
+                    {totalCount === 0 ? (
+                      <div className="p-6 text-center text-xs text-gray-400 font-bold italic">All clear — no outstanding balances</div>
+                    ) : (
+                      <>
+                        {preDepartureBalanceAlerts.length > 0 && (
+                          <div className="mt-1">
+                            <p className="px-3 pt-2 pb-1 text-xs font-bold text-amber-500">
+                              Before & during stay ({preDepartureBalanceAlerts.length})
+                            </p>
+                            {preDepartureBalanceAlerts.map(a => (
+                              <div key={a.bookingId} className="px-3 py-2 rounded-xl hover:bg-amber-50/40 flex items-start gap-2.5">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-amber-500" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-gray-900 truncate">{a.guestName}</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    {a.room} ·{' '}
+                                    {a.daysUntilCheckIn > 0
+                                      ? (a.daysUntilCheckIn === 1 ? 'Arrives tomorrow' : `Arrives in ${a.daysUntilCheckIn}d`)
+                                      : a.daysUntilCheckIn === 0
+                                        ? 'Arrives today'
+                                        : a.daysUntilCheckOut === 0
+                                          ? 'Checks out today'
+                                          : a.daysUntilCheckOut === 1
+                                            ? 'Checks out tomorrow'
+                                            : `Currently staying · ${a.daysUntilCheckOut}d left`}
+                                  </p>
+                                  <p className="text-xs font-bold text-amber-600 mt-0.5">
+                                    €{a.remaining.toFixed(0)} remaining
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {postDepartureBalanceAlerts.length > 0 && (
+                          <div className={cn('mt-1', preDepartureBalanceAlerts.length > 0 && 'border-t border-gray-50 pt-1')}>
+                            <p className="px-3 pt-2 pb-1 text-xs font-bold text-rose-500">
+                              After departure ({postDepartureBalanceAlerts.length})
+                            </p>
+                            {postDepartureBalanceAlerts.map(a => (
+                              <div key={a.bookingId} className="px-3 py-2 rounded-xl hover:bg-rose-50/40 flex items-start gap-2.5">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-rose-500" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-gray-900 truncate">{a.guestName}</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    {a.room} · {a.daysSinceCheckout === 0 ? 'Checked out today' : `${a.daysSinceCheckout}d since checkout`}
+                                  </p>
+                                  <p className="text-xs font-bold text-rose-600 mt-0.5">
+                                    €{a.remaining.toFixed(0)} remaining
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </>
             )}
