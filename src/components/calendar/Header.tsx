@@ -56,8 +56,9 @@ export default function Header({
     compact ? 'h-7 w-7' : 'h-8 w-8',
   );
 
-  /** Compact year/month steppers — mobile only */
-  const mobileNavBtnClass = 'inline-flex items-center justify-center h-7 w-5 bg-gray-200 hover:bg-gray-300 rounded transition-colors';
+  /** Compact year/month steppers — mobile only; matched size + gap from label */
+  const mobileNavBtnClass = 'inline-flex items-center justify-center h-7 w-6 bg-gray-200 hover:bg-gray-300 rounded transition-colors';
+  const mobileLabelClass = 'inline-flex items-center justify-center h-7 min-w-[40px] px-2 rounded text-[11px] font-bold tabular-nums';
 
   const monthBtnClass = (active: boolean) => cn(
     layout.monthBtn,
@@ -68,77 +69,41 @@ export default function Header({
 
   return (
     <div className="bg-[#f0f2f5] border-b print:hidden">
-      <div className={cn(
-        'flex items-center justify-between',
-        'px-2 sm:px-4',
-        layout.calHeaderRow,
-      )}>
-        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+      {/* Mobile: year left · month centered · destinations menu right */}
+      <div className={cn('flex sm:hidden items-center px-2', layout.calHeaderRow)}>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewStartDate(subYears(viewStartDate, 1))}
+            className={mobileNavBtnClass}
+            aria-label="Previous year"
+          >
+            <ChevronLeft size={11} />
+          </button>
+          <span className={cn(mobileLabelClass, 'bg-white text-gray-900 border border-gray-200')}>
+            {viewYear}
+          </span>
+          <button
+            type="button"
+            onClick={() => setViewStartDate(addYears(viewStartDate, 1))}
+            className={mobileNavBtnClass}
+            aria-label="Next year"
+          >
+            <ChevronRight size={11} />
+          </button>
+        </div>
 
-          {/* Year — desktop */}
-          <div className="hidden sm:flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setViewStartDate(subYears(viewStartDate, 1))}
-              className={navBtnClass}
-              aria-label="Previous year"
-            >
-              <ChevronLeft size={layout.navChevronSize} />
-            </button>
-            <span className={cn('font-bold px-2 min-w-[44px] text-center', layout.navYearText)}>{viewYear}</span>
-            <button
-              onClick={() => setViewStartDate(addYears(viewStartDate, 1))}
-              className={navBtnClass}
-              aria-label="Next year"
-            >
-              <ChevronRight size={layout.navChevronSize} />
-            </button>
-          </div>
-
-          {/* Year — mobile compact */}
-          <div className="flex sm:hidden items-center shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewStartDate(subYears(viewStartDate, 1))}
-              className={mobileNavBtnClass}
-              aria-label="Previous year"
-            >
-              <ChevronLeft size={10} />
-            </button>
-            <span className="font-bold text-[11px] px-0.5 min-w-[34px] text-center tabular-nums">{viewYear}</span>
-            <button
-              type="button"
-              onClick={() => setViewStartDate(addYears(viewStartDate, 1))}
-              className={mobileNavBtnClass}
-              aria-label="Next year"
-            >
-              <ChevronRight size={10} />
-            </button>
-          </div>
-
-          {/* Month pills — desktop */}
-          <div className="hidden sm:flex items-center gap-0.5 ml-1 min-w-0">
-            {months.map((m, i) => (
-              <button
-                key={m}
-                onClick={() => onScrollToDate(new Date(viewYear, i, 1))}
-                className={monthBtnClass(i === visibleMonth)}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-
-          {/* Month stepper — mobile (green selected month label) */}
-          <div className="flex sm:hidden items-center shrink-0">
+        <div className="flex-1 flex items-center justify-center min-w-0 px-1">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={() => navigateMonth(-1)}
               className={mobileNavBtnClass}
               aria-label="Previous month"
             >
-              <ChevronLeft size={10} />
+              <ChevronLeft size={11} />
             </button>
-            <span className="inline-flex items-center justify-center min-w-[36px] h-7 px-1.5 rounded text-[11px] font-bold bg-green-600 text-white shadow-sm">
+            <span className={cn(mobileLabelClass, 'bg-green-600 text-white shadow-sm')}>
               {months[visibleMonth]}
             </span>
             <button
@@ -147,50 +112,13 @@ export default function Header({
               className={mobileNavBtnClass}
               aria-label="Next month"
             >
-              <ChevronRight size={10} />
+              <ChevronRight size={11} />
             </button>
           </div>
         </div>
 
-        {/* Desktop destination pills */}
-        {showDestinations && (
-          <div className="hidden sm:flex items-center gap-1.5 shrink-0 ml-2">
-            {onOpenBookings && (
-              <button
-                type="button"
-                onClick={onOpenBookings}
-                className={cn(
-                  layout.calActionPill,
-                  'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 hover:border-gray-400 transition-colors',
-                )}
-                title="Bookings"
-                aria-label="Bookings"
-              >
-                <List size={layout.calActionPillIconSize} />
-                Bookings
-              </button>
-            )}
-            {onOpenFinances && (
-              <button
-                type="button"
-                onClick={onOpenFinances}
-                className={cn(
-                  layout.calActionPill,
-                  'bg-gray-900 text-white hover:bg-black transition-colors',
-                )}
-                title="Finances"
-                aria-label="Finances"
-              >
-                <DollarSign size={layout.calActionPillIconSize} />
-                Finances
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Mobile destination overflow menu */}
-        {showDestinations && (
-          <div className="relative sm:hidden shrink-0 ml-1" ref={destMenuRef}>
+        {showDestinations ? (
+          <div className="relative shrink-0" ref={destMenuRef}>
             <button
               type="button"
               onClick={() => setIsDestMenuOpen(v => !v)}
@@ -230,6 +158,82 @@ export default function Header({
                   </button>
                 )}
               </div>
+            )}
+          </div>
+        ) : (
+          <div className="w-8 shrink-0" aria-hidden="true" />
+        )}
+      </div>
+
+      {/* Desktop: original layout unchanged */}
+      <div className={cn(
+        'hidden sm:flex items-center justify-between',
+        'px-4',
+        layout.calHeaderRow,
+      )}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setViewStartDate(subYears(viewStartDate, 1))}
+              className={navBtnClass}
+              aria-label="Previous year"
+            >
+              <ChevronLeft size={layout.navChevronSize} />
+            </button>
+            <span className={cn('font-bold px-2 min-w-[44px] text-center', layout.navYearText)}>{viewYear}</span>
+            <button
+              onClick={() => setViewStartDate(addYears(viewStartDate, 1))}
+              className={navBtnClass}
+              aria-label="Next year"
+            >
+              <ChevronRight size={layout.navChevronSize} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-0.5 ml-1 min-w-0">
+            {months.map((m, i) => (
+              <button
+                key={m}
+                onClick={() => onScrollToDate(new Date(viewYear, i, 1))}
+                className={monthBtnClass(i === visibleMonth)}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {showDestinations && (
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            {onOpenBookings && (
+              <button
+                type="button"
+                onClick={onOpenBookings}
+                className={cn(
+                  layout.calActionPill,
+                  'bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 hover:border-gray-400 transition-colors',
+                )}
+                title="Bookings"
+                aria-label="Bookings"
+              >
+                <List size={layout.calActionPillIconSize} />
+                Bookings
+              </button>
+            )}
+            {onOpenFinances && (
+              <button
+                type="button"
+                onClick={onOpenFinances}
+                className={cn(
+                  layout.calActionPill,
+                  'bg-gray-900 text-white hover:bg-black transition-colors',
+                )}
+                title="Finances"
+                aria-label="Finances"
+              >
+                <DollarSign size={layout.calActionPillIconSize} />
+                Finances
+              </button>
             )}
           </div>
         )}
