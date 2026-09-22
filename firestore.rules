@@ -356,6 +356,15 @@ service cloud.firestore {
       allow create: if isSignedIn();
     }
 
+    match /invoices/{invoiceId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /invoiceCounters/{dateKey} {
+      allow read, write: if isAdmin();
+    }
+
     // Default Deny (Fallback)
     match /{document=**} {
       allow read, write: if false;

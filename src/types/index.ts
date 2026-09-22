@@ -401,3 +401,53 @@ export interface BookingForm {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// ── Invoices (snapshot documents; not booking financials) ─────────────────────
+
+export type InvoiceSourceType = 'booking' | 'venueHire';
+
+export type InvoiceDiscountKind = 'amount' | 'percent';
+
+export type InvoicePaymentStatus = 'PAID' | 'PARTIALLY PAID' | 'UNPAID';
+
+export interface InvoiceDiscount {
+  kind: InvoiceDiscountKind;
+  value: number;
+}
+
+export interface InvoiceItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  /** Optional discount on this line only (after qty × price). */
+  discount?: InvoiceDiscount | null;
+}
+
+export interface InvoicePayment {
+  id: string;
+  label: string;
+  amount: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  sourceType: InvoiceSourceType;
+  sourceId: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone?: string;
+  description: string;
+  items: InvoiceItem[];
+  /** Optional discount on the invoice subtotal (after item-level discounts). */
+  invoiceDiscount?: InvoiceDiscount | null;
+  payments: InvoicePayment[];
+  paymentMethod: string;
+  /** Bank / payment instructions shown on the invoice. */
+  paymentDetails: string;
+  pdfGeneratedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

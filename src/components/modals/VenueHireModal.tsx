@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { VenueHire, Room, ConfigOption, BookingStatus } from '@/types';
+import { VenueHire, Room, ConfigOption, BookingStatus, Invoice } from '@/types';
 import { db } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn, findPeriodOverlapError } from '@/lib/utils';
@@ -13,6 +13,10 @@ import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle'
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import { AlertTriangle, Trash2, Save, Plus, X, Ban, RotateCcw, Receipt } from 'lucide-react';
 import { useBooking } from '@/hooks/useBooking';
+import InvoiceEditorModal from '@/components/invoices/InvoiceEditorModal';
+import InvoiceHistoryList from '@/components/invoices/InvoiceHistoryList';
+import { snapshotFromVenueHire } from '@/lib/invoiceLogic';
+import { useInvoices } from '@/hooks/useInvoices';
 
 interface VenueHireModalProps {
   isOpen: boolean;
@@ -67,8 +71,12 @@ export default function VenueHireModal({
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [isReactivating, setIsReactivating] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [invoiceToEdit, setInvoiceToEdit] = useState<Invoice | null>(null);
+  const [invoiceCreateNew, setInvoiceCreateNew] = useState(false);
 
   const isCancelled = isCancelledLifecycle(venueHire ?? {});
+  const { invoices, loading: invoicesLoading } = useInvoices(venueHire?.id ? 'venueHire' : null, venueHire?.id ?? null);
 
   useEffect(() => {
     if (venueHire) {
@@ -127,6 +135,13 @@ export default function VenueHireModal({
   const total = (formData.bookingPrice || 0) + totalExtras;
   const remaining = total - (formData.deposit || 0) - (formData.paidLater1 || 0) - (formData.paidLater2 || 0);
   const days = calculateNights(formData.startDate || '', formData.endDate || '');
+  const invoiceSnapshot = venueHire?.id ? snapshotFromVenueHire(formData, venueHire.id) : null;
+
+  const openInvoiceEditor = (inv: Invoice | null, createNew: boolean) => {
+    setInvoiceToEdit(inv);
+    setInvoiceCreateNew(createNew);
+    setInvoiceOpen(true);
+  };
 
   let calculatedStatus: BookingStatus = 'Unpaid';
   if (remaining <= 0 && total > 0) calculatedStatus = 'Paid';
@@ -300,6 +315,7 @@ export default function VenueHireModal({
   };
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title={venueHire ? (isCancelled ? 'Cancelled Venue Hire' : 'Edit Venue Hire') : 'Add Venue Hire'} elevated={elevated}>
       <form onSubmit={handleSave} className="space-y-8">
 
@@ -560,6 +576,15 @@ export default function VenueHireModal({
               paymentChannels={paymentChannels}
               onChange={patch => setFormData(prev => ({ ...prev, ...patch }))}
             />
+
+            {venueHire?.id && (
+              <InvoiceHistoryList
+                sourceType="venueHire"
+                sourceId={venueHire.id}
+                onOpen={(inv) => openInvoiceEditor(inv, false)}
+                onCreate={() => openInvoiceEditor(null, true)}
+              />
+            )}
           </div>
         </section>
 
@@ -609,13 +634,28 @@ export default function VenueHireModal({
           )}
           
           <div className="flex gap-3 ml-auto">
-            <button 
-              type="button" 
-              onClick={onClose}
-              className="px-6 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
-            >
-              Cancel
-            </button>
+            {venueHire ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (invoicesLoading) return;
+                  if (invoices[0]) openInvoiceEditor(invoices[0], false);
+                  else openInvoiceEditor(null, true);
+                }}
+                disabled={invoicesLoading}
+                className="px-6 py-2 text-gray-800 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm disabled:opacity-50"
+              >
+                Invoice
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors text-sm"
+              >
+                Cancel
+              </button>
+            )}
             <button 
               type="submit"
               disabled={isSaving || !!overlapWarning}
@@ -719,5 +759,19 @@ export default function VenueHireModal({
         </div>
       )}
     </Modal>
+      {invoiceOpen && invoiceSnapshot && (
+        <InvoiceEditorModal
+          isOpen={invoiceOpen}
+          onClose={() => {
+            setInvoiceOpen(false);
+            setInvoiceToEdit(null);
+            setInvoiceCreateNew(false);
+          }}
+          snapshot={invoiceSnapshot}
+          existing={invoiceToEdit}
+          createNew={invoiceCreateNew}
+        />
+      )}
+    </>
   );
 }

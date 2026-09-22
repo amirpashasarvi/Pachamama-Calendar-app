@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { Booking, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire } from '@/types';
+import { Booking, Invoice, Room, GlobalSettings, BookingStatus, ConfigOption, VenueHire } from '@/types';
 import { db, handleFirestoreError, OperationType } from '@/services/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { calculateNights, cn } from '@/lib/utils';
@@ -13,6 +13,10 @@ import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle'
 import { getCollectedAmount, getLaterPaymentsTotal, paymentsFromLegacy, syncLegacyPaidLaterFields } from '@/lib/bookingFinancials';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw, Receipt } from 'lucide-react';
+import InvoiceEditorModal from '@/components/invoices/InvoiceEditorModal';
+import InvoiceHistoryList from '@/components/invoices/InvoiceHistoryList';
+import { snapshotFromBooking } from '@/lib/invoiceLogic';
+import { useInvoices } from '@/hooks/useInvoices';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -171,8 +175,12 @@ export default function BookingModal({
   const [cancelReason, setCancelReason] = useState('');
   const [isReactivating, setIsReactivating] = useState(false);
   const [showBedConfig, setShowBedConfig] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [invoiceToEdit, setInvoiceToEdit] = useState<Invoice | null>(null);
+  const [invoiceCreateNew, setInvoiceCreateNew] = useState(false);
 
   const isCancelled = isCancelledLifecycle(booking ?? {});
+  const { invoices, loading: invoicesLoading } = useInvoices(booking?.id ? 'booking' : null, booking?.id ?? null);
 
   useEffect(() => {
     if (booking) {
@@ -248,6 +256,15 @@ export default function BookingModal({
   else if (collected > 0) calculatedStatus = 'Partial';
 
   const nights = calculateNights(formData.checkIn || '', formData.checkOut || '');
+  const invoiceSnapshot = booking?.id
+    ? snapshotFromBooking(formData, booking.id, rooms.find(r => r.id === formData.roomId) || null)
+    : null;
+
+  const openInvoiceEditor = (inv: Invoice | null, createNew: boolean) => {
+    setInvoiceToEdit(inv);
+    setInvoiceCreateNew(createNew);
+    setInvoiceOpen(true);
+  };
 
   const checkOverlaps = (targetRoomId: string) => {
     if (!targetRoomId || !formData.checkIn || !formData.checkOut) return null;
@@ -576,7 +593,18 @@ export default function BookingModal({
         </div>
       )}
       <div className="flex gap-1.5 sm:gap-3 ml-auto">
-        <>
+        {booking && isAdmin ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (invoices[0] && !invoicesLoading) openInvoiceEditor(invoices[0], false);
+              else openInvoiceEditor(null, true);
+            }}
+            className="px-3 py-2 sm:px-6 sm:py-3 text-gray-800 font-bold hover:bg-gray-100 rounded-xl transition-colors text-[11px] sm:text-sm disabled:opacity-50"
+          >
+            Invoice
+          </button>
+        ) : (
           <button
             type="button"
             onClick={onClose}
@@ -584,7 +612,8 @@ export default function BookingModal({
           >
             Cancel
           </button>
-          <button
+        )}
+        <button
             type="submit"
             form="booking-form"
             className="flex items-center gap-1 sm:gap-2 px-3 py-2 sm:px-8 sm:py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-[11px] sm:text-sm"
@@ -609,13 +638,13 @@ export default function BookingModal({
               </>
             )}
           </button>
-        </>
       </div>
     </div>
     </div>
   );
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? (isCancelled ? 'Cancelled Booking' : 'Edit Booking') : 'Booking Details') : 'New Booking'} footer={modalFooter} dismissible={!error} elevated={elevated}>
       <form id="booking-form" onSubmit={handleSave} autoComplete="off" className="space-y-5">
 
@@ -1067,6 +1096,15 @@ export default function BookingModal({
                 onChange={patch => setFormData(prev => ({ ...prev, ...patch }))}
               />
 
+              {booking?.id && (
+                <InvoiceHistoryList
+                  sourceType="booking"
+                  sourceId={booking.id}
+                  onOpen={(inv) => openInvoiceEditor(inv, false)}
+                  onCreate={() => openInvoiceEditor(null, true)}
+                />
+              )}
+
             </div>
           </section>
         )}
@@ -1219,5 +1257,19 @@ export default function BookingModal({
         </div>
       )}
     </Modal>
+      {invoiceOpen && invoiceSnapshot && (
+        <InvoiceEditorModal
+          isOpen={invoiceOpen}
+          onClose={() => {
+            setInvoiceOpen(false);
+            setInvoiceToEdit(null);
+            setInvoiceCreateNew(false);
+          }}
+          snapshot={invoiceSnapshot}
+          existing={invoiceToEdit}
+          createNew={invoiceCreateNew}
+        />
+      )}
+    </>
   );
 }
