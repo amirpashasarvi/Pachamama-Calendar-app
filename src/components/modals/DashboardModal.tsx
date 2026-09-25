@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, startTransition } from 'react';
+import React, { useMemo, useState, useEffect, useRef, startTransition } from 'react';
 import { motion } from 'motion/react';
 import { X, DollarSign, ChevronLeft, ChevronRight, Save, AlertCircle, Pencil, Trash2, Receipt } from 'lucide-react';
 import DatePicker from '@/components/ui/DatePicker';
@@ -11,10 +11,11 @@ import BookingModal from '@/components/modals/BookingModal';
 import VenueHireModal from '@/components/modals/VenueHireModal';
 import { cn, formatCurrency, safeFormatISO } from '@/lib/utils';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
-import { MONTH_LABELS, FILTER_CTRL, monthRange, isFullMonthRange } from '@/lib/reportPeriod';
+import { MONTH_LABELS, FILTER_CTRL, monthRange, yearRange, isFullMonthRange } from '@/lib/reportPeriod';
 import {
   monthKeyFromRange,
   sumMonthlyExpenseTotal,
+  sumExpensesForYear,
   sumExpenseAmounts,
   splitAmountEvenly,
   monthsInYear,
@@ -50,7 +51,7 @@ interface DashboardModalProps {
 }
 
 type Tab = 'overview' | 'expenses' | 'retreats' | 'coliving' | 'venue' | 'exchange';
-type Period = 'All' | 'Month';
+type Period = 'FullYear' | 'Month';
 
 // ── Shared UI primitives ──────────────────────────────────────────────────────
 
@@ -277,17 +278,60 @@ function buildExpenseSourceRows(
   return rows;
 }
 
+function buildYearExpenseSourceRows(
+  year: number,
+  expenseCategories: ConfigOption[],
+  monthlyExpenses: MonthlyExpense[],
+  expenseSpreads: ExpenseSpread[],
+  recurringExpenses: RecurringExpense[],
+): ExpenseSourceRow[] {
+  const byKey = new Map<string, ExpenseSourceRow>();
+  for (const monthKey of monthsInYear(year)) {
+    const monthlyExpense = monthlyExpenses.find(e => e.month === monthKey || e.id === monthKey);
+    for (const row of buildExpenseSourceRows(
+      monthKey,
+      expenseCategories,
+      monthlyExpense,
+      expenseSpreads,
+      recurringExpenses,
+    )) {
+      const existing = byKey.get(row.key);
+      if (existing) {
+        existing.amount += row.amount;
+      } else {
+        byKey.set(row.key, { ...row, hint: null });
+      }
+    }
+  }
+  const rows = [...byKey.values()].filter(r => r.amount > 0);
+  const sourceOrder: Record<ExpenseSource, number> = { month: 0, spread: 1, recurring: 2 };
+  rows.sort((a, b) => {
+    const baseA = a.label.replace(/\s\([^)]+\)$/, '');
+    const baseB = b.label.replace(/\s\([^)]+\)$/, '');
+    const nameCompare = baseA.localeCompare(baseB);
+    if (nameCompare !== 0) return nameCompare;
+    const sourceA = a.key.split(':')[1] as ExpenseSource;
+    const sourceB = b.key.split(':')[1] as ExpenseSource;
+    return sourceOrder[sourceA] - sourceOrder[sourceB];
+  });
+  return rows;
+}
+
 // ── Tab sections ──────────────────────────────────────────────────────────────
 
 function OverviewSection({
   stats,
   totalExpenses,
-  isMonthView,
+  showExpenseStats,
+  isFullYearView,
+  selectedYear,
   onOpenOutstanding,
 }: {
   stats: ReturnType<typeof useDashboardStats>;
   totalExpenses: number;
-  isMonthView: boolean;
+  showExpenseStats: boolean;
+  isFullYearView: boolean;
+  selectedYear: number;
   onOpenOutstanding: (item: OutstandingItem) => void;
 }) {
   const g = stats.global;
@@ -297,7 +341,7 @@ function OverviewSection({
 
   return (
     <div className="space-y-6">
-      {isMonthView ? (
+      {showExpenseStats ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Gross Income" value={formatCurrency(g.totalRevenue)} tone="default" />
           <StatCard label="Commissions" value={formatCurrency(g.totalCommissions)} tone="blue" />
@@ -313,7 +357,7 @@ function OverviewSection({
 
       <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">
         Based on {g.bookingCount} records · active stays pro-rated · cancelled counted on check-in date
-        {!isMonthView && ' · select a month to see expenses and net income'}
+        {isFullYearView && ` · 1 Jan – 31 Dec ${selectedYear} · expenses summed across all months`}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -542,7 +586,9 @@ function StatsTabContent({
   paymentChannels,
   periodRange,
   totalExpenses,
-  isMonthView,
+  showExpenseStats,
+  isFullYearView,
+  selectedYear,
   onOpenOutstanding,
 }: {
   tab: Exclude<Tab, 'expenses'>;
@@ -553,7 +599,9 @@ function StatsTabContent({
   paymentChannels: ConfigOption[];
   periodRange: PeriodRange | null;
   totalExpenses: number;
-  isMonthView: boolean;
+  showExpenseStats: boolean;
+  isFullYearView: boolean;
+  selectedYear: number;
   onOpenOutstanding: (item: OutstandingItem) => void;
 }) {
   const stats = useDashboardStats(
@@ -565,7 +613,9 @@ function StatsTabContent({
       <OverviewSection
         stats={stats}
         totalExpenses={totalExpenses}
-        isMonthView={isMonthView}
+        showExpenseStats={showExpenseStats}
+        isFullYearView={isFullYearView}
+        selectedYear={selectedYear}
         onOpenOutstanding={onOpenOutstanding}
       />
     );
@@ -577,19 +627,25 @@ function StatsTabContent({
 }
 
 function ExpensesReportSection({
+  isFullYearView,
+  selectedYear,
   monthKey,
   expenseCategories,
+  monthlyExpenses,
   monthlyExpense,
   expenseSpreads,
   recurringExpenses,
 }: {
+  isFullYearView: boolean;
+  selectedYear: number;
   monthKey: string | null;
   expenseCategories: ConfigOption[];
+  monthlyExpenses: MonthlyExpense[];
   monthlyExpense?: MonthlyExpense;
   expenseSpreads: ExpenseSpread[];
   recurringExpenses: RecurringExpense[];
 }) {
-  if (!monthKey) {
+  if (!isFullYearView && !monthKey) {
     return (
       <div className="bg-white rounded-2xl border p-8 text-center">
         <p className="text-sm font-bold text-gray-700">Select a month to view expenses</p>
@@ -598,22 +654,40 @@ function ExpensesReportSection({
     );
   }
 
-  const monthLabel = safeFormatISO(`${monthKey}-01`, 'MMMM yyyy', monthKey);
-  const recurringByCategory = getRecurringAmountsForMonth(monthKey, recurringExpenses);
-  const expenseRows = buildExpenseSourceRows(
-    monthKey,
-    expenseCategories,
-    monthlyExpense,
-    expenseSpreads,
-    recurringExpenses,
-  );
+  const periodTitle = isFullYearView
+    ? `Full year ${selectedYear}`
+    : safeFormatISO(`${monthKey}-01`, 'MMMM yyyy', monthKey!);
+  const periodSubtitle = isFullYearView
+    ? 'Totals for Jan – Dec — manual entries, spreads, and recurring amounts summed per category.'
+    : 'Monthly expense totals — detail stays in Spendee.';
 
-  const spreadByCategory = getSpreadAmountsForMonth(monthKey, expenseSpreads);
-  const total = sumMonthlyExpenseTotal(monthlyExpense, recurringByCategory, spreadByCategory);
-  const savedNote = monthlyExpense?.note;
+  const expenseRows = isFullYearView
+    ? buildYearExpenseSourceRows(
+      selectedYear,
+      expenseCategories,
+      monthlyExpenses,
+      expenseSpreads,
+      recurringExpenses,
+    )
+    : buildExpenseSourceRows(
+      monthKey!,
+      expenseCategories,
+      monthlyExpense,
+      expenseSpreads,
+      recurringExpenses,
+    );
+
+  const total = isFullYearView
+    ? sumExpensesForYear(selectedYear, monthlyExpenses, expenseSpreads, recurringExpenses)
+    : sumMonthlyExpenseTotal(
+      monthlyExpense,
+      getRecurringAmountsForMonth(monthKey!, recurringExpenses),
+      getSpreadAmountsForMonth(monthKey!, expenseSpreads),
+    );
+  const savedNote = isFullYearView ? undefined : monthlyExpense?.note;
   const hasData = total > 0 || !!savedNote?.trim();
-  const updatedAt = monthlyExpense?.updatedAt;
-  const updatedBy = monthlyExpense?.updatedBy;
+  const updatedAt = isFullYearView ? undefined : monthlyExpense?.updatedAt;
+  const updatedBy = isFullYearView ? undefined : monthlyExpense?.updatedBy;
 
   let updatedLabel = '';
   if (updatedAt) {
@@ -629,8 +703,8 @@ function ExpensesReportSection({
       <div className="bg-white rounded-2xl border p-4 sm:p-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-sm font-black text-gray-900">{monthLabel}</h3>
-            <p className="text-xs text-gray-400 mt-1">Monthly expense totals — detail stays in Spendee.</p>
+            <h3 className="text-sm font-black text-gray-900">{periodTitle}</h3>
+            <p className="text-xs text-gray-400 mt-1">{periodSubtitle}</p>
           </div>
           {updatedLabel && (
             <p className="text-[10px] text-gray-400 text-right shrink-0">
@@ -642,7 +716,9 @@ function ExpensesReportSection({
 
         {!hasData ? (
           <div className="py-10 text-center">
-            <p className="text-sm font-bold text-gray-600">No expenses recorded for this month</p>
+            <p className="text-sm font-bold text-gray-600">
+              {isFullYearView ? 'No expenses recorded for this year' : 'No expenses recorded for this month'}
+            </p>
             <p className="text-xs text-gray-400 mt-1">Use Manage expenses to add them.</p>
           </div>
         ) : (
@@ -1134,6 +1210,7 @@ function ExpensesSpreadForm({
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const yearMonths = useMemo(() => monthsInYear(year), [year]);
   const allMonthsSelected = selectedMonths.length === yearMonths.length
@@ -1151,19 +1228,28 @@ function ExpensesSpreadForm({
     setSaveError(null);
   };
 
+  const prevYearRef = useRef(year);
   useEffect(() => {
-    resetForm();
+    if (prevYearRef.current !== year) {
+      prevYearRef.current = year;
+      resetForm();
+    }
   }, [year]);
 
   const startEdit = (spread: ExpenseSpread) => {
     setEditingId(spread.id);
     setName(spread.name || '');
-    setCategoryId(spread.categoryId);
-    setTotal(String(spread.totalAmount));
+    setCategoryId(spread.categoryId || expenseCategories[0]?.id || '');
+    setTotal(String(spread.totalAmount ?? ''));
     setNote(spread.note || '');
     setSelectedMonths([...(Array.isArray(spread.months) ? spread.months : [])].sort());
     setSaveError(null);
   };
+
+  useEffect(() => {
+    if (!editingId || !formRef.current) return;
+    formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [editingId]);
 
   const monthCount = selectedMonths.length;
   const parsedTotal = total.trim() === '' ? 0 : Number(total);
@@ -1274,17 +1360,22 @@ function ExpensesSpreadForm({
                   key={spread.id}
                   className={cn(
                     'flex items-center gap-3 p-3 rounded-xl border transition-colors',
-                    editingId === spread.id ? 'border-gray-900 bg-gray-50' : 'border-gray-100 bg-white',
+                    editingId === spread.id ? 'border-gray-900 bg-gray-50 ring-1 ring-gray-900/10' : 'border-gray-100 bg-white',
                   )}
                 >
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(spread)}
+                    disabled={deletingId === spread.id}
+                    className="min-w-0 flex-1 text-left rounded-lg -m-1 p-1 hover:bg-gray-100/80 disabled:opacity-50"
+                  >
                     <p className="text-xs font-bold text-gray-900 truncate">
                       {spreadDisplayName(spread)}
                     </p>
                     <p className="text-[10px] text-gray-400 mt-0.5 truncate">
                       {spread.categoryLabel} · {formatCurrency(share)}/mo · {formatSpreadMonthLabel(months)}
                     </p>
-                  </div>
+                  </button>
                   <span className="text-xs font-black text-gray-900 shrink-0">
                     {formatCurrency(Number(spread.totalAmount) || 0)}
                   </span>
@@ -1313,10 +1404,15 @@ function ExpensesSpreadForm({
         )}
       </div>
 
-      <div className="pt-3 border-t border-gray-100">
+      <div ref={formRef} className="pt-3 border-t border-gray-100 scroll-mt-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
           {editingId ? 'Edit spread' : 'Add spread'}
         </p>
+        {editingId && (
+          <p className="text-xs text-gray-500 mt-1">
+            Editing <span className="font-bold text-gray-800">{name || 'spread'}</span> — change fields below, then Update spread.
+          </p>
+        )}
       </div>
 
       <div>
@@ -1907,12 +2003,34 @@ function DashboardModalContent({
     setPeriod('Month');
   };
 
+  const selectFullYear = (year: number) => {
+    setSelectedYear(year);
+    setDateRange(yearRange(year));
+    setPeriod('FullYear');
+  };
+
+  const toggleFullYear = (year: number) => {
+    if (period === 'FullYear') {
+      selectMonth(selectedYear, selectedMonth);
+    } else {
+      selectFullYear(year);
+    }
+  };
+
   const periodRange = useMemo(() => {
-    if (period === 'All') return null;
-    if (dateRange.from && dateRange.to) {
+    if (period === 'FullYear') {
+      const yr = yearRange(selectedYear);
       return {
-        start: startOfDay(parseISO(dateRange.from)),
-        end: endOfDay(parseISO(dateRange.to)),
+        start: startOfDay(parseISO(yr.from)),
+        end: endOfDay(parseISO(yr.to)),
+      };
+    }
+    const from = dateRange.from;
+    const to = dateRange.to;
+    if (from && to) {
+      return {
+        start: startOfDay(parseISO(from)),
+        end: endOfDay(parseISO(to)),
       };
     }
     const fallback = monthRange(selectedYear, selectedMonth);
@@ -1922,7 +2040,13 @@ function DashboardModalContent({
     };
   }, [period, dateRange, selectedYear, selectedMonth]);
 
-  const isMonthView = period !== 'All';
+  const isMonthView = period === 'Month';
+  const isFullYearView = period === 'FullYear';
+  const showExpenseStats = isMonthView || isFullYearView;
+
+  const monthChipActive = (monthIndex: number) =>
+    isFullYearView
+    || (period === 'Month' && isFullMonthRange(dateRange.from, dateRange.to, selectedYear, monthIndex));
   const monthKey = useMemo(
     () => (isMonthView ? monthKeyFromRange(periodRange) : null),
     [isMonthView, periodRange],
@@ -1943,10 +2067,21 @@ function DashboardModalContent({
     [monthKey, expenseSpreads],
   );
 
-  const totalExpenses = useMemo(
-    () => sumMonthlyExpenseTotal(currentMonthlyExpense, recurringByCategory, spreadByCategory),
-    [currentMonthlyExpense, recurringByCategory, spreadByCategory],
-  );
+  const totalExpenses = useMemo(() => {
+    if (isFullYearView) {
+      return sumExpensesForYear(selectedYear, monthlyExpenses, expenseSpreads, recurringExpenses);
+    }
+    return sumMonthlyExpenseTotal(currentMonthlyExpense, recurringByCategory, spreadByCategory);
+  }, [
+    isFullYearView,
+    selectedYear,
+    monthlyExpenses,
+    expenseSpreads,
+    recurringExpenses,
+    currentMonthlyExpense,
+    recurringByCategory,
+    spreadByCategory,
+  ]);
 
   const openExpenseEntry = () => {
     setManageYear(selectedYear);
@@ -1998,24 +2133,24 @@ function DashboardModalContent({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setPeriod('All')}
+                  onClick={() => toggleFullYear(selectedYear)}
                   className={cn(
                     FILTER_CTRL,
                     'transition-all shrink-0 inline-flex items-center',
-                    period === 'All'
+                    period === 'FullYear'
                       ? 'bg-black text-white border-black'
                       : 'text-gray-500 hover:text-gray-900'
                   )}
                 >
-                  All
+                  Full year
                 </button>
                 <div className="flex items-center h-7 gap-0.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
                       const y = selectedYear - 1;
-                      setSelectedYear(y);
-                      if (period === 'Month') selectMonth(y, selectedMonth);
+                      if (period === 'FullYear') selectFullYear(y);
+                      else selectMonth(y, selectedMonth);
                     }}
                     className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                   >
@@ -2026,8 +2161,8 @@ function DashboardModalContent({
                     type="button"
                     onClick={() => {
                       const y = selectedYear + 1;
-                      setSelectedYear(y);
-                      if (period === 'Month') selectMonth(y, selectedMonth);
+                      if (period === 'FullYear') selectFullYear(y);
+                      else selectMonth(y, selectedMonth);
                     }}
                     className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                   >
@@ -2043,7 +2178,7 @@ function DashboardModalContent({
                     onClick={() => selectMonth(selectedYear, i)}
                     className={cn(
                       'h-7 px-1 inline-flex items-center justify-center rounded-lg text-[10px] font-bold transition-all',
-                      period === 'Month' && isFullMonthRange(dateRange.from, dateRange.to, selectedYear, i)
+                      monthChipActive(i)
                         ? 'bg-green-600 text-white shadow-sm'
                         : 'text-gray-600 hover:bg-gray-100'
                     )}
@@ -2088,16 +2223,16 @@ function DashboardModalContent({
               <div className="flex flex-wrap items-center gap-2 min-h-7">
                 <button
                   type="button"
-                  onClick={() => setPeriod('All')}
+                  onClick={() => toggleFullYear(selectedYear)}
                   className={cn(
                     FILTER_CTRL,
                     'transition-all shrink-0 inline-flex items-center',
-                    period === 'All'
+                    period === 'FullYear'
                       ? 'bg-black text-white border-black'
                       : 'text-gray-500 hover:text-gray-900'
                   )}
                 >
-                  All
+                  Full year
                 </button>
 
                 <div className="flex items-center h-7 gap-0.5 shrink-0">
@@ -2105,8 +2240,8 @@ function DashboardModalContent({
                     type="button"
                     onClick={() => {
                       const y = selectedYear - 1;
-                      setSelectedYear(y);
-                      if (period === 'Month') selectMonth(y, selectedMonth);
+                      if (period === 'FullYear') selectFullYear(y);
+                      else selectMonth(y, selectedMonth);
                     }}
                     className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                   >
@@ -2117,8 +2252,8 @@ function DashboardModalContent({
                     type="button"
                     onClick={() => {
                       const y = selectedYear + 1;
-                      setSelectedYear(y);
-                      if (period === 'Month') selectMonth(y, selectedMonth);
+                      if (period === 'FullYear') selectFullYear(y);
+                      else selectMonth(y, selectedMonth);
                     }}
                     className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                   >
@@ -2134,7 +2269,7 @@ function DashboardModalContent({
                       onClick={() => selectMonth(selectedYear, i)}
                       className={cn(
                         'h-7 px-2 inline-flex items-center rounded-lg text-[11px] font-bold transition-all',
-                        period === 'Month' && isFullMonthRange(dateRange.from, dateRange.to, selectedYear, i)
+                        monthChipActive(i)
                           ? 'bg-green-600 text-white shadow-sm'
                           : 'text-gray-600 hover:bg-gray-100'
                       )}
@@ -2232,8 +2367,11 @@ function DashboardModalContent({
           <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-5xl mx-auto w-full">
             {tab === 'expenses' ? (
               <ExpensesReportSection
+                isFullYearView={isFullYearView}
+                selectedYear={selectedYear}
                 monthKey={monthKey}
                 expenseCategories={expenseCategories}
+                monthlyExpenses={monthlyExpenses}
                 monthlyExpense={currentMonthlyExpense}
                 expenseSpreads={expenseSpreads}
                 recurringExpenses={recurringExpenses}
@@ -2248,7 +2386,9 @@ function DashboardModalContent({
                 paymentChannels={paymentChannels}
                 periodRange={periodRange}
                 totalExpenses={totalExpenses}
-                isMonthView={isMonthView}
+                showExpenseStats={showExpenseStats}
+                isFullYearView={isFullYearView}
+                selectedYear={selectedYear}
                 onOpenOutstanding={handleOpenOutstanding}
               />
             )}

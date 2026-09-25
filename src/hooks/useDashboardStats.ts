@@ -98,6 +98,28 @@ export interface HomeExchangeStats {
   estimatedValue: number;
 }
 
+/** Ignore spaces, hyphens, and casing so "Co-living" matches the Coliving tab. */
+function normalizeBookingType(type: string | undefined | null): string {
+  return (type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isRetreatBooking(type: string | undefined | null): boolean {
+  const normalized = normalizeBookingType(type);
+  return normalized === 'retreat' || normalized === 'retreats';
+}
+
+function isColivingBooking(type: string | undefined | null): boolean {
+  return normalizeBookingType(type) === 'coliving';
+}
+
+function isVenueHireBooking(type: string | undefined | null): boolean {
+  return normalizeBookingType(type) === 'venuehire';
+}
+
+function isHomeExchangeBooking(type: string | undefined | null): boolean {
+  return normalizeBookingType(type).includes('exchange');
+}
+
 function safeParseISO(value: string | undefined | null): Date | null {
   if (!value) return null;
   try {
@@ -364,7 +386,7 @@ export function useDashboardStats(
   }, [filteredBookings, filteredCancelledBookings, filteredVH, filteredCancelledVH, activeBookings, activeVenueHires, bookingChannels, paymentChannels, periodRange, today]);
 
   const retreats = useMemo((): RetreatStats => {
-    const rb = filteredBookings.filter(b => b.type?.toLowerCase() === 'retreat');
+    const rb = filteredBookings.filter(b => isRetreatBooking(b.type));
     let totalRevenue = 0, totalCollected = 0, totalGuests = 0, totalNights = 0;
     const channelCount: Record<string, number> = {};
 
@@ -379,7 +401,7 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeBookings
-      .filter(b => b.type?.toLowerCase() === 'retreat' && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
+      .filter(b => isRetreatBooking(b.type) && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
       .map(b => {
         const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
         return {
@@ -408,7 +430,7 @@ export function useDashboardStats(
   }, [filteredBookings, bookings, periodRange]);
 
   const coliving = useMemo((): ColivingStats => {
-    const cb = filteredBookings.filter(b => b.type?.toLowerCase() === 'coliving');
+    const cb = filteredBookings.filter(b => isColivingBooking(b.type));
     let totalRevenue = 0, totalCollected = 0, totalNights = 0;
     let rateSum = 0, rateCount = 0;
     const roomCount: Record<string, number> = {};
@@ -424,7 +446,7 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeBookings
-      .filter(b => b.type?.toLowerCase() === 'coliving' && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
+      .filter(b => isColivingBooking(b.type) && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
       .map(b => {
         const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
         return {
@@ -455,6 +477,7 @@ export function useDashboardStats(
 
   const venueHire = useMemo((): VenueHireStats => {
     let totalRevenue = 0, totalCollected = 0, totalDuration = 0, totalGuests = 0;
+    const venueBookings = filteredBookings.filter(b => isVenueHireBooking(b.type));
 
     for (const vh of filteredVH) {
       const amounts = resolveReportingFinancials(vh.startDate, vh.endDate, periodRange, vhFinancials(vh), vh.lifecycleStatus);
@@ -464,7 +487,17 @@ export function useDashboardStats(
       totalGuests += vh.guestCount || 0;
     }
 
-    const upcoming: UpcomingItem[] = activeVenueHires
+    for (const b of venueBookings) {
+      const amounts = resolveReportingFinancials(b.checkIn, b.checkOut, periodRange, bookingFinancials(b), b.lifecycleStatus);
+      totalRevenue += amounts.revenue;
+      totalCollected += amounts.collected;
+      totalDuration += amounts.overlapNights || stayTotalNights(b.checkIn, b.checkOut);
+      totalGuests += (b.adults || 0) + (b.kids || 0);
+    }
+
+    const eventCount = filteredVH.length + venueBookings.length;
+
+    const upcomingVenueHires: UpcomingItem[] = activeVenueHires
       .filter(vh => safeParseISO(vh.startDate) && !isBefore(safeParseISO(vh.startDate)!, today))
       .map(vh => {
         const full = resolveReportingFinancials(vh.startDate, vh.endDate, null, vhFinancials(vh), vh.lifecycleStatus);
@@ -475,7 +508,22 @@ export function useDashboardStats(
           revenue: full.revenue,
           remaining: full.remaining,
         };
-      })
+      });
+
+    const upcomingVenueBookings: UpcomingItem[] = activeBookings
+      .filter(b => isVenueHireBooking(b.type) && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
+      .map(b => {
+        const full = resolveReportingFinancials(b.checkIn, b.checkOut, null, bookingFinancials(b), b.lifecycleStatus);
+        return {
+          id: b.id, name: b.guestName, roomName: roomName(b.roomId),
+          checkIn: b.checkIn, checkOut: b.checkOut,
+          nights: stayTotalNights(b.checkIn, b.checkOut),
+          revenue: full.revenue,
+          remaining: full.remaining,
+        };
+      });
+
+    const upcoming = [...upcomingVenueHires, ...upcomingVenueBookings]
       .sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''))
       .slice(0, 8);
 
@@ -483,15 +531,15 @@ export function useDashboardStats(
       totalRevenue,
       totalCollected,
       totalOutstanding: Math.max(0, totalRevenue - totalCollected),
-      eventCount: filteredVH.length,
-      avgDuration: filteredVH.length ? totalDuration / filteredVH.length : 0,
-      avgGuestCount: filteredVH.length ? totalGuests / filteredVH.length : 0,
+      eventCount,
+      avgDuration: eventCount ? totalDuration / eventCount : 0,
+      avgGuestCount: eventCount ? totalGuests / eventCount : 0,
       upcoming,
     };
-  }, [filteredVH, venueHires, periodRange]);
+  }, [filteredVH, filteredBookings, activeVenueHires, activeBookings, periodRange]);
 
   const homeExchange = useMemo((): HomeExchangeStats => {
-    const hb = filteredBookings.filter(b => b.type?.toLowerCase().includes('exchange'));
+    const hb = filteredBookings.filter(b => isHomeExchangeBooking(b.type));
     let totalNights = 0;
     const roomCount: Record<string, number> = {};
 
@@ -502,7 +550,7 @@ export function useDashboardStats(
     }
 
     const upcoming: UpcomingItem[] = activeBookings
-      .filter(b => b.type?.toLowerCase().includes('exchange') && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
+      .filter(b => isHomeExchangeBooking(b.type) && safeParseISO(b.checkIn) && !isBefore(safeParseISO(b.checkIn)!, today))
       .map(b => ({
         id: b.id, name: b.guestName, roomName: roomName(b.roomId),
         checkIn: b.checkIn, checkOut: b.checkOut,

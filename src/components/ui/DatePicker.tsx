@@ -35,11 +35,14 @@ export default function DatePicker({ value, onChange, min, defaultMonth, placeho
   const initialMonth = value ? parseISO(value) : (defaultMonth && isValid(parseISO(defaultMonth)) ? parseISO(defaultMonth) : startOfToday());
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [centerOnScreen, setCenterOnScreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const updatePosition = useCallback(() => {
-    if (!containerRef.current) return;
+    const narrow = window.innerWidth < 640;
+    setCenterOnScreen(narrow);
+    if (narrow || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const openAbove = spaceBelow < DROPDOWN_HEIGHT && rect.top > DROPDOWN_HEIGHT;
@@ -108,16 +111,17 @@ export default function DatePicker({ value, onChange, min, defaultMonth, placeho
 
   const minDate = min ? parseISO(min) : null;
 
-  const dropdown = (
-    <AnimatePresence>
-      {isOpen && (
+  const calendar = (
         <motion.div
           ref={dropdownRef}
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-          style={{ top: position.top, left: position.left }}
-          className="fixed z-[300] p-4 bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-[300px]"
+          style={centerOnScreen ? undefined : { top: position.top, left: position.left }}
+          className={cn(
+            'p-4 bg-white rounded-2xl shadow-2xl border border-gray-100 w-[min(300px,calc(100vw-2rem))]',
+            centerOnScreen ? 'relative' : 'fixed z-[300]',
+          )}
         >
           <div className="flex items-center justify-between mb-4">
             <button 
@@ -187,6 +191,18 @@ export default function DatePicker({ value, onChange, min, defaultMonth, placeho
             </button>
           </div>
         </motion.div>
+  );
+
+  const dropdown = (
+    <AnimatePresence>
+      {isOpen && (
+        centerOnScreen ? (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/25">
+            {calendar}
+          </div>
+        ) : (
+          calendar
+        )
       )}
     </AnimatePresence>
   );

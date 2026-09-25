@@ -1,7 +1,8 @@
 import { format } from 'date-fns';
 import { PeriodRange } from '@/lib/prorate';
-import { MonthlyExpense } from '@/types';
-import { asAmountMap } from '@/lib/expenseSpreads';
+import { ExpenseSpread, MonthlyExpense, RecurringExpense } from '@/types';
+import { asAmountMap, getSpreadAmountsForMonth, monthsInYear } from '@/lib/expenseSpreads';
+import { getRecurringAmountsForMonth } from '@/lib/recurringExpenses';
 
 export {
   monthsInYear,
@@ -41,6 +42,26 @@ export function sumMonthlyExpenseTotal(
   let total = 0;
   for (const id of ids) {
     total += (Number(manual[id]) || 0) + (Number(spread[id]) || 0) + (Number(recurring[id]) || 0);
+  }
+  return total;
+}
+
+function monthlyExpenseForKey(monthKey: string, monthlyExpenses: MonthlyExpense[]): MonthlyExpense | undefined {
+  return monthlyExpenses.find(e => e.month === monthKey || e.id === monthKey);
+}
+
+export function sumExpensesForYear(
+  year: number,
+  monthlyExpenses: MonthlyExpense[],
+  expenseSpreads: ExpenseSpread[],
+  recurringExpenses: RecurringExpense[],
+): number {
+  let total = 0;
+  for (const monthKey of monthsInYear(year)) {
+    const expense = monthlyExpenseForKey(monthKey, monthlyExpenses);
+    const recurring = getRecurringAmountsForMonth(monthKey, recurringExpenses);
+    const spread = getSpreadAmountsForMonth(monthKey, expenseSpreads);
+    total += sumMonthlyExpenseTotal(expense, recurring, spread);
   }
   return total;
 }

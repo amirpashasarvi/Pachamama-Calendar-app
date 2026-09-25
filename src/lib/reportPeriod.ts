@@ -16,3 +16,15 @@ export function isFullMonthRange(from: string, to: string, year: number, month: 
   const expected = monthRange(year, month);
   return from === expected.from && to === expected.to;
 }
+
+export function yearRange(year: number) {
+  return {
+    from: `${year}-01-01`,
+    to: `${year}-12-31`,
+  };
+}
+
+export function isFullYearRange(from: string, to: string, year: number) {
+  const expected = yearRange(year);
+  return from === expected.from && to === expected.to;
+}
