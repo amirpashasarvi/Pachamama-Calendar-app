@@ -12,7 +12,7 @@ import { logActivity } from '@/lib/activityLog';
 import { isActiveLifecycle, isCancelledLifecycle } from '@/lib/bookingLifecycle';
 import { getCollectedAmount, getLaterPaymentsTotal, paymentsFromLegacy, syncLegacyPaidLaterFields } from '@/lib/bookingFinancials';
 import CurrencyInput from '@/components/ui/CurrencyInput';
-import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw, Receipt } from 'lucide-react';
+import { Trash2, Save, Plus, X, AlertTriangle, Ban, RotateCcw, Receipt, MoreHorizontal } from 'lucide-react';
 import InvoiceEditorModal from '@/components/invoices/InvoiceEditorModal';
 import InvoiceHistoryList from '@/components/invoices/InvoiceHistoryList';
 import { snapshotFromBooking } from '@/lib/invoiceLogic';
@@ -175,6 +175,7 @@ export default function BookingModal({
   const [cancelReason, setCancelReason] = useState('');
   const [isReactivating, setIsReactivating] = useState(false);
   const [showBedConfig, setShowBedConfig] = useState(false);
+  const [footerMenuOpen, setFooterMenuOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceToEdit, setInvoiceToEdit] = useState<Invoice | null>(null);
   const [invoiceCreateNew, setInvoiceCreateNew] = useState(false);
@@ -220,6 +221,7 @@ export default function BookingModal({
     setIsCancelling(false);
     setCancelReason('');
     setIsReactivating(false);
+    setFooterMenuOpen(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id, initialData, isOpen]);
 
@@ -546,6 +548,12 @@ export default function BookingModal({
     });
   };
 
+  const openInvoice = () => {
+    setFooterMenuOpen(false);
+    if (invoices[0] && !invoicesLoading) openInvoiceEditor(invoices[0], false);
+    else openInvoiceEditor(null, true);
+  };
+
   const modalFooter = (
     <div className="space-y-3">
       {error && (
@@ -556,7 +564,64 @@ export default function BookingModal({
       )}
     <div className="flex flex-wrap items-center justify-between gap-2">
       {booking && isAdmin && (
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="relative sm:hidden">
+          <button
+            type="button"
+            onClick={() => setFooterMenuOpen(open => !open)}
+            className="h-10 w-10 flex items-center justify-center rounded-xl text-gray-700 hover:bg-gray-100"
+            aria-label="More actions"
+            aria-expanded={footerMenuOpen}
+          >
+            <MoreHorizontal size={20} />
+          </button>
+          {footerMenuOpen && (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-[10]"
+                aria-label="Close menu"
+                onClick={() => setFooterMenuOpen(false)}
+              />
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-48 rounded-xl border border-gray-200 bg-white py-1 shadow-xl">
+                {isCancelled ? (
+                  <button
+                    type="button"
+                    onClick={() => { setFooterMenuOpen(false); setShowConfirmRestore(true); }}
+                    disabled={isReactivating}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    <RotateCcw size={16} /> Restore Booking
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setFooterMenuOpen(false); setShowConfirmCancel(true); }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-amber-700 hover:bg-amber-50"
+                  >
+                    <Ban size={16} /> Cancel Booking
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setFooterMenuOpen(false); setShowConfirmDelete(true); }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50"
+                >
+                  <Trash2 size={16} /> Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={openInvoice}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-gray-800 hover:bg-gray-50"
+                >
+                  <Receipt size={16} /> Invoice
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {booking && isAdmin && (
+        <div className="hidden sm:flex items-center gap-1 sm:gap-2">
           {isCancelled ? (
             <button
               type="button"
@@ -596,11 +661,8 @@ export default function BookingModal({
         {booking && isAdmin ? (
           <button
             type="button"
-            onClick={() => {
-              if (invoices[0] && !invoicesLoading) openInvoiceEditor(invoices[0], false);
-              else openInvoiceEditor(null, true);
-            }}
-            className="px-3 py-2 sm:px-6 sm:py-3 text-gray-800 font-bold hover:bg-gray-100 rounded-xl transition-colors text-[11px] sm:text-sm disabled:opacity-50"
+            onClick={openInvoice}
+            className="hidden sm:inline-flex px-3 py-2 sm:px-6 sm:py-3 text-gray-800 font-bold hover:bg-gray-100 rounded-xl transition-colors text-[11px] sm:text-sm disabled:opacity-50"
           >
             Invoice
           </button>
@@ -645,7 +707,7 @@ export default function BookingModal({
 
   return (
     <>
-    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? (isCancelled ? 'Cancelled Booking' : 'Edit Booking') : 'Booking Details') : 'New Booking'} footer={modalFooter} dismissible={!error} elevated={elevated}>
+    <Modal isOpen={isOpen} onClose={onClose} title={booking ? (isAdmin ? (isCancelled ? 'Cancelled Booking' : 'Edit Booking') : 'Booking Details') : 'New Booking'} footer={modalFooter} dismissible={!error} elevated={elevated} compactHeader>
       <form id="booking-form" onSubmit={handleSave} autoComplete="off" className="space-y-5">
 
         {isCancelled && (

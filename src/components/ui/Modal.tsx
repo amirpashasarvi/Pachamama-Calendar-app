@@ -1,4 +1,10 @@
 import React from 'react';
+
+function cnHeader(compact: boolean) {
+  return compact
+    ? 'shrink-0 flex items-center justify-between px-4 py-2 sm:px-6 sm:py-4 border-b'
+    : 'shrink-0 flex items-center justify-between px-6 py-4 border-b';
+}
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -11,9 +17,10 @@ interface ModalProps {
   dismissible?: boolean;
   elevated?: boolean;
   wide?: boolean;
+  compactHeader?: boolean;
 }
 
-export default function Modal({ isOpen, onClose, title, children, footer, dismissible = true, elevated = false, wide = false }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, footer, dismissible = true, elevated = false, wide = false, compactHeader = false }: ModalProps) {
   const backdropZ = elevated ? 'z-[210]' : 'z-[100]';
   const contentZ = elevated ? 'z-[220]' : 'z-[110]';
 
@@ -40,11 +47,13 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
             className={`fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full ${wide ? 'sm:max-w-6xl' : 'sm:max-w-2xl'} bg-white sm:rounded-2xl shadow-2xl ${contentZ} overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[90vh] pt-safe pb-safe px-safe sm:pt-0 sm:pb-0 sm:px-0`}
           >
             {/* Header */}
-            <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+            <div className={cnHeader(compactHeader)}>
+              <h2 className={compactHeader ? 'text-base sm:text-lg font-semibold text-gray-900' : 'text-lg font-semibold text-gray-900'}>{title}</h2>
               <button
                 onClick={onClose}
-                className="p-2.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors"
+                className={compactHeader
+                  ? 'p-1.5 sm:p-2.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors'
+                  : 'p-2.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-colors'}
               >
                 <X size={18} />
               </button>
@@ -57,7 +66,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
 
             {/* Sticky footer — only rendered when passed */}
             {footer && (
-              <div className="shrink-0 border-t bg-white px-6 py-4">
+              <div className={compactHeader ? 'shrink-0 border-t bg-white px-4 py-2.5 sm:px-6 sm:py-4' : 'shrink-0 border-t bg-white px-6 py-4'}>
                 {footer}
               </div>
             )}
