@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread, RecurringExpense, AccommodationPricing, SeasonalRate, BookingForm } from '@/types';
+import {
+  getLastInvoiceBankDetails,
+  getLastInvoicePaymentMethod,
+  InvoicePaymentDefaults,
+  setLastInvoiceBankDetails,
+  setLastInvoicePaymentMethod,
+} from '@/lib/invoiceDetails';
 
 function reportListenerError(error: unknown, path: string) {
   console.error(`Firestore listener failed (${path}):`, error);
@@ -30,6 +37,7 @@ export function useBookingData() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [calendarDisplaySettings, setCalendarDisplaySettings] = useState<CalendarDisplaySettings | null>(null);
+  const [invoiceDefaults, setInvoiceDefaults] = useState<InvoicePaymentDefaults | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -288,6 +296,28 @@ export function useBookingData() {
       reportListenerError(error, 'teamAssignments');
     });
 
+    const unsubInvoiceDefaults = onSnapshot(doc(db, 'settings', 'invoiceDefaults'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const paymentMethod = typeof data.paymentMethod === 'string' ? data.paymentMethod : '';
+        const paymentDetails = typeof data.paymentDetails === 'string' ? data.paymentDetails : '';
+        setInvoiceDefaults({ paymentMethod, paymentDetails });
+        if (paymentDetails) setLastInvoiceBankDetails(paymentDetails);
+        if (paymentMethod) setLastInvoicePaymentMethod(paymentMethod);
+      } else {
+        setInvoiceDefaults({
+          paymentMethod: getLastInvoicePaymentMethod(),
+          paymentDetails: getLastInvoiceBankDetails(),
+        });
+      }
+    }, (error) => {
+      setInvoiceDefaults({
+        paymentMethod: getLastInvoicePaymentMethod(),
+        paymentDetails: getLastInvoiceBankDetails(),
+      });
+      reportListenerError(error, 'settings/invoiceDefaults');
+    });
+
     const unsubSettings = onSnapshot(collection(db, 'settings'), (snap) => {
       const global = snap.docs.find(d => d.id === 'global');
       if (global) {
@@ -417,11 +447,12 @@ export function useBookingData() {
       unsubPositions();
       unsubAssignments();
       unsubSettings();
+      unsubInvoiceDefaults();
       unsubAccommodationPricing();
       unsubSeasonalRates();
       unsubBookingForms();
     };
   }, []);
 
-  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, recurringExpenses, users, accommodationPricing, seasonalRates, bookingForms, loading };
+  return { rooms, bookings, deletedBookings, retreats, retreatTypes, teamPositions, teamAssignments, venueHires, deletedVenueHires, settings, calendarDisplaySettings, invoiceDefaults, bookingTypes, bookingChannels, paymentChannels, expenseCategories, monthlyExpenses, expenseSpreads, recurringExpenses, users, accommodationPricing, seasonalRates, bookingForms, loading };
 }

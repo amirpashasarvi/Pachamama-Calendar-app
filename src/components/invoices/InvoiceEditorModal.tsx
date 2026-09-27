@@ -7,7 +7,14 @@ import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import InvoicePreview from '@/components/invoices/InvoicePreview';
-import { setLastInvoiceBankDetails, setLastInvoicePaymentMethod, getLastInvoiceBankDetails } from '@/lib/invoiceDetails';
+import {
+  setLastInvoiceBankDetails,
+  setLastInvoicePaymentMethod,
+  resolveInvoicePaymentDefaults,
+  persistInvoicePaymentDefaults,
+  InvoicePaymentDefaults,
+} from '@/lib/invoiceDetails';
+import { useBooking } from '@/hooks/useBooking';
 import {
   InvoiceSourceSnapshot,
   applySnapshotToInvoice,
@@ -95,19 +102,21 @@ function buildInvoiceState(
   snapshot: InvoiceSourceSnapshot,
   existing: Invoice | null,
   createNew: boolean,
+  paymentDefaults: InvoicePaymentDefaults | null,
 ): Invoice {
+  const resolved = resolveInvoicePaymentDefaults(paymentDefaults);
   if (existing && !createNew) {
     return {
       ...existing,
       items: existing.items || [],
       payments: existing.payments || [],
       paymentMethod: existing.paymentMethod || '',
-      paymentDetails: existing.paymentDetails || getLastInvoiceBankDetails(),
+      paymentDetails: existing.paymentDetails || resolved.paymentDetails,
     };
   }
   try {
     return {
-      ...createInvoiceDraft(snapshot, `PM-${invoiceDateKey()}-…`, todayInvoiceDateIso()),
+      ...createInvoiceDraft(snapshot, `PM-${invoiceDateKey()}-…`, todayInvoiceDateIso(), paymentDefaults),
       id: newDocId(),
     };
   } catch {
@@ -124,8 +133,8 @@ function buildInvoiceState(
       items: [],
       invoiceDiscount: null,
       payments: [],
-      paymentMethod: '',
-      paymentDetails: getLastInvoiceBankDetails(),
+      paymentMethod: resolved.paymentMethod,
+      paymentDetails: resolved.paymentDetails,
       createdAt: now,
       updatedAt: now,
     };
@@ -139,10 +148,35 @@ export default function InvoiceEditorModal({
   existing = null,
   createNew = false,
 }: InvoiceEditorModalProps) {
-  const [invoice, setInvoice] = useState<Invoice>(() => buildInvoiceState(snapshot, existing, createNew));
+  const { invoiceDefaults } = useBooking();
+  const [invoice, setInvoice] = useState<Invoice>(() => buildInvoiceState(snapshot, existing, createNew, invoiceDefaults));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const loadedSessionRef = useRef<string | null>(null);
+  const defaultsSaveTimer = useRef<number>();
+  const invoiceDefaultsRef = useRef(invoiceDefaults);
+  invoiceDefaultsRef.current = invoiceDefaults;
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+  const existingRef = useRef(existing);
+  existingRef.current = existing;
+
+  useEffect(() => {
+    if (!isOpen) {
+      loadedSessionRef.current = null;
+      return;
+    }
+    const sessionKey = `${createNew ? 'new' : existing?.id ?? 'new'}:${snapshot.sourceId}`;
+    if (loadedSessionRef.current === sessionKey) return;
+    loadedSessionRef.current = sessionKey;
+    setInvoice(buildInvoiceState(
+      snapshotRef.current,
+      existingRef.current,
+      createNew,
+      invoiceDefaultsRef.current,
+    ));
+  }, [isOpen, existing?.id, createNew, snapshot.sourceId, snapshot.sourceType]);
 
   useEffect(() => {
     if (!isOpen || (existing && !createNew)) return;
@@ -192,22 +226,58 @@ export default function InvoiceEditorModal({
     onClose();
   };
 
+  const queueDefaultsPersist = (partial: Partial<InvoicePaymentDefaults>) => {
+    window.clearTimeout(defaultsSaveTimer.current);
+    defaultsSaveTimer.current = window.setTimeout(() => {
+      persistInvoicePaymentDefaults(partial).catch(() => {});
+    }, 700);
+  };
+
   const patch = (partial: Partial<Invoice>) => {
     setInvoice(prev => ({ ...prev, ...partial }));
+    const defaultsPatch: Partial<InvoicePaymentDefaults> = {};
     if (partial.paymentMethod != null) {
       setLastInvoicePaymentMethod(partial.paymentMethod);
+      defaultsPatch.paymentMethod = partial.paymentMethod;
     }
     if (partial.paymentDetails != null) {
       setLastInvoiceBankDetails(partial.paymentDetails);
+      defaultsPatch.paymentDetails = partial.paymentDetails;
+    }
+    if (Object.keys(defaultsPatch).length > 0) {
+      queueDefaultsPersist(defaultsPatch);
     }
   };
 
   const updateItem = (index: number, partial: Partial<InvoiceItem>) => {
     setInvoice(prev => {
-      const items = [...prev.items];
+      const items = [...(prev.items || [])];
       items[index] = { ...items[index], ...partial };
       return { ...prev, items };
     });
+  };
+
+  const appendItem = () => {
+    setInvoice(prev => ({
+      ...prev,
+      items: [
+        ...(prev.items || []),
+        {
+          id: newInvoiceId('item'),
+          description: '',
+          quantity: 1,
+          unitPrice: 0,
+          discount: null,
+        },
+      ],
+    }));
+  };
+
+  const removeItem = (index: number) => {
+    setInvoice(prev => ({
+      ...prev,
+      items: (prev.items || []).filter((_, i) => i !== index),
+    }));
   };
 
   const handleSave = async () => {
@@ -235,6 +305,10 @@ export default function InvoiceEditorModal({
     const withPdf = { ...invoice, pdfGeneratedAt: new Date().toISOString() };
     setLastInvoicePaymentMethod(withPdf.paymentMethod || '');
     setLastInvoiceBankDetails(withPdf.paymentDetails || '');
+    persistInvoicePaymentDefaults({
+      paymentMethod: withPdf.paymentMethod || '',
+      paymentDetails: withPdf.paymentDetails || '',
+    }).catch(() => {});
     try {
       const saved = await persist(withPdf);
       setInvoice(saved);
@@ -327,15 +401,7 @@ export default function InvoiceEditorModal({
                 <h3 className={cn(LABEL, 'mb-0')}>Items</h3>
                 <button
                   type="button"
-                  onClick={() => patch({
-                    items: [...invoice.items, {
-                      id: newInvoiceId('item'),
-                      description: '',
-                      quantity: 1,
-                      unitPrice: 0,
-                      discount: null,
-                    }],
-                  })}
+                  onClick={appendItem}
                   className="flex items-center gap-1 text-xs font-bold text-blue-600"
                 >
                   <Plus size={12} /> Add item
@@ -353,7 +419,7 @@ export default function InvoiceEditorModal({
                       />
                       <button
                         type="button"
-                        onClick={() => patch({ items: invoice.items.filter((_, i) => i !== index) })}
+                        onClick={() => removeItem(index)}
                         className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"
                         aria-label="Remove item"
                       >
@@ -458,7 +524,7 @@ export default function InvoiceEditorModal({
                 value={invoice.paymentMethod}
                 onChange={e => patch({ paymentMethod: e.target.value })}
               />
-              <p className="text-[11px] text-gray-400 mt-1">Remembered for the next invoice you create.</p>
+              <p className="text-[11px] text-gray-400 mt-1">Saved for new invoices on all your devices.</p>
             </div>
 
             <div>
@@ -468,7 +534,7 @@ export default function InvoiceEditorModal({
                 value={invoice.paymentDetails || ''}
                 onChange={e => patch({ paymentDetails: e.target.value })}
               />
-              <p className="text-[11px] text-gray-400 mt-1">Shown at the bottom of the invoice. Remembered for the next invoice you create.</p>
+              <p className="text-[11px] text-gray-400 mt-1">Shown at the bottom of the invoice. Saved for new invoices on all your devices.</p>
             </div>
 
             {totals && (

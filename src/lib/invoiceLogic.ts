@@ -2,7 +2,10 @@ import { format, parseISO } from 'date-fns';
 import { Booking, Invoice, InvoiceDiscount, InvoiceItem, InvoicePayment, InvoicePaymentStatus, InvoiceSourceType, Room, VenueHire } from '@/types';
 import { calculateNights } from '@/lib/utils';
 import { asExtrasList, getPaymentEntries } from '@/lib/bookingFinancials';
-import { getLastInvoiceBankDetails, getLastInvoicePaymentMethod } from '@/lib/invoiceDetails';
+import {
+  InvoicePaymentDefaults,
+  resolveInvoicePaymentDefaults,
+} from '@/lib/invoiceDetails';
 
 export interface InvoiceSourceSnapshot {
   sourceType: InvoiceSourceType;
@@ -52,7 +55,7 @@ export function invoiceFilename(invoice: Pick<Invoice, 'invoiceNumber' | 'guestN
     .replace(/[^\w]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '') || 'Guest';
-  return `Invoice_${invoice.invoiceNumber}_${name}.pdf`;
+  return `${name}_${invoice.invoiceNumber}.pdf`;
 }
 
 function hasDiscount(discount?: InvoiceDiscount | null): boolean {
@@ -207,7 +210,9 @@ export function createInvoiceDraft(
   snapshot: InvoiceSourceSnapshot,
   invoiceNumber: string,
   invoiceDate: string,
+  paymentDefaults?: InvoicePaymentDefaults | null,
 ): Invoice {
+  const { paymentMethod, paymentDetails } = resolveInvoicePaymentDefaults(paymentDefaults);
   const now = new Date().toISOString();
   return {
     id: '',
@@ -222,8 +227,8 @@ export function createInvoiceDraft(
     items: itemsFromSnapshot(snapshot),
     invoiceDiscount: null,
     payments: paymentsFromSnapshot(snapshot),
-    paymentMethod: getLastInvoicePaymentMethod(),
-    paymentDetails: getLastInvoiceBankDetails(),
+    paymentMethod,
+    paymentDetails,
     createdAt: now,
     updatedAt: now,
   };

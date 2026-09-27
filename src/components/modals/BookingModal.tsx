@@ -568,7 +568,7 @@ export default function BookingModal({
           <button
             type="button"
             onClick={() => setFooterMenuOpen(open => !open)}
-            className="h-10 w-10 flex items-center justify-center rounded-xl text-gray-700 hover:bg-gray-100"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100"
             aria-label="More actions"
             aria-expanded={footerMenuOpen}
           >
@@ -678,7 +678,7 @@ export default function BookingModal({
         <button
             type="submit"
             form="booking-form"
-            className="flex items-center gap-1 sm:gap-2 px-3 py-2 sm:px-8 sm:py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-[11px] sm:text-sm"
+            className="flex items-center gap-1 sm:gap-2 h-8 px-3 sm:h-auto sm:px-8 sm:py-3 bg-black text-white rounded-lg sm:rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg shadow-black/20 text-sm"
           >
             <Save size={14} className="sm:w-4 sm:h-4 shrink-0" />
             {isAdmin ? (

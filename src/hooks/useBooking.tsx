@@ -1,6 +1,7 @@
 import React, { createContext, useContext } from 'react';
 import { useBookingData } from './useBookingData';
 import { Room, Booking, Retreat, RetreatType, GlobalSettings, ConfigOption, UserRecord, VenueHire, TeamPosition, TeamAssignment, CalendarDisplaySettings, MonthlyExpense, ExpenseSpread, RecurringExpense, AccommodationPricing, SeasonalRate, BookingForm } from '@/types';
+import { InvoicePaymentDefaults } from '@/lib/invoiceDetails';
 
 interface BookingDataContextType {
   rooms: Room[];
@@ -25,6 +26,7 @@ interface BookingDataContextType {
   bookingForms: BookingForm[];
   settings: GlobalSettings | null;
   calendarDisplaySettings: CalendarDisplaySettings | null;
+  invoiceDefaults: InvoicePaymentDefaults | null;
   loading: boolean;
 }
 

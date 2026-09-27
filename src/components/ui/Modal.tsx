@@ -2,7 +2,7 @@ import React from 'react';
 
 function cnHeader(compact: boolean) {
   return compact
-    ? 'shrink-0 flex items-center justify-between px-4 py-2 sm:px-6 sm:py-4 border-b'
+    ? 'shrink-0 h-12 px-4 sm:h-auto sm:px-6 sm:py-4 flex items-center justify-between border-b'
     : 'shrink-0 flex items-center justify-between px-6 py-4 border-b';
 }
 import { X } from 'lucide-react';
@@ -66,7 +66,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, dismis
 
             {/* Sticky footer — only rendered when passed */}
             {footer && (
-              <div className={compactHeader ? 'shrink-0 border-t bg-white px-4 py-2.5 sm:px-6 sm:py-4' : 'shrink-0 border-t bg-white px-6 py-4'}>
+              <div className={compactHeader ? 'shrink-0 min-h-12 px-4 sm:min-h-0 sm:px-6 sm:py-4 border-t bg-white flex items-center sm:block' : 'shrink-0 border-t bg-white px-6 py-4'}>
                 {footer}
               </div>
             )}

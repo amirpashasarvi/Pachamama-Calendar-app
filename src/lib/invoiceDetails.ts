@@ -1,3 +1,6 @@
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '@/services/firebase';
+
 export const INVOICE_ISSUER = {
   title: 'Pachamama Farm Retreat',
   name: 'Pachamama Farm Retreat',
@@ -58,4 +61,32 @@ export function setLastInvoiceBankDetails(value: string): void {
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+export interface InvoicePaymentDefaults {
+  paymentMethod: string;
+  paymentDetails: string;
+}
+
+/** Firestore-backed defaults, with localStorage / code fallback. */
+export function resolveInvoicePaymentDefaults(
+  cloud: InvoicePaymentDefaults | null | undefined,
+): InvoicePaymentDefaults {
+  const paymentMethod = cloud?.paymentMethod?.trim()
+    ? cloud.paymentMethod
+    : getLastInvoicePaymentMethod();
+  const paymentDetails = cloud?.paymentDetails?.trim()
+    ? cloud.paymentDetails
+    : getLastInvoiceBankDetails();
+  return { paymentMethod, paymentDetails };
+}
+
+export async function persistInvoicePaymentDefaults(
+  partial: Partial<InvoicePaymentDefaults>,
+): Promise<void> {
+  await setDoc(
+    doc(db, 'settings', 'invoiceDefaults'),
+    { ...partial, updatedAt: new Date().toISOString() },
+    { merge: true },
+  );
 }
