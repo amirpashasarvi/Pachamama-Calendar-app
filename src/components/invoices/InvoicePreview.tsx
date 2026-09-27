@@ -3,10 +3,12 @@ import { Invoice } from '@/types';
 import { INVOICE_ISSUER, defaultInvoiceBankDetails } from '@/lib/invoiceDetails';
 import {
   calculateInvoiceTotals,
+  normalizeInvoiceItems,
   formatDiscountDisplay,
   formatEuro,
   formatInvoiceDate,
-  lineDiscountAmount,
+  formatItemDiscountAmount,
+  formatItemDiscountLabel,
 } from '@/lib/invoiceLogic';
 import { cn } from '@/lib/utils';
 
@@ -55,22 +57,43 @@ export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
                 <th className="font-medium px-3 py-2 rounded-l-lg">Item</th>
                 <th className="font-medium px-3 py-2 text-right">Quantity</th>
                 <th className="font-medium px-3 py-2 text-right">Price</th>
-                <th className="font-medium px-3 py-2 text-right">Discount</th>
                 <th className="font-medium px-3 py-2 text-right rounded-r-lg">Total</th>
               </tr>
             </thead>
             <tbody>
-              {(invoice.items || []).map((item, index) => (
-                <tr key={item.id} className="border-b border-gray-100">
-                  <td className="px-3 py-3 align-top">{item.description || '—'}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatEuro(item.unitPrice)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-gray-500">
-                    {formatDiscountDisplay(lineDiscountAmount(item))}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatEuro(totals.itemTotals[index] || 0)}</td>
-                </tr>
-              ))}
+              {normalizeInvoiceItems(invoice.items).map((item, index) => {
+                const discountLabel = formatItemDiscountLabel(item);
+                const discountAmount = formatItemDiscountAmount(item);
+                const hasLineDiscount = !!(discountLabel && discountAmount);
+                const secondLine = hasLineDiscount ? (
+                  <div className="text-xs text-rose-600 mt-1 leading-snug min-h-[1.125rem]">{discountLabel}</div>
+                ) : null;
+                return (
+                  <tr key={item.id} className="border-b border-gray-100">
+                    <td className="px-3 py-3 align-top">
+                      <div>{item.description || '—'}</div>
+                      {secondLine}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums align-top">{item.quantity}</td>
+                    <td className="px-3 py-3 text-right tabular-nums align-top">
+                      <div>{formatEuro(item.unitPrice)}</div>
+                      {hasLineDiscount && (
+                        <div className="text-xs text-rose-600 mt-1 leading-snug min-h-[1.125rem]">{discountAmount}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums align-top">
+                      {hasLineDiscount ? (
+                        <>
+                          <div className="min-h-[1.25rem]" aria-hidden />
+                          <div>{formatEuro(totals.itemTotals[index] || 0)}</div>
+                        </>
+                      ) : (
+                        formatEuro(totals.itemTotals[index] || 0)
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -82,7 +105,7 @@ export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
         {totals.invoiceDiscountAmount > 0 && (
           <div className="px-4 py-2 flex items-center justify-between text-rose-700">
             <span>Invoice discount</span>
-            <span className="tabular-nums">−{formatEuro(totals.invoiceDiscountAmount)}</span>
+            <span className="tabular-nums">{formatDiscountDisplay(totals.invoiceDiscountAmount)}</span>
           </div>
         )}
         <div className="mt-4 ml-auto w-full sm:w-80">

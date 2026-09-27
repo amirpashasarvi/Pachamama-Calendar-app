@@ -40,6 +40,15 @@ export function newInvoiceId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** Firestore may return arrays or map-like objects for `items`. */
+export function normalizeInvoiceItems(items: unknown): InvoiceItem[] {
+  if (Array.isArray(items)) return items as InvoiceItem[];
+  if (items && typeof items === 'object') {
+    return Object.values(items as Record<string, InvoiceItem>);
+  }
+  return [];
+}
+
 export function formatInvoiceDate(iso: string): string {
   if (!iso) return '';
   try {
@@ -84,7 +93,7 @@ export function lineTotal(item: InvoiceItem): number {
 }
 
 export function calculateInvoiceTotals(invoice: Pick<Invoice, 'items' | 'invoiceDiscount' | 'payments'>): InvoiceTotals {
-  const items = invoice.items || [];
+  const items = normalizeInvoiceItems(invoice.items);
   const itemGross = items.map(lineGross);
   const itemDiscountAmounts = items.map(lineDiscountAmount);
   const itemTotals = items.map(lineTotal);
@@ -117,12 +126,30 @@ export function formatEuro(amount: number, showZero = true): string {
     minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   });
-  return `€${formatted}`;
+  return `€ ${formatted}`;
 }
 
 export function formatDiscountDisplay(amount: number): string {
   if (!amount) return '—';
-  return `−${formatEuro(amount)}`;
+  return `- ${formatEuro(amount)}`;
+}
+
+export function formatItemDiscountLabel(item: InvoiceItem): string | null {
+  const discount = item.discount;
+  if (!hasDiscount(discount)) return null;
+  if (lineDiscountAmount(item) <= 0) return null;
+  const value = Number(discount!.value) || 0;
+  if (discount!.kind === 'percent') {
+    const pct = value % 1 === 0 ? String(value) : value.toFixed(1).replace(/\.0$/, '');
+    return `${pct}% discount`;
+  }
+  return 'Discount';
+}
+
+export function formatItemDiscountAmount(item: InvoiceItem): string | null {
+  const amount = lineDiscountAmount(item);
+  if (amount <= 0) return null;
+  return formatDiscountDisplay(amount);
 }
 
 function defaultDescription(snapshot: InvoiceSourceSnapshot): string {
@@ -297,7 +324,7 @@ export function invoiceToFirestore(invoice: Invoice): Record<string, unknown> {
     guestName: invoice.guestName,
     guestEmail: invoice.guestEmail || '',
     description: invoice.description,
-    items: (invoice.items || []).map(item => ({
+    items: normalizeInvoiceItems(invoice.items).map(item => ({
       id: item.id,
       description: item.description,
       quantity: item.quantity,

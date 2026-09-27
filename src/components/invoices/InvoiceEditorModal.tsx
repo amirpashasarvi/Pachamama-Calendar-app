@@ -21,8 +21,10 @@ import {
   calculateInvoiceTotals,
   createInvoiceDraft,
   formatEuro,
+  formatDiscountDisplay,
   invoiceToFirestore,
   newInvoiceId,
+  normalizeInvoiceItems,
 } from '@/lib/invoiceLogic';
 import { allocateInvoiceNumberOnce, invoiceDateKey, todayInvoiceDateIso } from '@/lib/invoiceNumber';
 import { downloadInvoicePdf } from '@/lib/invoicePdf';
@@ -108,7 +110,7 @@ function buildInvoiceState(
   if (existing && !createNew) {
     return {
       ...existing,
-      items: existing.items || [],
+      items: normalizeInvoiceItems(existing.items),
       payments: existing.payments || [],
       paymentMethod: existing.paymentMethod || '',
       paymentDetails: existing.paymentDetails || resolved.paymentDetails,
@@ -153,38 +155,22 @@ export default function InvoiceEditorModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const loadedSessionRef = useRef<string | null>(null);
   const defaultsSaveTimer = useRef<number>();
-  const invoiceDefaultsRef = useRef(invoiceDefaults);
-  invoiceDefaultsRef.current = invoiceDefaults;
-  const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
-  const existingRef = useRef(existing);
-  existingRef.current = existing;
-
-  useEffect(() => {
-    if (!isOpen) {
-      loadedSessionRef.current = null;
-      return;
-    }
-    const sessionKey = `${createNew ? 'new' : existing?.id ?? 'new'}:${snapshot.sourceId}`;
-    if (loadedSessionRef.current === sessionKey) return;
-    loadedSessionRef.current = sessionKey;
-    setInvoice(buildInvoiceState(
-      snapshotRef.current,
-      existingRef.current,
-      createNew,
-      invoiceDefaultsRef.current,
-    ));
-  }, [isOpen, existing?.id, createNew, snapshot.sourceId, snapshot.sourceType]);
+  const itemsListEndRef = useRef<HTMLDivElement>(null);
+  const initialCreateStarted = useRef(false);
+  const invoiceRef = useRef(invoice);
+  invoiceRef.current = invoice;
 
   useEffect(() => {
     if (!isOpen || (existing && !createNew)) return;
-    const docId = invoice.id;
+    if (initialCreateStarted.current) return;
+    initialCreateStarted.current = true;
+    const docId = invoiceRef.current.id;
     let cancelled = false;
     (async () => {
       const number = await allocateInvoiceNumberOnce(docId);
-      await setDoc(doc(db, 'invoices', docId), invoiceToFirestore({ ...invoice, invoiceNumber: number }));
+      const draft = { ...invoiceRef.current, invoiceNumber: number };
+      await setDoc(doc(db, 'invoices', docId), invoiceToFirestore(draft));
       if (cancelled) return;
       setInvoice(prev => ({ ...prev, invoiceNumber: number }));
       setError(null);
@@ -194,13 +180,11 @@ export default function InvoiceEditorModal({
     return () => {
       cancelled = true;
     };
-    // Create exactly once when the editor opens.
+    // Create exactly once when the editor opens for a new invoice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const totals = useMemo(() => calculateInvoiceTotals(invoice), [invoice]);
-  const invoiceRef = useRef(invoice);
-  invoiceRef.current = invoice;
   const skipAutosave = useRef(true);
 
   const persist = async (next: Invoice, extra?: Partial<Invoice>) => {
@@ -251,7 +235,7 @@ export default function InvoiceEditorModal({
 
   const updateItem = (index: number, partial: Partial<InvoiceItem>) => {
     setInvoice(prev => {
-      const items = [...(prev.items || [])];
+      const items = [...normalizeInvoiceItems(prev.items)];
       items[index] = { ...items[index], ...partial };
       return { ...prev, items };
     });
@@ -261,7 +245,7 @@ export default function InvoiceEditorModal({
     setInvoice(prev => ({
       ...prev,
       items: [
-        ...(prev.items || []),
+        ...normalizeInvoiceItems(prev.items),
         {
           id: newInvoiceId('item'),
           description: '',
@@ -271,12 +255,15 @@ export default function InvoiceEditorModal({
         },
       ],
     }));
+    requestAnimationFrame(() => {
+      itemsListEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const removeItem = (index: number) => {
     setInvoice(prev => ({
       ...prev,
-      items: (prev.items || []).filter((_, i) => i !== index),
+      items: normalizeInvoiceItems(prev.items).filter((_, i) => i !== index),
     }));
   };
 
@@ -408,7 +395,7 @@ export default function InvoiceEditorModal({
                 </button>
               </div>
               <div className="space-y-3">
-                {invoice.items.map((item, index) => (
+                {normalizeInvoiceItems(invoice.items).map((item, index) => (
                   <div key={item.id} className="border border-slate-200 rounded-2xl p-3 space-y-2">
                     <div className="flex items-start gap-2">
                       <input
@@ -456,6 +443,7 @@ export default function InvoiceEditorModal({
                     </div>
                   </div>
                 ))}
+                <div ref={itemsListEndRef} />
               </div>
             </div>
 
@@ -542,7 +530,7 @@ export default function InvoiceEditorModal({
                 <div className="flex justify-between"><span>Subtotal</span><span>{formatEuro(totals.subtotal)}</span></div>
                 {totals.invoiceDiscountAmount > 0 && (
                   <div className="flex justify-between text-rose-700">
-                    <span>Invoice discount</span><span>−{formatEuro(totals.invoiceDiscountAmount)}</span>
+                    <span>Invoice discount</span><span>{formatDiscountDisplay(totals.invoiceDiscountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold"><span>Total</span><span>{formatEuro(totals.total)}</span></div>

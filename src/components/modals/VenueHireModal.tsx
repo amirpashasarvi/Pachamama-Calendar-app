@@ -761,6 +761,7 @@ export default function VenueHireModal({
     </Modal>
       {invoiceOpen && invoiceSnapshot && (
         <InvoiceEditorModal
+          key={`${invoiceToEdit?.id ?? 'new'}-${invoiceCreateNew}`}
           isOpen={invoiceOpen}
           onClose={() => {
             setInvoiceOpen(false);

@@ -6,8 +6,10 @@ import {
   formatDiscountDisplay,
   formatEuro,
   formatInvoiceDate,
+  formatItemDiscountAmount,
+  formatItemDiscountLabel,
   invoiceFilename,
-  lineDiscountAmount,
+  normalizeInvoiceItems,
 } from '@/lib/invoiceLogic';
 
 const PAGE_W = 210;
@@ -80,11 +82,11 @@ export function downloadInvoicePdf(invoice: Invoice): void {
 
   const cols = {
     item: MARGIN,
-    qty: MARGIN + 88,
-    price: MARGIN + 112,
-    disc: MARGIN + 142,
-    total: right,
+    qtyRight: MARGIN + 118,
+    priceRight: MARGIN + 152,
+    totalRight: right,
   };
+  const itemTextWidth = cols.qtyRight - cols.item - 6;
 
   y = addPageIfNeeded(doc, y, 20);
   doc.setFillColor(249, 250, 251);
@@ -93,27 +95,38 @@ export function downloadInvoicePdf(invoice: Invoice): void {
   doc.setFontSize(8);
   doc.setTextColor(107, 114, 128);
   doc.text('ITEM', cols.item + 2, y + 5.5);
-  doc.text('QTY', cols.qty, y + 5.5);
-  doc.text('PRICE', cols.price, y + 5.5);
-  doc.text('DISCOUNT', cols.disc, y + 5.5);
-  doc.text('TOTAL', cols.total, y + 5.5, { align: 'right' });
+  doc.text('QTY', cols.qtyRight, y + 5.5, { align: 'right' });
+  doc.text('PRICE', cols.priceRight, y + 5.5, { align: 'right' });
+  doc.text('TOTAL', cols.totalRight, y + 5.5, { align: 'right' });
   y += 12;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  (invoice.items || []).forEach((item, index) => {
-    const descLines = doc.splitTextToSize(item.description || '—', 82);
-    const rowH = Math.max(8, descLines.length * 4.5 + 3);
+  normalizeInvoiceItems(invoice.items).forEach((item, index) => {
+    const discountLabel = formatItemDiscountLabel(item);
+    const discountAmount = formatItemDiscountAmount(item);
+    const hasLineDiscount = !!(discountLabel && discountAmount);
+    const descLines = doc.splitTextToSize(item.description || '—', itemTextWidth);
+    const discountExtra = hasLineDiscount ? 5 : 0;
+    const rowH = Math.max(8, descLines.length * 4.5 + discountExtra + 3);
     y = addPageIfNeeded(doc, y, rowH + 2);
     doc.setTextColor(17, 24, 39);
     doc.text(descLines, cols.item + 2, y);
-    doc.text(String(item.quantity ?? 0), cols.qty, y);
-    doc.text(formatEuro(item.unitPrice || 0), cols.price, y);
-    const dAmt = lineDiscountAmount(item);
-    doc.setTextColor(dAmt ? 185 : 156, dAmt ? 28 : 163, dAmt ? 28 : 175);
-    doc.text(formatDiscountDisplay(dAmt), cols.disc, y);
-    doc.setTextColor(17, 24, 39);
-    doc.text(formatEuro(totals.itemTotals[index] || 0), cols.total, y, { align: 'right' });
+    doc.text(String(item.quantity ?? 0), cols.qtyRight, y, { align: 'right' });
+    doc.text(formatEuro(item.unitPrice || 0), cols.priceRight, y, { align: 'right' });
+    if (!hasLineDiscount) {
+      doc.text(formatEuro(totals.itemTotals[index] || 0), cols.totalRight, y, { align: 'right' });
+    }
+    if (hasLineDiscount) {
+      const yDisc = y + descLines.length * 4.5;
+      doc.setFontSize(9);
+      doc.setTextColor(185, 28, 28);
+      doc.text(discountLabel!, cols.item + 2, yDisc);
+      doc.text(discountAmount!, cols.priceRight, yDisc, { align: 'right' });
+      doc.setTextColor(17, 24, 39);
+      doc.setFontSize(10);
+      doc.text(formatEuro(totals.itemTotals[index] || 0), cols.totalRight, yDisc, { align: 'right' });
+    }
     y += rowH;
     doc.setDrawColor(243, 244, 246);
     doc.line(MARGIN, y - 3, right, y - 3);
@@ -134,7 +147,7 @@ export function downloadInvoicePdf(invoice: Invoice): void {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(185, 28, 28);
     doc.text('Invoice discount', MARGIN + 2, y);
-    doc.text(`−${formatEuro(totals.invoiceDiscountAmount)}`, right, y, { align: 'right' });
+    doc.text(formatDiscountDisplay(totals.invoiceDiscountAmount), right, y, { align: 'right' });
     y += 7;
   }
 
