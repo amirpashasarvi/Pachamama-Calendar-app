@@ -22,6 +22,7 @@ import {
   createInvoiceDraft,
   formatEuro,
   formatDiscountDisplay,
+  invoiceDiscountTitle,
   invoiceToFirestore,
   newInvoiceId,
   normalizeInvoiceItems,
@@ -156,7 +157,8 @@ export default function InvoiceEditorModal({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const defaultsSaveTimer = useRef<number>();
-  const itemsListEndRef = useRef<HTMLDivElement>(null);
+  const itemsListRef = useRef<HTMLDivElement>(null);
+  const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
   const initialCreateStarted = useRef(false);
   const invoiceRef = useRef(invoice);
   invoiceRef.current = invoice;
@@ -242,12 +244,13 @@ export default function InvoiceEditorModal({
   };
 
   const appendItem = () => {
+    const id = newInvoiceId('item');
     setInvoice(prev => ({
       ...prev,
       items: [
         ...normalizeInvoiceItems(prev.items),
         {
-          id: newInvoiceId('item'),
+          id,
           description: '',
           quantity: 1,
           unitPrice: 0,
@@ -255,10 +258,19 @@ export default function InvoiceEditorModal({
         },
       ],
     }));
-    requestAnimationFrame(() => {
-      itemsListEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
+    setJustAddedItemId(id);
   };
+
+  useEffect(() => {
+    if (!justAddedItemId) return;
+    const card = itemsListRef.current?.querySelector<HTMLElement>(`[data-item-id="${justAddedItemId}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+    }
+    const timer = window.setTimeout(() => setJustAddedItemId(null), 1200);
+    return () => window.clearTimeout(timer);
+  }, [justAddedItemId]);
 
   const removeItem = (index: number) => {
     setInvoice(prev => ({
@@ -389,14 +401,21 @@ export default function InvoiceEditorModal({
                 <button
                   type="button"
                   onClick={appendItem}
-                  className="flex items-center gap-1 text-xs font-bold text-blue-600"
+                  className="flex items-center gap-1 text-xs font-bold text-blue-600 rounded-lg px-2 py-1 -mr-2 transition hover:bg-blue-50 hover:text-blue-700 active:scale-95 active:bg-blue-100"
                 >
                   <Plus size={12} /> Add item
                 </button>
               </div>
-              <div className="space-y-3">
+              <div ref={itemsListRef} className="space-y-3">
                 {normalizeInvoiceItems(invoice.items).map((item, index) => (
-                  <div key={item.id} className="border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div
+                    key={item.id}
+                    data-item-id={item.id}
+                    className={cn(
+                      'border rounded-2xl p-3 space-y-2 transition-colors duration-700',
+                      item.id === justAddedItemId ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-transparent',
+                    )}
+                  >
                     <div className="flex items-start gap-2">
                       <input
                         className={cn(FIELD, 'flex-1')}
@@ -443,12 +462,17 @@ export default function InvoiceEditorModal({
                     </div>
                   </div>
                 ))}
-                <div ref={itemsListEndRef} />
               </div>
             </div>
 
             <div className="border border-slate-200 rounded-2xl p-3">
               <label className={LABEL}>Invoice discount (optional, on subtotal)</label>
+              <input
+                className={cn(FIELD, 'mb-2')}
+                placeholder="Title (default: Invoice discount)"
+                value={invoice.invoiceDiscountLabel || ''}
+                onChange={e => patch({ invoiceDiscountLabel: e.target.value })}
+              />
               <DiscountEditor
                 discount={invoice.invoiceDiscount}
                 onChange={d => patch({ invoiceDiscount: d })}
@@ -530,7 +554,7 @@ export default function InvoiceEditorModal({
                 <div className="flex justify-between"><span>Subtotal</span><span>{formatEuro(totals.subtotal)}</span></div>
                 {totals.invoiceDiscountAmount > 0 && (
                   <div className="flex justify-between text-rose-700">
-                    <span>Invoice discount</span><span>{formatDiscountDisplay(totals.invoiceDiscountAmount)}</span>
+                    <span>{invoiceDiscountTitle(invoice)}</span><span>{formatDiscountDisplay(totals.invoiceDiscountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold"><span>Total</span><span>{formatEuro(totals.total)}</span></div>

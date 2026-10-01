@@ -443,6 +443,8 @@ export interface Invoice {
   items: InvoiceItem[];
   /** Optional discount on the invoice subtotal (after item-level discounts). */
   invoiceDiscount?: InvoiceDiscount | null;
+  /** Title shown next to the invoice discount; falls back to "Invoice discount". */
+  invoiceDiscountLabel?: string;
   payments: InvoicePayment[];
   paymentMethod: string;
   /** Bank / payment instructions shown on the invoice. */

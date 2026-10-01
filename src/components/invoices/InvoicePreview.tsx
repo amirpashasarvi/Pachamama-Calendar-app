@@ -9,6 +9,7 @@ import {
   formatInvoiceDate,
   formatItemDiscountAmount,
   formatItemDiscountLabel,
+  invoiceDiscountTitle,
 } from '@/lib/invoiceLogic';
 import { cn } from '@/lib/utils';
 
@@ -104,7 +105,7 @@ export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
         </div>
         {totals.invoiceDiscountAmount > 0 && (
           <div className="px-4 py-2 flex items-center justify-between text-rose-700">
-            <span>Invoice discount</span>
+            <span>{invoiceDiscountTitle(invoice)}</span>
             <span className="tabular-nums">{formatDiscountDisplay(totals.invoiceDiscountAmount)}</span>
           </div>
         )}

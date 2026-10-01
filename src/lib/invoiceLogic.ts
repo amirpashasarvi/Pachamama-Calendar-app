@@ -233,6 +233,10 @@ export function applySnapshotToInvoice(
   };
 }
 
+export function invoiceDiscountTitle(invoice: Pick<Invoice, 'invoiceDiscountLabel'>): string {
+  return invoice.invoiceDiscountLabel?.trim() || 'Invoice discount';
+}
+
 export function createInvoiceDraft(
   snapshot: InvoiceSourceSnapshot,
   invoiceNumber: string,
@@ -336,6 +340,7 @@ export function invoiceToFirestore(invoice: Invoice): Record<string, unknown> {
     invoiceDiscount: hasDiscount(invoice.invoiceDiscount)
       ? { kind: invoice.invoiceDiscount!.kind, value: invoice.invoiceDiscount!.value }
       : null,
+    invoiceDiscountLabel: invoice.invoiceDiscountLabel || '',
     payments: (invoice.payments || []).map(p => ({
       id: p.id,
       label: p.label,

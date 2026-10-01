@@ -8,6 +8,7 @@ import {
   formatInvoiceDate,
   formatItemDiscountAmount,
   formatItemDiscountLabel,
+  invoiceDiscountTitle,
   invoiceFilename,
   normalizeInvoiceItems,
 } from '@/lib/invoiceLogic';
@@ -146,7 +147,7 @@ export function downloadInvoicePdf(invoice: Invoice): void {
   if (totals.invoiceDiscountAmount > 0) {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(185, 28, 28);
-    doc.text('Invoice discount', MARGIN + 2, y);
+    doc.text(invoiceDiscountTitle(invoice), MARGIN + 2, y);
     doc.text(formatDiscountDisplay(totals.invoiceDiscountAmount), right, y, { align: 'right' });
     y += 7;
   }
