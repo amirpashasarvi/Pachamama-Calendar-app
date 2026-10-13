@@ -24,6 +24,7 @@ import {
   formatDiscountDisplay,
   invoiceDiscountTitle,
   invoiceToFirestore,
+  lineNights,
   newInvoiceId,
   normalizeInvoiceItems,
 } from '@/lib/invoiceLogic';
@@ -253,6 +254,7 @@ export default function InvoiceEditorModal({
           id,
           description: '',
           quantity: 1,
+          nights: 1,
           unitPrice: 0,
           discount: null,
         },
@@ -432,12 +434,20 @@ export default function InvoiceEditorModal({
                         <X size={14} />
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className={LABEL}>Quantity</label>
                         <CurrencyInput
                           value={item.quantity}
                           onChange={v => updateItem(index, { quantity: v })}
+                          className={cn(FIELD, 'py-2')}
+                        />
+                      </div>
+                      <div>
+                        <label className={LABEL}>Nights</label>
+                        <CurrencyInput
+                          value={lineNights(item)}
+                          onChange={v => updateItem(index, { nights: v > 0 ? v : 1 })}
                           className={cn(FIELD, 'py-2')}
                         />
                       </div>
@@ -526,6 +536,17 @@ export default function InvoiceEditorModal({
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <label className={LABEL}>Note (optional)</label>
+              <textarea
+                className={cn(FIELD, 'min-h-[88px] resize-y')}
+                placeholder="To confirm this booking, a deposit of 30% is due."
+                value={invoice.note || ''}
+                onChange={e => patch({ note: e.target.value })}
+              />
+              <p className="text-[11px] text-gray-400 mt-1">Shown under the totals, before payment details. Only on this invoice.</p>
             </div>
 
             <div>

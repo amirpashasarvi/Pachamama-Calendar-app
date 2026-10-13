@@ -80,8 +80,19 @@ export function discountAmountOn(base: number, discount?: InvoiceDiscount | null
   return Math.min(base, value);
 }
 
+/** Nights multiplier. Missing, zero, or invalid values count as 1 so older invoices stay unchanged. */
+export function lineNights(item: Pick<InvoiceItem, 'nights'>): number {
+  const n = Number(item.nights);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return n;
+}
+
+export function invoiceShowsNights(items: unknown): boolean {
+  return normalizeInvoiceItems(items).some(item => lineNights(item) !== 1);
+}
+
 export function lineGross(item: InvoiceItem): number {
-  return (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+  return (Number(item.quantity) || 0) * lineNights(item) * (Number(item.unitPrice) || 0);
 }
 
 export function lineDiscountAmount(item: InvoiceItem): number {
@@ -194,11 +205,14 @@ function paymentsFromSnapshot(snapshot: InvoiceSourceSnapshot): InvoicePayment[]
 export function itemsFromSnapshot(snapshot: InvoiceSourceSnapshot): InvoiceItem[] {
   const items: InvoiceItem[] = [];
   if (snapshot.price > 0 || snapshot.roomName || snapshot.sourceType === 'venueHire') {
+    const nights = snapshot.nights > 0 ? snapshot.nights : 1;
     items.push({
       id: newInvoiceId('item'),
       description: accommodationDescription(snapshot),
       quantity: 1,
-      unitPrice: snapshot.price || 0,
+      nights,
+      // The booking stores a stay total, not a per-night rate. For stays longer than one night, leave the unit price blank.
+      unitPrice: nights > 1 ? 0 : (snapshot.price || 0),
       discount: null,
     });
   }
@@ -208,6 +222,7 @@ export function itemsFromSnapshot(snapshot: InvoiceSourceSnapshot): InvoiceItem[
       id: newInvoiceId('item'),
       description: label,
       quantity: 1,
+      nights: 1,
       unitPrice: extra.amount || 0,
       discount: null,
     });
@@ -258,6 +273,7 @@ export function createInvoiceDraft(
     items: itemsFromSnapshot(snapshot),
     invoiceDiscount: null,
     payments: paymentsFromSnapshot(snapshot),
+    note: '',
     paymentMethod,
     paymentDetails,
     createdAt: now,
@@ -332,6 +348,7 @@ export function invoiceToFirestore(invoice: Invoice): Record<string, unknown> {
       id: item.id,
       description: item.description,
       quantity: item.quantity,
+      nights: lineNights(item),
       unitPrice: item.unitPrice,
       discount: hasDiscount(item.discount)
         ? { kind: item.discount!.kind, value: item.discount!.value }
@@ -346,6 +363,7 @@ export function invoiceToFirestore(invoice: Invoice): Record<string, unknown> {
       label: p.label,
       amount: p.amount,
     })),
+    note: invoice.note || '',
     paymentMethod: invoice.paymentMethod || '',
     paymentDetails: invoice.paymentDetails || '',
     createdAt: invoice.createdAt,

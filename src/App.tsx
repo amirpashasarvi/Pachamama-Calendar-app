@@ -112,8 +112,7 @@ function AppContent() {
       <header className={cn('border-b flex items-center justify-between bg-white relative z-[150] print:hidden pt-safe pl-safe pr-safe', layout.appHeaderMinH)}>
         <div className="flex items-center gap-3 min-w-0 flex-1 mr-2 pl-3 sm:pl-5">
           <h1 className={cn('font-bold tracking-tight leading-tight truncate', layout.appTitleClass)}>
-            <span className="sm:hidden">Pachamama</span>
-            <span className="hidden sm:inline">Pachamama Calendar</span>
+            Pachamama Calendar
           </h1>
         </div>
 
@@ -277,7 +276,7 @@ function AppContent() {
               >
                 <MoreHorizontal size={layout.appIconSize} />
                 {isAdmin && criticalCount > 0 && (
-                  <span className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 min-w-[13px] h-3.5 px-0.5 bg-rose-500 text-white text-[7px] font-bold rounded-full flex items-center justify-center border border-white leading-none pointer-events-none">
+                  <span className="absolute top-1.5 right-1 min-w-[13px] h-3.5 px-0.5 bg-rose-500 text-white text-[7px] font-bold rounded-full flex items-center justify-center border border-white leading-none pointer-events-none">
                     {criticalCount}
                   </span>
                 )}

@@ -10,6 +10,8 @@ import {
   formatItemDiscountLabel,
   invoiceDiscountTitle,
   invoiceFilename,
+  invoiceShowsNights,
+  lineNights,
   normalizeInvoiceItems,
 } from '@/lib/invoiceLogic';
 
@@ -81,12 +83,22 @@ export function downloadInvoicePdf(invoice: Invoice): void {
   doc.text(desc, MARGIN + 4, y + 12);
   y += 16 + Math.max(0, (desc.length - 1) * 4) + 8;
 
-  const cols = {
-    item: MARGIN,
-    qtyRight: MARGIN + 118,
-    priceRight: MARGIN + 152,
-    totalRight: right,
-  };
+  const showNights = invoiceShowsNights(invoice.items);
+  const cols = showNights
+    ? {
+        item: MARGIN,
+        qtyRight: MARGIN + 100,
+        nightsRight: MARGIN + 128,
+        priceRight: MARGIN + 156,
+        totalRight: right,
+      }
+    : {
+        item: MARGIN,
+        qtyRight: MARGIN + 118,
+        nightsRight: 0,
+        priceRight: MARGIN + 152,
+        totalRight: right,
+      };
   const itemTextWidth = cols.qtyRight - cols.item - 6;
 
   y = addPageIfNeeded(doc, y, 20);
@@ -97,6 +109,7 @@ export function downloadInvoicePdf(invoice: Invoice): void {
   doc.setTextColor(107, 114, 128);
   doc.text('ITEM', cols.item + 2, y + 5.5);
   doc.text('QTY', cols.qtyRight, y + 5.5, { align: 'right' });
+  if (showNights) doc.text('NIGHTS', cols.nightsRight, y + 5.5, { align: 'right' });
   doc.text('PRICE', cols.priceRight, y + 5.5, { align: 'right' });
   doc.text('TOTAL', cols.totalRight, y + 5.5, { align: 'right' });
   y += 12;
@@ -114,6 +127,7 @@ export function downloadInvoicePdf(invoice: Invoice): void {
     doc.setTextColor(17, 24, 39);
     doc.text(descLines, cols.item + 2, y);
     doc.text(String(item.quantity ?? 0), cols.qtyRight, y, { align: 'right' });
+    if (showNights) doc.text(String(lineNights(item)), cols.nightsRight, y, { align: 'right' });
     doc.text(formatEuro(item.unitPrice || 0), cols.priceRight, y, { align: 'right' });
     if (!hasLineDiscount) {
       doc.text(formatEuro(totals.itemTotals[index] || 0), cols.totalRight, y, { align: 'right' });
@@ -179,6 +193,20 @@ export function downloadInvoicePdf(invoice: Invoice): void {
   doc.text(totals.status, right, y, { align: 'right' });
   doc.setTextColor(17, 24, 39);
   y += 10;
+
+  const noteText = invoice.note?.trim();
+  if (noteText) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(17, 24, 39);
+    const noteLines = doc.splitTextToSize(noteText, CONTENT_W);
+    noteLines.forEach((line: string) => {
+      y = addPageIfNeeded(doc, y, 5);
+      doc.text(line, MARGIN, y);
+      y += 4.5;
+    });
+    y += 6;
+  }
 
   if (invoice.paymentMethod) {
     y = addPageIfNeeded(doc, y, 12);

@@ -10,11 +10,14 @@ import {
   formatItemDiscountAmount,
   formatItemDiscountLabel,
   invoiceDiscountTitle,
+  invoiceShowsNights,
+  lineNights,
 } from '@/lib/invoiceLogic';
 import { cn } from '@/lib/utils';
 
 export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
   const totals = calculateInvoiceTotals(invoice);
+  const showNights = invoiceShowsNights(invoice.items);
   const statusClass =
     totals.status === 'PAID'
       ? 'text-emerald-700'
@@ -57,6 +60,7 @@ export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
               <tr className="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wide">
                 <th className="font-medium px-3 py-2 rounded-l-lg">Item</th>
                 <th className="font-medium px-3 py-2 text-right">Quantity</th>
+                {showNights && <th className="font-medium px-3 py-2 text-right">Nights</th>}
                 <th className="font-medium px-3 py-2 text-right">Price</th>
                 <th className="font-medium px-3 py-2 text-right rounded-r-lg">Total</th>
               </tr>
@@ -76,6 +80,9 @@ export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
                       {secondLine}
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums align-top">{item.quantity}</td>
+                    {showNights && (
+                      <td className="px-3 py-3 text-right tabular-nums align-top">{lineNights(item)}</td>
+                    )}
                     <td className="px-3 py-3 text-right tabular-nums align-top">
                       <div>{formatEuro(item.unitPrice)}</div>
                       {hasLineDiscount && (
@@ -127,6 +134,10 @@ export default function InvoicePreview({ invoice }: { invoice: Invoice }) {
           </div>
         </div>
       </div>
+
+      {invoice.note?.trim() ? (
+        <p className="mt-6 whitespace-pre-wrap text-[13px] text-gray-800">{invoice.note.trim()}</p>
+      ) : null}
 
       {invoice.paymentMethod ? (
         <div className="mt-8">

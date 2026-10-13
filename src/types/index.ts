@@ -419,8 +419,10 @@ export interface InvoiceItem {
   id: string;
   description: string;
   quantity: number;
+  /** Stay length for this line. Missing or 0 counts as 1. */
+  nights?: number;
   unitPrice: number;
-  /** Optional discount on this line only (after qty × price). */
+  /** Optional discount on this line only (after quantity × nights × price). */
   discount?: InvoiceDiscount | null;
 }
 
@@ -446,6 +448,8 @@ export interface Invoice {
   /** Title shown next to the invoice discount; falls back to "Invoice discount". */
   invoiceDiscountLabel?: string;
   payments: InvoicePayment[];
+  /** Optional note shown under the totals, before payment instructions. */
+  note?: string;
   paymentMethod: string;
   /** Bank / payment instructions shown on the invoice. */
   paymentDetails: string;
